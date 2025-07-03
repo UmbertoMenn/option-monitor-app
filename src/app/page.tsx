@@ -35,21 +35,23 @@ const fallbackData: OptionData[] = [
 export default function Page() {
   const [data, setData] = useState<OptionData[]>(fallbackData)
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const res = await fetch('/api/opzioni')
-        if (!res.ok) throw new Error('Network response was not ok')
-        const json = await res.json()
-        if (Array.isArray(json)) {
-          setData(json)
-        } else {
-          console.warn('Unexpected API response format, using fallback')
-        }
-      } catch (err) {
-        console.error('Errore caricamento dati, uso fallback:', err)
+  const fetchData = async () => {
+    try {
+      const res = await fetch('/api/opzioni')
+      if (!res.ok) throw new Error('Network response was not ok')
+      const json = await res.json()
+      if (Array.isArray(json)) {
+        setData(json)
+      } else {
+        console.warn('Unexpected API response format, using fallback')
       }
+    } catch (err) {
+      console.error('Errore caricamento dati, uso fallback:', err instanceof Error ? err.message : err)
+      setData(fallbackData)
     }
+  }
+
+  useEffect(() => {
     fetchData()
   }, [])
 
@@ -57,13 +59,12 @@ export default function Page() {
     const diffPct = ((price - currentCallPrice) / spot) * 100
     const color = diffPct >= 0 ? 'text-green-400' : 'text-red-400'
     const sign = diffPct >= 0 ? '+' : ''
-    const tooltip = `Premio percentuale mensile ${diffPct >= 0 ? 'aggiuntivo' : 'riduttivo'} rispetto all'opzione attuale, diviso il prezzo spot del sottostante`
     return (
       <>
         {price.toFixed(2)}{' '}
         <span
           className={color}
-          title={tooltip}
+          title="Premio percentuale mensile aggiuntivo/riduttivo rispetto all'opzione attuale, diviso il prezzo spot del sottostante"
         >
           / {sign}{diffPct.toFixed(1)}%
         </span>
@@ -97,7 +98,18 @@ export default function Page() {
 
           return (
             <div key={index} className="bg-zinc-900 border border-zinc-800 shadow-md rounded-lg p-3">
-              <h2 className="text-base font-bold mb-1 text-red-500">{item.ticker}</h2>
+              <div className="flex justify-between items-center mb-1">
+                <h2 className="text-base font-bold text-red-500">{item.ticker}</h2>
+                <div className="w-1/2 flex justify-end">
+                  <button
+                    onClick={fetchData}
+                    className="w-full bg-white/10 hover:bg-white/20 text-white text-xs font-medium px-2 py-1 rounded text-left"
+                    title="Aggiorna manualmente i dati dell'opzione in portafoglio"
+                  >
+                    🔄 UPDATE POSITION
+                  </button>
+                </div>
+              </div>
 
               <div className="grid grid-cols-2 gap-1 mb-2">
                 <div className={`p-1 ${boxColor}`}>Spot</div>
