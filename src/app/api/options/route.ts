@@ -87,14 +87,18 @@ export async function GET() {
     const monthlyExpiries = allExpiries.filter(isThirdFriday)
     const curExpiryIdx = monthlyExpiries.indexOf(CURRENT_EXPIRY)
 
+    let future1Idx = -1
+
     // FUTURE 1
     const future1 = await (async () => {
       const futureExpiries = monthlyExpiries.slice(curExpiryIdx + 1)
-      for (const expiry of futureExpiries) {
+      for (let i = 0; i < futureExpiries.length; i++) {
+        const expiry = futureExpiries[i]
         console.log(`➡️ Cercando FUTURE 1 su expiry ${expiry}, strike > ${CURRENT_STRIKE}`)
         const f = await selectOption(contracts, expiry, CURRENT_STRIKE, true)
         if (f) {
           console.log(`✅ FUTURE 1 trovata: ${f.label}`)
+          future1Idx = curExpiryIdx + 1 + i
           return f
         }
       }
@@ -104,9 +108,8 @@ export async function GET() {
 
     // FUTURE 2
     const future2 = await (async () => {
-      if (!future1) return null
-      const idx = monthlyExpiries.indexOf(future1.expiry)
-      const nextExpiries = monthlyExpiries.slice(idx + 1)
+      if (!future1 || future1Idx === -1) return null
+      const nextExpiries = monthlyExpiries.slice(future1Idx + 1)
       for (const expiry of nextExpiries) {
         console.log(`➡️ Cercando FUTURE 2 su expiry ${expiry}, strike > ${future1.strike}`)
         const f = await selectOption(contracts, expiry, future1.strike, true)
