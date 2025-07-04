@@ -18,16 +18,16 @@ const fallbackData: OptionData[] = [
   {
     ticker: 'NVDA',
     spot: 157.25,
-    strike: 165,
-    expiry: 'OCT 25',
-    currentCallPrice: 11.2,
+    strike: 170,
+    expiry: 'NOV 25',
+    currentCallPrice: 12.6,
     earlier: [
-      { label: 'Sep25 C160', price: 9.5, strike: 160 },
-      { label: 'Sep25 C155', price: 8.8, strike: 155 },
+      { label: 'Oct25 C165', price: 11.0, strike: 165 },
+      { label: 'Sep25 C160', price: 9.7, strike: 160 },
     ],
     future: [
-      { label: 'Nov25 C170', price: 12.05, strike: 170 },
-      { label: 'Dec25 C175', price: 11.9, strike: 175 },
+      { label: 'Dec25 C175', price: 13.2, strike: 175 },
+      { label: 'Jan26 C180', price: 13.9, strike: 180 },
     ],
   },
 ]
@@ -100,15 +100,13 @@ export default function Page() {
             <div key={index} className="bg-zinc-900 border border-zinc-800 shadow-md rounded-lg p-3">
               <div className="flex justify-between items-center mb-1">
                 <h2 className="text-base font-bold text-red-500">{item.ticker}</h2>
-                <div className="w-1/2 flex justify-end">
-                  <button
-                    onClick={fetchData}
-                    className="w-full bg-white/10 hover:bg-white/20 text-white text-xs font-medium px-2 py-1 rounded text-left"
-                    title="Aggiorna manualmente i dati dell'opzione in portafoglio"
-                  >
-                    🔄 UPDATE POSITION
-                  </button>
-                </div>
+                <button
+                  onClick={fetchData}
+                  className="w-1/2 bg-white/10 hover:bg-white/20 text-white text-xs font-medium px-2 py-1 rounded text-left"
+                  title="Aggiorna manualmente i dati dell'opzione in portafoglio"
+                >
+                  🔄 UPDATE POSITION
+                </button>
               </div>
 
               <div className="grid grid-cols-2 gap-1 mb-2">
