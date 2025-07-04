@@ -1,4 +1,4 @@
-// src/app/api/opzioni/route.ts
+// src/app/api/options/route.ts
 
 import { NextResponse } from 'next/server'
 
@@ -29,11 +29,14 @@ export async function GET() {
 
     const json = (await res.json()) as { results: PolygonOptionContract[] }
 
+    console.log('📦 Opzioni ricevute da Polygon:', json.results.length)
+    console.log('🔍 Ticker ricevuti:', json.results.map(opt => opt.ticker))
+    console.log('🔍 Strike + Expiry ricevuti:', json.results.map(opt => `${opt.strike_price} @ ${opt.expiration_date}`))
+
     const calls = json.results.filter(
       (opt) => opt.exercise_style === 'american'
     )
 
-    // Ordina per data scadenza crescente, poi per strike
     calls.sort((a, b) => {
       if (a.expiration_date === b.expiration_date) {
         return a.strike_price - b.strike_price
@@ -42,22 +45,22 @@ export async function GET() {
     })
 
     const currentCall = calls.find(
-    (c) =>
-    c.strike_price === CURRENT_CALL.strike &&
-    c.expiration_date === CURRENT_CALL.expiry
-)
+      (c) =>
+        c.strike_price === CURRENT_CALL.strike &&
+        c.expiration_date === CURRENT_CALL.expiry
+    )
 
     if (!currentCall) {
-    console.error('Call attuale non trovata tra le opzioni ricevute')
-    return NextResponse.json([], { status: 500 })
-}
+      console.error('❌ Call attuale non trovata. Strike:', CURRENT_CALL.strike, 'Expiry:', CURRENT_CALL.expiry)
+      console.error('📦 Opzioni disponibili:', calls.map(c => `${c.strike_price} @ ${c.expiration_date}`))
+      return NextResponse.json([], { status: 500 })
+    }
 
-const currentExpiry = currentCall.expiration_date
-const currentStrike = currentCall.strike_price
+    const currentExpiry = currentCall.expiration_date
+    const currentStrike = currentCall.strike_price
 
-    // Future: 1a e 2a scadenza mensile successiva, strike > attuale
-    const future = calls.filter((c) =>
-      c.expiration_date > currentExpiry && c.strike_price > currentStrike
+    const future = calls.filter(
+      (c) => c.expiration_date > currentExpiry && c.strike_price > currentStrike
     )
 
     const nextExpiries = Array.from(
@@ -65,12 +68,13 @@ const currentStrike = currentCall.strike_price
     ).slice(0, 2)
 
     const futureOptions = nextExpiries.map((exp) =>
-      future.find((f) => f.expiration_date === exp && f.strike_price > currentStrike)
+      future.find(
+        (f) => f.expiration_date === exp && f.strike_price > currentStrike
+      )
     ).filter(Boolean) as PolygonOptionContract[]
 
-    // Earlier: 1a e 2a scadenza mensile precedente, strike < attuale
-    const earlier = calls.filter((c) =>
-      c.expiration_date < currentExpiry && c.strike_price < currentStrike
+    const earlier = calls.filter(
+      (c) => c.expiration_date < currentExpiry && c.strike_price < currentStrike
     )
 
     const prevExpiries = Array.from(
@@ -78,22 +82,26 @@ const currentStrike = currentCall.strike_price
     ).slice(-2)
 
     const earlierOptions = prevExpiries.map((exp) =>
-      [...earlier].reverse().find((e) => e.expiration_date === exp && e.strike_price < currentStrike)
+      [...earlier].reverse().find(
+        (e) => e.expiration_date === exp && e.strike_price < currentStrike
+      )
     ).filter(Boolean) as PolygonOptionContract[]
 
     const formatLabel = (opt: PolygonOptionContract) => {
       const [y, m] = opt.expiration_date.split('-')
-      const month = new Date(opt.expiration_date).toLocaleString('en-US', { month: 'short' }).toUpperCase()
+      const month = new Date(opt.expiration_date).toLocaleString('en-US', {
+        month: 'short',
+      }).toUpperCase()
       return `${month}${y.slice(2)} C${opt.strike_price}`
     }
 
     const result = [
       {
         ticker: UNDERLYING,
-        spot: 157.25, // Placeholder finché non integriamo lo spot reale
+        spot: 157.25, // Placeholder per ora
         strike: currentStrike,
         expiry: 'NOV 25',
-        currentCallPrice: 12.6, // Placeholder
+        currentCallPrice: 12.6, // Placeholder per ora
         earlier: earlierOptions.map((e) => ({
           label: formatLabel(e),
           price: 10.5,
