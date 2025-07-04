@@ -41,12 +41,19 @@ export async function GET() {
       return a.expiration_date.localeCompare(b.expiration_date)
     })
 
-    const currentIndex = calls.findIndex((c) => c.ticker === CURRENT_CALL.ticker)
-    if (currentIndex === -1) throw new Error('Call attuale non trovata')
+    const currentCall = calls.find(
+    (c) =>
+    c.strike_price === CURRENT_CALL.strike &&
+    c.expiration_date === CURRENT_CALL.expiry
+)
 
-    const currentCall = calls[currentIndex]
-    const currentExpiry = currentCall.expiration_date
-    const currentStrike = currentCall.strike_price
+    if (!currentCall) {
+    console.error('Call attuale non trovata tra le opzioni ricevute')
+    return NextResponse.json([], { status: 500 })
+}
+
+const currentExpiry = currentCall.expiration_date
+const currentStrike = currentCall.strike_price
 
     // Future: 1a e 2a scadenza mensile successiva, strike > attuale
     const future = calls.filter((c) =>
