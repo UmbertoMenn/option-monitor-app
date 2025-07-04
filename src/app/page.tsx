@@ -37,7 +37,7 @@ export default function Page() {
 
   const fetchData = async () => {
     try {
-      const res = await fetch('/api/opzioni')
+      const res = await fetch('/api/options')
       if (!res.ok) throw new Error('Network response was not ok')
       const json = await res.json()
       if (Array.isArray(json)) {
