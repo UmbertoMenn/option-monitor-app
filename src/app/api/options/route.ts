@@ -14,6 +14,13 @@ function padStrike(strike: number) {
   return (strike * 1000).toFixed(0).padStart(8, '0')
 }
 
+function isThirdFriday(dateStr: string): boolean {
+  const date = new Date(dateStr)
+  if (date.getDay() !== 5) return false
+  const day = date.getDate()
+  return day >= 15 && day <= 21
+}
+
 async function fetchContracts(): Promise<any[]> {
   const url = `${CONTRACTS_URL}?underlying_ticker=${UNDERLYING}&contract_type=call&limit=1000&apiKey=${POLYGON_API_KEY}`
   const res = await fetch(url)
@@ -36,6 +43,22 @@ async function fetchSpotAlphaVantage(ticker: string): Promise<number> {
   return parseFloat(json?.["Global Quote"]?.["05. price"] ?? '0')
 }
 
+function buildExpiriesMap(contracts: any[]) {
+  const map: Record<string, number[]> = {}
+  for (const c of contracts) {
+    if (!isThirdFriday(c.expiration_date)) continue
+    if (!map[c.expiration_date]) {
+      map[c.expiration_date] = []
+    }
+    map[c.expiration_date].push(c.strike_price)
+  }
+  // ordina gli strike per ciascuna expiry
+  for (const exp in map) {
+    map[exp].sort((a, b) => a - b)
+  }
+  return map
+}
+
 export async function GET() {
   try {
     const contracts = await fetchContracts()
@@ -49,45 +72,79 @@ export async function GET() {
       c.ticker.includes(paddedStrike)
     )
     if (!current) throw new Error('Call attuale non trovata')
-    const currentCall = current
 
     const spot = await fetchSpotAlphaVantage(UNDERLYING)
-    const currentCallPrice = (await fetchBid(currentCall.ticker)) ?? 0
+    const currentCallPrice = (await fetchBid(current.ticker)) ?? 0
 
-    const uniqueExpiries = Array.from(new Set(contracts.map(c => c.expiration_date))).sort()
-    const curIdx = uniqueExpiries.indexOf(CURRENT_EXPIRY)
+    const expiriesMap = buildExpiriesMap(contracts)
+    const monthlyExpiries = Object.keys(expiriesMap).sort()
+    const curIdx = monthlyExpiries.indexOf(CURRENT_EXPIRY)
 
-    async function selectOption(expiry: string, strikeRef: number, higher: boolean) {
-      const candidates = contracts
-        .filter(c => c.expiration_date === expiry)
-        .filter(c => higher ? c.strike_price > strikeRef : c.strike_price < strikeRef)
-      if (!candidates.length) return null
-      const best = candidates.sort((a, b) =>
-        higher ? a.strike_price - b.strike_price : b.strike_price - a.strike_price
-      )[0]
-      const bid = await fetchBid(best.ticker)
-      return { best, bid }
-    }
-
-    // FUTURE 1 & 2
-    const futureList: any[] = []
-    for (const expiry of uniqueExpiries.slice(curIdx + 1)) {
-      const sel = await selectOption(expiry, CURRENT_STRIKE, true)
-      if (sel) {
-        console.log('🎯 Future found:', sel.best.ticker, sel.best.strike_price, expiry)
-        futureList.push({ label: `${expiry.slice(5)} C${sel.best.strike_price}`, strike: sel.best.strike_price, price: sel.bid ?? 0, expiry })
-        if (futureList.length === 2) break
+    async function findOption(expiry: string, strikeRef: number, higher: boolean) {
+      const strikes = expiriesMap[expiry]
+      if (!strikes) return null
+      const filtered = strikes.filter(s => higher ? s > strikeRef : s < strikeRef)
+      if (!filtered.length) return null
+      const selectedStrike = higher ? filtered[0] : filtered[filtered.length - 1]
+      const match = contracts.find(c => c.expiration_date === expiry && c.strike_price === selectedStrike)
+      if (!match) return null
+      const bid = await fetchBid(match.ticker)
+      return {
+        label: `${expiry.slice(5)} C${selectedStrike}`,
+        strike: selectedStrike,
+        price: bid ?? 0,
+        expiry,
+        ticker: match.ticker
       }
     }
 
-    // EARLIER 1 & 2
-    const earlierList: any[] = []
-    for (const expiry of uniqueExpiries.slice(0, curIdx).reverse()) {
-      const sel = await selectOption(expiry, CURRENT_STRIKE, false)
-      if (sel) {
-        console.log('🎯 Earlier found:', sel.best.ticker, sel.best.strike_price, expiry)
-        earlierList.push({ label: `${expiry.slice(5)} C${sel.best.strike_price}`, strike: sel.best.strike_price, price: sel.bid ?? 0, expiry })
-        if (earlierList.length === 2) break
+    // FUTURE 1
+    let future1 = null
+    let future2 = null
+    for (let i = curIdx + 1; i < monthlyExpiries.length; i++) {
+      const f1 = await findOption(monthlyExpiries[i], CURRENT_STRIKE, true)
+      if (f1) {
+        future1 = f1
+        console.log('🎯 Future 1:', f1.ticker, f1.strike, f1.expiry)
+        break
+      }
+    }
+
+    // FUTURE 2
+    if (future1) {
+      const idx1 = monthlyExpiries.indexOf(future1.expiry)
+      for (let i = idx1 + 1; i < monthlyExpiries.length; i++) {
+        const f2 = await findOption(monthlyExpiries[i], future1.strike, true)
+        if (f2) {
+          future2 = f2
+          console.log('🎯 Future 2:', f2.ticker, f2.strike, f2.expiry)
+          break
+        }
+      }
+    }
+
+    // EARLIER 1
+    let earlier1 = null
+    let earlier2 = null
+    for (let i = curIdx - 1; i >= 0; i--) {
+      const e1 = await findOption(monthlyExpiries[i], CURRENT_STRIKE, false)
+      if (e1) {
+        earlier1 = e1
+        console.log('🎯 Earlier 1:', e1.ticker, e1.strike, e1.expiry)
+        break
+      }
+    }
+
+    // EARLIER 2
+    if (earlier1) {
+      const idx1 = monthlyExpiries.indexOf(earlier1.expiry)
+      for (let i = idx1 - 1; i >= 0; i--) {
+        const e2 = await findOption(monthlyExpiries[i], earlier1.strike, false)
+        if (e2) {
+          earlier2 = e2
+          console.log('🎯 Earlier 2:', e2.ticker, e2.strike, e2.expiry)
+          break
+        }
       }
     }
 
@@ -98,12 +155,12 @@ export async function GET() {
       expiry: CURRENT_EXPIRY,
       currentCallPrice,
       future: [
-        futureList[0] || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0 },
-        futureList[1] || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0 }
+        future1 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0 },
+        future2 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0 }
       ],
       earlier: [
-        earlierList[0] || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0 },
-        earlierList[1] || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0 }
+        earlier1 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0 },
+        earlier2 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0 }
       ]
     }]
 
