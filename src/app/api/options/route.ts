@@ -95,21 +95,45 @@ export async function GET() {
       }
     }
 
-    const future1 = curExpiryIdx + 1 < uniqueExpiries.length
-      ? await selectOption(uniqueExpiries[curExpiryIdx + 1], CURRENT_STRIKE, true)
-      : null
+    // ⚠️ Ricerca dinamica delle future anche su scadenze non consecutive
+    const futureExpiries = uniqueExpiries.slice(curExpiryIdx + 1)
 
-    const future2 = future1 && curExpiryIdx + 2 < uniqueExpiries.length
-      ? await selectOption(uniqueExpiries[curExpiryIdx + 2], future1.strike, true)
-      : null
+    const future1 = await (async () => {
+      for (const expiry of futureExpiries) {
+        const f = await selectOption(expiry, CURRENT_STRIKE, true)
+        if (f) return f
+      }
+      return null
+    })()
 
-    const earlier1 = curExpiryIdx - 1 >= 0
-      ? await selectOption(uniqueExpiries[curExpiryIdx - 1], CURRENT_STRIKE, false)
-      : null
+    const future2 = await (async () => {
+      if (!future1) return null
+      for (const expiry of futureExpiries) {
+        const f = await selectOption(expiry, future1.strike, true)
+        if (f) return f
+      }
+      return null
+    })()
 
-    const earlier2 = earlier1 && curExpiryIdx - 2 >= 0
-      ? await selectOption(uniqueExpiries[curExpiryIdx - 2], earlier1.strike, false)
-      : null
+    // EARLIER
+    const earlierExpiries = uniqueExpiries.slice(0, curExpiryIdx).reverse()
+
+    const earlier1 = await (async () => {
+      for (const expiry of earlierExpiries) {
+        const f = await selectOption(expiry, CURRENT_STRIKE, false)
+        if (f) return f
+      }
+      return null
+    })()
+
+    const earlier2 = await (async () => {
+      if (!earlier1) return null
+      for (const expiry of earlierExpiries) {
+        const f = await selectOption(expiry, earlier1.strike, false)
+        if (f) return f
+      }
+      return null
+    })()
 
     const output = [{
       ticker: UNDERLYING,
@@ -122,8 +146,8 @@ export async function GET() {
         future2 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0 }
       ],
       earlier: [
-        earlier2 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0 },
-        earlier1 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0 }
+        earlier1 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0 },
+        earlier2 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0 }
       ]
     }]
 
