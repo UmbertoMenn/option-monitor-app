@@ -55,55 +55,77 @@ export default function Page() {
       ['GEN','FEB','MAR','APR','MAG','GIU','LUG','AGO','SET','OTT','NOV','DIC'].indexOf(selectedMonth)+1
     ).toString().padStart(2,'0')}-20`).toISOString().slice(0, 10)
 
-    const allExpiries = Object.keys(chain[selectedYear] || {}).sort((a, b) => (
-      ['GEN','FEB','MAR','APR','MAG','GIU','LUG','AGO','SET','OTT','NOV','DIC'].indexOf(a) -
-      ['GEN','FEB','MAR','APR','MAG','GIU','LUG','AGO','SET','OTT','NOV','DIC'].indexOf(b)
-    ))
-    const currentMonthIndex = allExpiries.indexOf(selectedMonth)
+    const updatedData = data.map(item => {
+      const currentMonthIndex = ['GEN','FEB','MAR','APR','MAG','GIU','LUG','AGO','SET','OTT','NOV','DIC'].indexOf(selectedMonth)
+      const future: OptionEntry[] = []
+      const earlier: OptionEntry[] = []
 
-    const future: OptionEntry[] = []
-    const earlier: OptionEntry[] = []
+      // Handle future options
+      let futureCount = 0
+      let monthIndex = currentMonthIndex
+      let year = Number(selectedYear)
 
-    for (let i = 1; i <= 2; i++) {
-      const fMonth = allExpiries[currentMonthIndex + i]
-      if (!fMonth) continue
-      const fStrikeList = chain[selectedYear]?.[fMonth] || []
-      const fStrike = fStrikeList.find(s => s > selectedStrike!)
-      if (fStrike) {
-        future.push({
-          label: `${fMonth} ${selectedYear.slice(2)} C${fStrike}`,
-          strike: fStrike,
-          price: 0,
-          expiry: `${selectedYear}-${(allExpiries.indexOf(fMonth)+1).toString().padStart(2,'0')}-20`
-        })
+      while (futureCount < 2) {
+        monthIndex++
+        if (monthIndex >= 12) {
+          year++
+          if (!chain[year]) break
+          monthIndex = 0
+        }
+        const futureMonth = ['GEN','FEB','MAR','APR','MAG','GIU','LUG','AGO','SET','OTT','NOV','DIC'][monthIndex]
+        const fStrikeList = chain[year]?.[futureMonth] || []
+        const fStrike = fStrikeList.find(s => s > selectedStrike!)
+        if (fStrike) {
+          future.push({
+            label: `${futureMonth} ${String(year).slice(2)} C${fStrike}`,
+            strike: fStrike,
+            price: 0,
+            expiry: `${year}-${(monthIndex+1).toString().padStart(2,'0')}-20`
+          })
+          futureCount++
+        }
       }
-    }
 
-    for (let i = 1; i <= 2; i++) {
-      const eMonth = allExpiries[currentMonthIndex - i]
-      if (!eMonth) continue
-      const eStrikeList = chain[selectedYear]?.[eMonth] || []
-      const eStrike = [...eStrikeList].reverse().find(s => s < selectedStrike!)
-      if (eStrike) {
-        earlier.push({
-          label: `${eMonth} ${selectedYear.slice(2)} C${eStrike}`,
-          strike: eStrike,
-          price: 0,
-          expiry: `${selectedYear}-${(allExpiries.indexOf(eMonth)+1).toString().padStart(2,'0')}-20`
-        })
+      // Handle earlier options
+      let earlierCount = 0
+      monthIndex = currentMonthIndex
+      year = Number(selectedYear)
+
+      while (earlierCount < 2) {
+        monthIndex--
+        if (monthIndex < 0) {
+          year--
+          if (!chain[year]) break
+          monthIndex = 11
+        }
+        const earlierMonth = ['GEN','FEB','MAR','APR','MAG','GIU','LUG','AGO','SET','OTT','NOV','DIC'][monthIndex]
+        const eStrikeList = chain[year]?.[earlierMonth] || []
+        const eStrike = [...eStrikeList].reverse().find(s => s < selectedStrike!)
+        if (eStrike) {
+          earlier.push({
+            label: `${earlierMonth} ${String(year).slice(2)} C${eStrike}`,
+            strike: eStrike,
+            price: 0,
+            expiry: `${year}-${(monthIndex+1).toString().padStart(2,'0')}-20`
+          })
+          earlierCount++
+        }
       }
-    }
 
-    const updated = data.map(d => ({
-      ...d,
-      strike: selectedStrike!,
-      expiry: expiryDate,
-      currentCallPrice: d.currentCallPrice * (selectedStrike! / d.strike),
-      future,
-      earlier
-    }))
+      return {
+        ...item,
+        strike: selectedStrike!,
+        expiry: expiryDate,
+        currentCallPrice: item.currentCallPrice * (selectedStrike! / item.strike),
+        future,
+        earlier
+      }
+    })
 
-    setData(updated)
+    setData(updatedData)
+    setSelectedYear('')
+    setSelectedMonth('')
+    setSelectedStrike(null)
     setShowDropdown(false)
   }
 
@@ -119,9 +141,7 @@ export default function Page() {
     return (
       <>
         {price.toFixed(2)}{' '}
-        <span className={color}>
-          / {sign}{diffPct.toFixed(1)}%
-        </span>
+        <span className={color}>/ {sign}{diffPct.toFixed(1)}%</span>
       </>
     )
   }
@@ -238,3 +258,4 @@ export default function Page() {
     </div>
   )
 }
+
