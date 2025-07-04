@@ -5,13 +5,12 @@ import { NextResponse } from 'next/server'
 const API_KEY = process.env.POLYGON_API_KEY!
 const CONTRACTS_URL = 'https://api.polygon.io/v3/reference/options/contracts'
 
-// Parametri predefiniti
 const UNDERLYING = 'NVDA'
 const CURRENT_EXPIRY = '2025-11-21'
 const CURRENT_STRIKE = 170
 
 function padStrike(strike: number) {
-  return (strike * 1000).toFixed(0).padStart(8, '0') // es: 170 -> "00170000"
+  return (strike * 1000).toFixed(0).padStart(8, '0')
 }
 
 function formatSymbol(expiry: string, strike: number) {
@@ -31,16 +30,11 @@ async function fetchContracts(): Promise<any[]> {
   return json.results!
 }
 
-async function fetchClosePrice(expiry: string, strike: number): Promise<number | null> {
-  const url = `https://api.polygon.io/v3/snapshot/options/${UNDERLYING}?expiration_date=${expiry}&strike_price=${strike}&contract_type=call&apiKey=${API_KEY}`
-  const res = await fetch(url)
-  if (!res.ok) {
-    const text = await res.text()
-    console.error("Errore snapshot:", res.status, text)
-    return null
-  }
+async function fetchBid(symbol: string): Promise<number | null> {
+  const res = await fetch(`https://api.polygon.io/v3/snapshot/options/${symbol}?apiKey=${API_KEY}`)
+  if (!res.ok) return null
   const json = await res.json()
-  return json?.results?.[0]?.day?.c ?? null
+  return json?.results?.last_quote?.bid ?? null
 }
 
 export async function GET() {
@@ -61,10 +55,20 @@ export async function GET() {
     if (currentIndex < 0) throw new Error('Call attuale non trovata')
 
     const currentCall = contracts[currentIndex]
-    const currentClosePrice = await fetchClosePrice(CURRENT_EXPIRY, CURRENT_STRIKE)
 
-    // Rimuovo il prezzo spot intraday e lascio 0 temporaneamente
-    const spot = 0
+    // ✅ Fetch spot price in tempo reale
+    const spotUrl = `https://api.polygon.io/v2/last/trade/stocks/${UNDERLYING}?apiKey=${API_KEY}`
+    const spotRes = await fetch(spotUrl)
+    if (!spotRes.ok) {
+      const txt = await spotRes.text()
+      console.error("Errore fetch spot:", spotRes.status, txt)
+      throw new Error("Errore fetch spot price")
+    }
+    const spotJson = await spotRes.json()
+    const spot = spotJson?.results?.p ?? 0
+
+    const currentBid = await fetchBid(currentCall.ticker)
+    const currentCallPrice = currentBid ?? 0
 
     const uniqueExpiries = Array.from(new Set(contracts.map((c: any) => c.expiration_date))).sort()
     const curExpiryIdx = uniqueExpiries.indexOf(CURRENT_EXPIRY)
@@ -79,11 +83,11 @@ export async function GET() {
         higher ? a.strike_price - b.strike_price : b.strike_price - a.strike_price
       )
       const c0 = sorted[0]
-      const closePrice = await fetchClosePrice(c0.expiration_date, c0.strike_price)
+      const bid = await fetchBid(c0.ticker)
       return {
         label: `${expiry.slice(5)} C${c0.strike_price}`,
         strike: c0.strike_price,
-        price: closePrice ?? 0,
+        price: bid ?? 0,
         expiry
       }
     }
@@ -109,7 +113,7 @@ export async function GET() {
       spot,
       strike: CURRENT_STRIKE,
       expiry: CURRENT_EXPIRY,
-      currentCallPrice: currentClosePrice ?? 0,
+      currentCallPrice,
       future: [
         future1 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0 },
         future2 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0 }
