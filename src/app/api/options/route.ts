@@ -22,7 +22,7 @@ function formatSymbol(expiry: string, strike: number) {
 }
 
 async function fetchContracts(): Promise<any[]> {
-  const url = `${CONTRACTS_URL}?underlying_ticker=${UNDERLYING}&contract_type=call&limit=2000&apiKey=${API_KEY}`
+  const url = `${CONTRACTS_URL}?underlying_ticker=${UNDERLYING}&contract_type=call&limit=1000&apiKey=${API_KEY}`
   const res = await fetch(url)
   if (!res.ok) throw new Error('Errore fetch contracts')
   const json = await res.json()
