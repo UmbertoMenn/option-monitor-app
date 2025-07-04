@@ -20,8 +20,7 @@ async function fetchFullChain(): Promise<any[]> {
 
   while (url) {
     const res: Response = await fetch(url)
-    if (!res.ok) throw new Error(`Errore fetch chain: ${res.status}`)
-    const json: any = await res.json()
+    const json: { results?: any[]; next_url?: string } = await res.json()
     if (json.results) contracts.push(...json.results)
     url = json.next_url ? `${json.next_url}&apiKey=${POLYGON_API_KEY}` : null
   }
@@ -29,20 +28,9 @@ async function fetchFullChain(): Promise<any[]> {
   return contracts
 }
 
-async function fetchSpot(): Promise<number> {
-  const res: Response = await fetch(`https://api.polygon.io/v2/last/trade/stocks/${UNDERLYING}?apiKey=${POLYGON_API_KEY}`)
-  if (!res.ok) throw new Error('Errore fetch spot')
-  const json: any = await res.json()
-  return json?.last?.price ?? 0
-}
-
 export async function GET() {
   try {
     const contracts = await fetchFullChain()
-    const spot = await fetchSpot()
-
-    const minStrike = spot * 0.5
-    const maxStrike = spot * 2.0
 
     const result: Record<string, Record<string, number[]>> = {}
 
@@ -55,7 +43,6 @@ export async function GET() {
       const month = date.getMonth()
 
       if (year > 2027) continue
-      if (c.strike_price < minStrike || c.strike_price > maxStrike) continue
 
       const yearStr = year.toString()
       const monthStr = formatMonthName(month)
@@ -66,7 +53,6 @@ export async function GET() {
       result[yearStr][monthStr].push(c.strike_price)
     }
 
-    // Ordina gli strike
     for (const year of Object.keys(result)) {
       for (const month of Object.keys(result[year])) {
         result[year][month].sort((a, b) => a - b)
