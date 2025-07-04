@@ -53,8 +53,9 @@ export default function Page() {
     )
   }
 
-  const arrowButton = (direction: 'up' | 'down', label: string) => (
+  const arrowButton = (direction: 'up' | 'down', label: string, onClick: () => void) => (
     <button
+      onClick={onClick}
       className={`px-1 py-0.5 rounded text-xs ${
         direction === 'up' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
       }`}
@@ -117,12 +118,12 @@ export default function Page() {
                   <div className="flex items-center gap-1">
                     <button className="bg-blue-700 text-white font-bold px-1.5 py-0.5 rounded text-xs">ROLLA</button>
                     <div className="flex gap-0.5">
-                      {arrowButton('up', 'Strike up')}
-                      {arrowButton('down', 'Strike down')}
+                      {arrowButton('up', 'Strike up', () => alert('Future Strike up'))}
+                      {arrowButton('down', 'Strike down', () => alert('Future Strike down'))}
                     </div>
                     <div className="flex gap-0.5">
-                      {arrowButton('up', 'Month up')}
-                      {arrowButton('down', 'Month down')}
+                      {arrowButton('up', 'Month up', () => alert('Future Month up'))}
+                      {arrowButton('down', 'Month down', () => alert('Future Month down'))}
                     </div>
                   </div>
                 </div>
@@ -138,12 +139,12 @@ export default function Page() {
                   <div className="flex items-center gap-1">
                     <button className="bg-blue-700 text-white font-bold px-1.5 py-0.5 rounded text-xs">ROLLA</button>
                     <div className="flex gap-0.5">
-                      {arrowButton('up', 'Strike up')}
-                      {arrowButton('down', 'Strike down')}
+                      {arrowButton('up', 'Strike up', () => alert('Earlier Strike up'))}
+                      {arrowButton('down', 'Strike down', () => alert('Earlier Strike down'))}
                     </div>
                     <div className="flex gap-0.5">
-                      {arrowButton('up', 'Month up')}
-                      {arrowButton('down', 'Month down')}
+                      {arrowButton('up', 'Month up', () => alert('Earlier Month up'))}
+                      {arrowButton('down', 'Month down', () => alert('Earlier Month down'))}
                     </div>
                   </div>
                 </div>

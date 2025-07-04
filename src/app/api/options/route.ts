@@ -2,120 +2,116 @@
 
 import { NextResponse } from 'next/server'
 
-const API_KEY = process.env.POLYGON_API_KEY as string
+const API_KEY = process.env.POLYGON_API_KEY!
 const CONTRACTS_URL = 'https://api.polygon.io/v3/reference/options/contracts'
-const SNAPSHOT_URL = 'https://api.polygon.io/v3/snapshot/options'
-const SPOT_URL = 'https://api.polygon.io/v2/last/trade/NVDA?apiKey=' + API_KEY
+
+// Call attuale pre-configurata
 const UNDERLYING = 'NVDA'
-const CURRENT_CALL = {
-  ticker: 'OPRA:NVDA251121C170.0',
-  strike: 170,
-  expiry: '2025-11-21',
+const CURRENT_EXPIRY = '2025-11-21'
+const CURRENT_STRIKE = 170
+
+function padStrike(strike: number) {
+  const s = Math.round(strike * 1000).toString()
+  return s.padStart(8, '0')
 }
 
-interface PolygonOptionContract {
-  ticker: string
-  strike_price: number
-  expiration_date: string
-  contract_type: string
-  underlying_ticker: string
+function formatSymbol(expiry: string, strike: number) {
+  const [y, m, d] = expiry.split('-')
+  // YYMMDD + C + strike000
+  return `${UNDERLYING}${y.slice(2)}${m}${d}C${padStrike(strike)}`
 }
 
-interface SnapshotResult {
-  results: {
-    details: { ticker: string }
-    last_quote: { bid: number; ask: number }
-  }
+async function fetchContracts(): Promise<any[]> {
+  const url = `${CONTRACTS_URL}?underlying_ticker=${UNDERLYING}&contract_type=call&limit=2000&apiKey=${API_KEY}`
+  const res = await fetch(url)
+  if (!res.ok) throw new Error('Errore fetch contracts')
+  const json = await res.json()
+  return json.results!
+}
+
+async function fetchBid(symbol: string): Promise<number | null> {
+  const res = await fetch(`https://api.polygon.io/v3/snapshot/options/${symbol}?apiKey=${API_KEY}`)
+  if (!res.ok) return null
+  const json = await res.json()
+  return json?.results.last_quote?.bid ?? null
 }
 
 export async function GET() {
   try {
-    const contractsRes = await fetch(
-      `${CONTRACTS_URL}?underlying_ticker=${UNDERLYING}&contract_type=call&limit=1000&sort=ticker&order=asc&apiKey=${API_KEY}`
-    )
+    const contracts = await fetchContracts()
+    // ordina per expiry e strike
+    contracts.sort((a: any, b: any) => a.expiration_date.localeCompare(b.expiration_date) || a.strike_price - b.strike_price)
 
-    if (!contractsRes.ok) throw new Error('Errore nella fetch Polygon Contracts')
+    const currentOpra = formatSymbol(CURRENT_EXPIRY, CURRENT_STRIKE)
+    const currentIndex = contracts.findIndex((c: any) => c.ticker === currentOpra)
+    if (currentIndex < 0) throw new Error('Call attuale non trovata')
 
-    const json = await contractsRes.json() as { results: PolygonOptionContract[] }
-    const calls = json.results
-
-    calls.sort((a, b) => {
-      if (a.expiration_date === b.expiration_date) {
-        return a.strike_price - b.strike_price
-      }
-      return a.expiration_date.localeCompare(b.expiration_date)
-    })
-
-    const currentIndex = calls.findIndex((c) => c.ticker === CURRENT_CALL.ticker)
-    if (currentIndex === -1) throw new Error('Call attuale non trovata')
-
-    const currentCall = calls[currentIndex]
-    const currentExpiry = currentCall.expiration_date
-    const currentStrike = currentCall.strike_price
-
-    const spotRes = await fetch(SPOT_URL)
+    const currentCall = contracts[currentIndex]
+    const spotRes = await fetch(`https://api.polygon.io/v3/last/trade/${UNDERLYING}?apiKey=${API_KEY}`)
     const spotJson = await spotRes.json()
-    const spotPrice = spotJson?.results?.p ?? 0
+    const spot = spotJson?.results?.price ?? 0
 
-    const future = calls.filter(
-      (c) => c.expiration_date > currentExpiry && c.strike_price > currentStrike
-    )
-    const nextExpiries = Array.from(new Set(future.map((f) => f.expiration_date))).slice(0, 2)
-    const futureOptions = nextExpiries.map((exp) =>
-      future.find((f) => f.expiration_date === exp && f.strike_price > currentStrike)
-    ).filter(Boolean) as PolygonOptionContract[]
+    const currentBid = await fetchBid(currentOpra)
+    const currentCallPrice = currentBid ?? 0
 
-    const earlier = calls.filter(
-      (c) => c.expiration_date < currentExpiry && c.strike_price < currentStrike
-    )
-    const prevExpiries = Array.from(new Set(earlier.map((f) => f.expiration_date))).slice(-2)
-    const earlierOptions = prevExpiries.map((exp) =>
-      [...earlier].reverse().find((e) => e.expiration_date === exp && e.strike_price < currentStrike)
-    ).filter(Boolean) as PolygonOptionContract[]
+    // Lista scadenze future ed earlier
+    const uniqueExpiries = Array.from(new Set(contracts.map((c: any) => c.expiration_date))).sort()
+    const curExpiryIdx = uniqueExpiries.indexOf(CURRENT_EXPIRY)
 
-    const priceTickers = [CURRENT_CALL.ticker, ...futureOptions, ...earlierOptions].map((o: any) => o.ticker)
-    const fetchSnapshots = await Promise.all(
-      priceTickers.map((ticker) =>
-        fetch(`${SNAPSHOT_URL}/${ticker}?apiKey=${API_KEY}`).then((res) => res.json())
+    // Funzione per trovare opzione con primo strike > o < di riferimento
+    async function selectOption(expiry: string, strikeRef: number, higher: boolean) {
+      const candidates = contracts.filter((c: any) =>
+        c.expiration_date === expiry &&
+        (higher ? c.strike_price > strikeRef : c.strike_price < strikeRef)
       )
-    )
-
-    const priceMap: Record<string, number> = {}
-    fetchSnapshots.forEach((snap: SnapshotResult) => {
-      const ticker = snap?.results?.details?.ticker
-      const bid = snap?.results?.last_quote?.bid ?? 0
-      if (ticker) priceMap[ticker] = bid
-    })
-
-    const formatLabel = (opt: PolygonOptionContract) => {
-      const [y, m] = opt.expiration_date.split('-')
-      const month = new Date(opt.expiration_date).toLocaleString('en-US', { month: 'short' }).toUpperCase()
-      return `${month}${y.slice(2)} C${opt.strike_price}`
+      if (candidates.length === 0) return null
+      const sorted = candidates.sort((a: any, b: any) =>
+        higher ? a.strike_price - b.strike_price : b.strike_price - a.strike_price
+      )
+      const c0 = sorted[0]
+      const bid = await fetchBid(c0.ticker)
+      return {
+        label: `${expiry.slice(5)} C${c0.strike_price}`,
+        strike: c0.strike_price,
+        price: bid ?? 0,
+        expiry
+      }
     }
 
-    const result = [
-      {
-        ticker: UNDERLYING,
-        spot: spotPrice,
-        strike: currentStrike,
-        expiry: 'NOV 25',
-        currentCallPrice: priceMap[CURRENT_CALL.ticker] ?? 0,
-        earlier: earlierOptions.map((e) => ({
-          label: formatLabel(e),
-          price: priceMap[e.ticker] ?? 0,
-          strike: e.strike_price,
-        })),
-        future: futureOptions.map((f) => ({
-          label: formatLabel(f),
-          price: priceMap[f.ticker] ?? 0,
-          strike: f.strike_price,
-        })),
-      },
-    ]
+    // Calcolo future & earlier
+    const future1 = curExpiryIdx + 1 < uniqueExpiries.length
+      ? await selectOption(uniqueExpiries[curExpiryIdx + 1], CURRENT_STRIKE, true)
+      : null
+    const future2 = future1 && curExpiryIdx + 2 < uniqueExpiries.length
+      ? await selectOption(uniqueExpiries[curExpiryIdx + 2], future1.strike, true)
+      : null
 
-    return NextResponse.json(result)
-  } catch (err) {
-    console.error('Errore caricamento dati da Polygon:', err instanceof Error ? err.message : err)
+    const earlier1 = curExpiryIdx - 1 >= 0
+      ? await selectOption(uniqueExpiries[curExpiryIdx - 1], CURRENT_STRIKE, false)
+      : null
+    const earlier2 = earlier1 && curExpiryIdx - 2 >= 0
+      ? await selectOption(uniqueExpiries[curExpiryIdx - 2], earlier1.strike, false)
+      : null
+
+    const output = [{
+      ticker: UNDERLYING,
+      spot,
+      strike: CURRENT_STRIKE,
+      expiry: CURRENT_EXPIRY,
+      currentCallPrice,
+      future: [
+        future1 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0 },
+        future2 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0 }
+      ],
+      earlier: [
+        earlier2 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0 },
+        earlier1 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0 }
+      ]
+    }]
+
+    return NextResponse.json(output)
+  } catch (err: any) {
+    console.error('Errore route options:', err.message)
     return NextResponse.json([], { status: 500 })
   }
 }
