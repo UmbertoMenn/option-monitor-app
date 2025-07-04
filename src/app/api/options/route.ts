@@ -14,20 +14,10 @@ function padStrike(strike: number) {
   return (strike * 1000).toFixed(0).padStart(8, '0')
 }
 
-function isThirdFriday(dateStr: string): boolean {
-  const [year, month, day] = dateStr.split('-').map(Number)
-  const date = new Date(year, month - 1, day)
-  return date.getDay() === 5 && day >= 15 && day <= 21
-}
-
 async function fetchContracts(): Promise<any[]> {
   const url = `${CONTRACTS_URL}?underlying_ticker=${UNDERLYING}&contract_type=call&limit=1000&apiKey=${POLYGON_API_KEY}`
   const res = await fetch(url)
-  if (!res.ok) {
-    const text = await res.text()
-    console.error("❌ Errore fetch contracts:", res.status, text)
-    throw new Error('Errore fetch contracts')
-  }
+  if (!res.ok) throw new Error('Errore fetch contracts')
   const json = await res.json()
   return json.results!
 }
@@ -40,129 +30,87 @@ async function fetchBid(symbol: string): Promise<number | null> {
 }
 
 async function fetchSpotAlphaVantage(ticker: string): Promise<number> {
-  const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${ticker}&apikey=${ALPHA_VANTAGE_API_KEY}`
-  const res = await fetch(url)
-  if (!res.ok) {
-    const text = await res.text()
-    console.error("❌ Errore fetch spot (Alpha Vantage):", res.status, text)
-    throw new Error('Errore fetch spot price')
-  }
+  const res = await fetch(`https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${ticker}&apikey=${ALPHA_VANTAGE_API_KEY}`)
+  if (!res.ok) throw new Error('Errore fetch spot')
   const json = await res.json()
-  const price = parseFloat(json?.["Global Quote"]?.["05. price"] ?? '0')
-  return isNaN(price) ? 0 : price
-}
-
-async function selectOption(contracts: any[], expiry: string, strikeRef: number, higher: boolean) {
-  const candidates = contracts.filter(c =>
-    c.expiration_date === expiry &&
-    (higher ? c.strike_price > strikeRef : c.strike_price < strikeRef)
-  )
-  console.log(`📊 ${candidates.length} opzioni trovate su ${expiry} con strike ${higher ? '>' : '<'} ${strikeRef}`)
-
-  if (candidates.length === 0) return null
-  const sorted = candidates.sort((a, b) =>
-    higher ? a.strike_price - b.strike_price : b.strike_price - a.strike_price
-  )
-  const best = sorted[0]
-  const bid = await fetchBid(best.ticker)
-  console.log(`🎯 Opzione selezionata: ${best.ticker} | Strike ${best.strike_price} | Expiry ${expiry}`)
-  return {
-    label: `${expiry.slice(5)} C${best.strike_price}`,
-    strike: best.strike_price,
-    price: bid ?? 0,
-    expiry: expiry
-  }
+  return parseFloat(json?.["Global Quote"]?.["05. price"] ?? '0')
 }
 
 export async function GET() {
   try {
     const contracts = await fetchContracts()
-
     contracts.sort((a, b) =>
-      a.expiration_date.localeCompare(b.expiration_date) ||
-      a.strike_price - b.strike_price
+      a.expiration_date.localeCompare(b.expiration_date) || a.strike_price - b.strike_price
     )
 
-    const allExpiries = Array.from(new Set(contracts.map(c => c.expiration_date))).sort()
-    const monthlyExpiries = allExpiries.filter(isThirdFriday)
-    const curExpiryIdx = monthlyExpiries.indexOf(CURRENT_EXPIRY)
-
-    let future1Idx = -1
-
-    // FUTURE 1
-    const future1 = await (async () => {
-      const futureExpiries = monthlyExpiries.slice(curExpiryIdx + 1)
-      for (let i = 0; i < futureExpiries.length; i++) {
-        const expiry = futureExpiries[i]
-        console.log(`➡️ Cercando FUTURE 1 su expiry ${expiry}, strike > ${CURRENT_STRIKE}`)
-        const f = await selectOption(contracts, expiry, CURRENT_STRIKE, true)
-        if (f) {
-          console.log(`✅ FUTURE 1 trovata: ${f.label}`)
-          future1Idx = curExpiryIdx + 1 + i
-          return f
-        }
-      }
-      console.log(`❌ FUTURE 1 non trovata`)
-      return null
-    })()
-
-    // FUTURE 2
-    const future2 = await (async () => {
-      if (!future1 || future1Idx === -1) return null
-      const nextExpiries = monthlyExpiries.slice(future1Idx + 1)
-      for (const expiry of nextExpiries) {
-        console.log(`➡️ Cercando FUTURE 2 su expiry ${expiry}, strike > ${future1.strike}`)
-        const f = await selectOption(contracts, expiry, future1.strike, true)
-        if (f) {
-          console.log(`✅ FUTURE 2 trovata: ${f.label}`)
-          return f
-        }
-      }
-      console.log(`❌ FUTURE 2 non trovata`)
-      return null
-    })()
-
-    // EARLIER 1
-    const earlier1 = await (async () => {
-      const earlierExpiries = monthlyExpiries.slice(0, curExpiryIdx).reverse()
-      for (const expiry of earlierExpiries) {
-        const f = await selectOption(contracts, expiry, CURRENT_STRIKE, false)
-        if (f) return f
-      }
-      return null
-    })()
-
-    // EARLIER 2
-    const earlier2 = await (async () => {
-      if (!earlier1) return null
-      const idx = monthlyExpiries.indexOf(earlier1.expiry)
-      const nextExpiries = monthlyExpiries.slice(0, idx).reverse()
-      for (const expiry of nextExpiries) {
-        const f = await selectOption(contracts, expiry, earlier1.strike, false)
-        if (f) return f
-      }
-      return null
-    })()
+    const paddedStrike = padStrike(CURRENT_STRIKE)
+    const current = contracts.find(c =>
+      c.expiration_date === CURRENT_EXPIRY &&
+      c.ticker.includes(paddedStrike)
+    )
+    if (!current) throw new Error('Call attuale non trovata')
+    const currentCall = current
 
     const spot = await fetchSpotAlphaVantage(UNDERLYING)
+    const currentCallPrice = (await fetchBid(currentCall.ticker)) ?? 0
 
-    return NextResponse.json([{
+    const uniqueExpiries = Array.from(new Set(contracts.map(c => c.expiration_date))).sort()
+    const curIdx = uniqueExpiries.indexOf(CURRENT_EXPIRY)
+
+    async function selectOption(expiry: string, strikeRef: number, higher: boolean) {
+      const candidates = contracts
+        .filter(c => c.expiration_date === expiry)
+        .filter(c => higher ? c.strike_price > strikeRef : c.strike_price < strikeRef)
+      if (!candidates.length) return null
+      const best = candidates.sort((a, b) =>
+        higher ? a.strike_price - b.strike_price : b.strike_price - a.strike_price
+      )[0]
+      const bid = await fetchBid(best.ticker)
+      return { best, bid }
+    }
+
+    // FUTURE 1 & 2
+    const futureList: any[] = []
+    for (const expiry of uniqueExpiries.slice(curIdx + 1)) {
+      const sel = await selectOption(expiry, CURRENT_STRIKE, true)
+      if (sel) {
+        console.log('🎯 Future found:', sel.best.ticker, sel.best.strike_price, expiry)
+        futureList.push({ label: `${expiry.slice(5)} C${sel.best.strike_price}`, strike: sel.best.strike_price, price: sel.bid ?? 0, expiry })
+        if (futureList.length === 2) break
+      }
+    }
+
+    // EARLIER 1 & 2
+    const earlierList: any[] = []
+    for (const expiry of uniqueExpiries.slice(0, curIdx).reverse()) {
+      const sel = await selectOption(expiry, CURRENT_STRIKE, false)
+      if (sel) {
+        console.log('🎯 Earlier found:', sel.best.ticker, sel.best.strike_price, expiry)
+        earlierList.push({ label: `${expiry.slice(5)} C${sel.best.strike_price}`, strike: sel.best.strike_price, price: sel.bid ?? 0, expiry })
+        if (earlierList.length === 2) break
+      }
+    }
+
+    const output = [{
       ticker: UNDERLYING,
       spot,
       strike: CURRENT_STRIKE,
       expiry: CURRENT_EXPIRY,
-      currentCallPrice: 0,
+      currentCallPrice,
       future: [
-        future1 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0 },
-        future2 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0 }
+        futureList[0] || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0 },
+        futureList[1] || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0 }
       ],
       earlier: [
-        earlier1 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0 },
-        earlier2 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0 }
+        earlierList[0] || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0 },
+        earlierList[1] || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0 }
       ]
-    }])
+    }]
+
+    return NextResponse.json(output)
   } catch (err: any) {
-    console.error('❌ Errore route options:', err.message)
+    console.error('Errore route options:', err.message)
     return NextResponse.json([], { status: 500 })
   }
 }
+
