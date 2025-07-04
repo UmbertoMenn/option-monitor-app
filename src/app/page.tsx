@@ -14,26 +14,8 @@ interface OptionData {
   future: { label: string; price: number; strike: number }[]
 }
 
-const fallbackData: OptionData[] = [
-  {
-    ticker: 'NVDA',
-    spot: 157.25,
-    strike: 170,
-    expiry: 'NOV 25',
-    currentCallPrice: 12.6,
-    earlier: [
-      { label: 'Oct25 C165', price: 11.0, strike: 165 },
-      { label: 'Sep25 C160', price: 9.7, strike: 160 },
-    ],
-    future: [
-      { label: 'Dec25 C175', price: 13.2, strike: 175 },
-      { label: 'Jan26 C180', price: 13.9, strike: 180 },
-    ],
-  },
-]
-
 export default function Page() {
-  const [data, setData] = useState<OptionData[]>(fallbackData)
+  const [data, setData] = useState<OptionData[]>([])
 
   const fetchData = async () => {
     try {
@@ -43,11 +25,10 @@ export default function Page() {
       if (Array.isArray(json)) {
         setData(json)
       } else {
-        console.warn('Unexpected API response format, using fallback')
+        console.warn('Unexpected API response format')
       }
     } catch (err) {
       console.error('Errore caricamento dati, uso fallback:', err instanceof Error ? err.message : err)
-      setData(fallbackData)
     }
   }
 
@@ -178,3 +159,4 @@ export default function Page() {
     </div>
   )
 }
+
