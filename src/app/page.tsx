@@ -49,6 +49,7 @@ export default function Page() {
 
   const updateCurrentCall = () => {
     if (!selectedYear || !selectedMonth || !selectedStrike) return
+
     const label = `${selectedMonth} ${selectedYear.slice(2)} C${selectedStrike}`
     const expiryDate = new Date(`${selectedYear}-${(
       ['GEN','FEB','MAR','APR','MAG','GIU','LUG','AGO','SET','OTT','NOV','DIC'].indexOf(selectedMonth)+1
@@ -59,11 +60,11 @@ export default function Page() {
       strike: selectedStrike,
       expiry: expiryDate.toISOString().slice(0, 10),
       currentCallPrice: d.currentCallPrice * (selectedStrike / d.strike),
-      future: [],
-      earlier: []
     }))
+
     setData(updated)
     setShowDropdown(false)
+    fetchData() // 🔁 ricarica future/earlier con la nuova call
   }
 
   useEffect(() => {
