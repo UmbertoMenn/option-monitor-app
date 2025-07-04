@@ -11,8 +11,7 @@ const CURRENT_EXPIRY = '2025-11-21'
 const CURRENT_STRIKE = 170
 
 function padStrike(strike: number) {
-  // es: 170 -> "00170000"
-  return (strike * 1000).toFixed(0).padStart(8, '0')
+  return (strike * 1000).toFixed(0).padStart(8, '0') // es: 170 -> "00170000"
 }
 
 function formatSymbol(expiry: string, strike: number) {
@@ -43,7 +42,7 @@ async function fetchBid(symbol: string): Promise<number | null> {
 export async function GET() {
   try {
     const contracts = await fetchContracts()
-    console.log("Esempio contratti:", contracts.slice(0, 5))
+    console.log("Esempio ticker disponibili:", contracts.slice(0, 20).map(c => c.ticker))
 
     contracts.sort((a: any, b: any) =>
       a.expiration_date.localeCompare(b.expiration_date) ||
@@ -51,9 +50,19 @@ export async function GET() {
     )
 
     const currentOpra = formatSymbol(CURRENT_EXPIRY, CURRENT_STRIKE)
-    console.log("Cerco OPRA:", currentOpra)
+    const paddedStrike = padStrike(CURRENT_STRIKE)
+    console.log("Ticker cercato (OPRA):", currentOpra)
+    console.log("Strike pad:", paddedStrike)
 
-    const currentIndex = contracts.findIndex((c: any) => c.ticker === currentOpra)
+    const possibili = contracts.filter((c: any) => c.expiration_date === CURRENT_EXPIRY)
+    console.log("Contratti con expiry giusta:", possibili.map(c => c.ticker))
+
+    // Fallback match per ticker con paddedStrike e expiry corretti
+    const currentIndex = contracts.findIndex((c: any) =>
+      c.expiration_date === CURRENT_EXPIRY &&
+      c.ticker.includes(paddedStrike)
+    )
+
     if (currentIndex < 0) throw new Error('Call attuale non trovata')
 
     const currentCall = contracts[currentIndex]
@@ -61,7 +70,7 @@ export async function GET() {
     const spotJson = await spotRes.json()
     const spot = spotJson?.results?.price ?? 0
 
-    const currentBid = await fetchBid(currentOpra)
+    const currentBid = await fetchBid(currentCall.ticker)
     const currentCallPrice = currentBid ?? 0
 
     const uniqueExpiries = Array.from(new Set(contracts.map((c: any) => c.expiration_date))).sort()
