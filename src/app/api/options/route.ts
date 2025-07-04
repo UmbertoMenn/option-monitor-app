@@ -2,12 +2,13 @@
 
 import { NextResponse } from 'next/server'
 
-const API_KEY = process.env.POLYGON_API_KEY!
-const CONTRACTS_URL = 'https://api.polygon.io/v3/reference/options/contracts'
+const POLYGON_API_KEY = process.env.POLYGON_API_KEY!
+const ALPHA_VANTAGE_API_KEY = process.env.ALPHA_VANTAGE_API_KEY!
 
 const UNDERLYING = 'NVDA'
 const CURRENT_EXPIRY = '2025-11-21'
 const CURRENT_STRIKE = 170
+const CONTRACTS_URL = 'https://api.polygon.io/v3/reference/options/contracts'
 
 function padStrike(strike: number) {
   return (strike * 1000).toFixed(0).padStart(8, '0')
@@ -19,7 +20,7 @@ function formatSymbol(expiry: string, strike: number) {
 }
 
 async function fetchContracts(): Promise<any[]> {
-  const url = `${CONTRACTS_URL}?underlying_ticker=${UNDERLYING}&contract_type=call&limit=1000&apiKey=${API_KEY}`
+  const url = `${CONTRACTS_URL}?underlying_ticker=${UNDERLYING}&contract_type=call&limit=1000&apiKey=${POLYGON_API_KEY}`
   const res = await fetch(url)
   if (!res.ok) {
     const text = await res.text()
@@ -31,22 +32,23 @@ async function fetchContracts(): Promise<any[]> {
 }
 
 async function fetchBid(symbol: string): Promise<number | null> {
-  const res = await fetch(`https://api.polygon.io/v3/snapshot/options/${symbol}?apiKey=${API_KEY}`)
+  const res = await fetch(`https://api.polygon.io/v3/snapshot/options/${symbol}?apiKey=${POLYGON_API_KEY}`)
   if (!res.ok) return null
   const json = await res.json()
   return json?.results?.last_quote?.bid ?? null
 }
 
-async function fetchSpotYahoo(ticker: string): Promise<number> {
-  const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${ticker}`
+async function fetchSpotAlphaVantage(ticker: string): Promise<number> {
+  const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${ticker}&apikey=${ALPHA_VANTAGE_API_KEY}`
   const res = await fetch(url)
   if (!res.ok) {
     const text = await res.text()
-    console.error("Errore fetch spot (Yahoo):", res.status, text)
+    console.error("Errore fetch spot (Alpha Vantage):", res.status, text)
     throw new Error('Errore fetch spot price')
   }
   const json = await res.json()
-  return json?.quoteResponse?.result?.[0]?.regularMarketPrice ?? 0
+  const price = parseFloat(json?.["Global Quote"]?.["05. price"] ?? '0')
+  return isNaN(price) ? 0 : price
 }
 
 export async function GET() {
@@ -67,9 +69,7 @@ export async function GET() {
     if (currentIndex < 0) throw new Error('Call attuale non trovata')
 
     const currentCall = contracts[currentIndex]
-
-    const spot = await fetchSpotYahoo(UNDERLYING)
-
+    const spot = await fetchSpotAlphaVantage(UNDERLYING)
     const currentBid = await fetchBid(currentCall.ticker)
     const currentCallPrice = currentBid ?? 0
 
