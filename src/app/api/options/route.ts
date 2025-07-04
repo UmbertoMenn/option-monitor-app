@@ -29,14 +29,11 @@ export async function GET() {
 
     const json = (await res.json()) as { results: PolygonOptionContract[] }
 
-    console.log('📦 Opzioni ricevute da Polygon:', json.results.length)
-    console.log('🔍 Ticker ricevuti:', json.results.map(opt => opt.ticker))
-    console.log('🔍 Strike + Expiry ricevuti:', json.results.map(opt => `${opt.strike_price} @ ${opt.expiration_date}`))
-
     const calls = json.results.filter(
       (opt) => opt.exercise_style === 'american'
     )
 
+    // Ordina per data scadenza crescente, poi per strike
     calls.sort((a, b) => {
       if (a.expiration_date === b.expiration_date) {
         return a.strike_price - b.strike_price
@@ -44,37 +41,34 @@ export async function GET() {
       return a.expiration_date.localeCompare(b.expiration_date)
     })
 
-    const currentCall = calls.find(
-      (c) =>
-        c.strike_price === CURRENT_CALL.strike &&
-        c.expiration_date === CURRENT_CALL.expiry
-    )
+    const currentIndex = calls.findIndex((c) => c.ticker === CURRENT_CALL.ticker)
+    if (currentIndex === -1) throw new Error('Call attuale non trovata')
 
-    if (!currentCall) {
-      console.error('❌ Call attuale non trovata. Strike:', CURRENT_CALL.strike, 'Expiry:', CURRENT_CALL.expiry)
-      console.error('📦 Opzioni disponibili:', calls.map(c => `${c.strike_price} @ ${c.expiration_date}`))
-      return NextResponse.json([], { status: 500 })
-    }
-
+    const currentCall = calls[currentIndex]
     const currentExpiry = currentCall.expiration_date
     const currentStrike = currentCall.strike_price
 
-    const future = calls.filter(
-      (c) => c.expiration_date > currentExpiry && c.strike_price > currentStrike
+    // Future: 1a e 2a scadenza mensile successiva, strike > attuale
+    const future = calls.filter((c) =>
+      c.expiration_date > currentExpiry && c.strike_price > currentStrike
     )
 
     const nextExpiries = Array.from(
       new Set(future.map((f) => f.expiration_date))
     ).slice(0, 2)
 
-    const futureOptions = nextExpiries.map((exp) =>
-      future.find(
-        (f) => f.expiration_date === exp && f.strike_price > currentStrike
-      )
-    ).filter(Boolean) as PolygonOptionContract[]
+    const futureOptions: PolygonOptionContract[] = []
 
-    const earlier = calls.filter(
-      (c) => c.expiration_date < currentExpiry && c.strike_price < currentStrike
+    for (const exp of nextExpiries) {
+      const strikeAbove = future
+        .filter(f => f.expiration_date === exp && f.strike_price > currentStrike)
+        .sort((a, b) => a.strike_price - b.strike_price)[0]
+      if (strikeAbove) futureOptions.push(strikeAbove)
+    }
+
+    // Earlier: 1a e 2a scadenza mensile precedente, strike < attuale
+    const earlier = calls.filter((c) =>
+      c.expiration_date < currentExpiry && c.strike_price < currentStrike
     )
 
     const prevExpiries = Array.from(
@@ -82,34 +76,30 @@ export async function GET() {
     ).slice(-2)
 
     const earlierOptions = prevExpiries.map((exp) =>
-      [...earlier].reverse().find(
-        (e) => e.expiration_date === exp && e.strike_price < currentStrike
-      )
+      [...earlier].reverse().find((e) => e.expiration_date === exp && e.strike_price < currentStrike)
     ).filter(Boolean) as PolygonOptionContract[]
 
     const formatLabel = (opt: PolygonOptionContract) => {
-      const [y, m] = opt.expiration_date.split('-')
-      const month = new Date(opt.expiration_date).toLocaleString('en-US', {
-        month: 'short',
-      }).toUpperCase()
+      const [y] = opt.expiration_date.split('-')
+      const month = new Date(opt.expiration_date).toLocaleString('en-US', { month: 'short' }).toUpperCase()
       return `${month}${y.slice(2)} C${opt.strike_price}`
     }
 
     const result = [
       {
         ticker: UNDERLYING,
-        spot: 157.25, // Placeholder per ora
+        spot: 157.25, // Placeholder finché non integriamo lo spot reale
         strike: currentStrike,
         expiry: 'NOV 25',
-        currentCallPrice: 12.6, // Placeholder per ora
+        currentCallPrice: 12.6, // Placeholder
         earlier: earlierOptions.map((e) => ({
           label: formatLabel(e),
-          price: 10.5,
+          price: 10.5, // Placeholder
           strike: e.strike_price,
         })),
         future: futureOptions.map((f) => ({
           label: formatLabel(f),
-          price: 13.2,
+          price: 13.2, // Placeholder
           strike: f.strike_price,
         })),
       },
