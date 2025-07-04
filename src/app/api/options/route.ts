@@ -1,5 +1,3 @@
-// src/app/api/options/route.ts
-
 import { NextResponse } from 'next/server'
 
 const POLYGON_API_KEY = process.env.POLYGON_API_KEY!
@@ -16,17 +14,25 @@ function padStrike(strike: number) {
 
 function isThirdFriday(dateStr: string): boolean {
   const date = new Date(dateStr)
-  if (date.getDay() !== 5) return false
+  if (date.getDay() !== 5) return false // non è venerdì
   const day = date.getDate()
   return day >= 15 && day <= 21
 }
 
 async function fetchContracts(): Promise<any[]> {
-  const url = `${CONTRACTS_URL}?underlying_ticker=${UNDERLYING}&contract_type=call&limit=1000&apiKey=${POLYGON_API_KEY}`
-  const res = await fetch(url)
-  if (!res.ok) throw new Error('Errore fetch contracts')
-  const json = await res.json()
-  return json.results!
+  let contracts: any[] = []
+  let url: string | null = `${CONTRACTS_URL}?underlying_ticker=${UNDERLYING}&contract_type=call&limit=1000&apiKey=${POLYGON_API_KEY}`
+
+  while (url) {
+    const res: Response = await fetch(url)
+    if (!res.ok) throw new Error(`Errore fetch contracts: ${res.status}`)
+    const json: any = await res.json()
+    if (json.results) contracts.push(...json.results)
+    url = json.next_url ? json.next_url + `&apiKey=${POLYGON_API_KEY}` : null
+  }
+
+  console.log(`✅ Contratti totali scaricati: ${contracts.length}`)
+  return contracts
 }
 
 async function fetchBid(symbol: string): Promise<number | null> {
@@ -52,7 +58,6 @@ function buildExpiriesMap(contracts: any[]) {
     }
     map[c.expiration_date].push(c.strike_price)
   }
-  // ordina gli strike per ciascuna expiry
   for (const exp in map) {
     map[exp].sort((a, b) => a - b)
   }
@@ -166,8 +171,9 @@ export async function GET() {
 
     return NextResponse.json(output)
   } catch (err: any) {
-    console.error('Errore route options:', err.message)
+    console.error('❌ Errore route options:', err.message)
     return NextResponse.json([], { status: 500 })
   }
 }
+
 
