@@ -14,6 +14,12 @@ function padStrike(strike: number) {
   return (strike * 1000).toFixed(0).padStart(8, '0')
 }
 
+function isThirdFriday(dateStr: string): boolean {
+  const [year, month, day] = dateStr.split('-').map(Number)
+  const date = new Date(year, month - 1, day)
+  return date.getDay() === 5 && day >= 15 && day <= 21
+}
+
 async function fetchContracts(): Promise<any[]> {
   const url = `${CONTRACTS_URL}?underlying_ticker=${UNDERLYING}&contract_type=call&limit=1000&apiKey=${POLYGON_API_KEY}`
   const res = await fetch(url)
@@ -55,21 +61,9 @@ export async function GET() {
       a.strike_price - b.strike_price
     )
 
-    const paddedStrike = padStrike(CURRENT_STRIKE)
-    const currentIndex = contracts.findIndex(c =>
-      c.expiration_date === CURRENT_EXPIRY &&
-      c.ticker.includes(paddedStrike)
-    )
-
-    if (currentIndex < 0) throw new Error('Call attuale non trovata')
-
-    const currentCall = contracts[currentIndex]
-    const spot = await fetchSpotAlphaVantage(UNDERLYING)
-    const currentBid = await fetchBid(currentCall.ticker)
-    const currentCallPrice = currentBid ?? 0
-
-    const uniqueExpiries = Array.from(new Set(contracts.map(c => c.expiration_date))).sort()
-    const curExpiryIdx = uniqueExpiries.indexOf(CURRENT_EXPIRY)
+    const allExpiries = Array.from(new Set(contracts.map(c => c.expiration_date))).sort()
+    const monthlyExpiries = allExpiries.filter(isThirdFriday)
+    const curExpiryIdx = monthlyExpiries.indexOf(CURRENT_EXPIRY)
 
     async function selectOption(expiry: string, strikeRef: number, higher: boolean) {
       const candidates = contracts.filter(c =>
@@ -90,9 +84,9 @@ export async function GET() {
       }
     }
 
-    // FUTURE
-    const futureExpiries = uniqueExpiries.slice(curExpiryIdx + 1)
+    // FUTURE 1
     const future1 = await (async () => {
+      const futureExpiries = monthlyExpiries.slice(curExpiryIdx + 1)
       for (const expiry of futureExpiries) {
         const f = await selectOption(expiry, CURRENT_STRIKE, true)
         if (f) return f
@@ -100,10 +94,11 @@ export async function GET() {
       return null
     })()
 
+    // FUTURE 2
     const future2 = await (async () => {
       if (!future1) return null
-      const idx = uniqueExpiries.indexOf(future1.expiry)
-      const nextExpiries = uniqueExpiries.slice(idx + 1)
+      const idx = monthlyExpiries.indexOf(future1.expiry)
+      const nextExpiries = monthlyExpiries.slice(idx + 1)
       for (const expiry of nextExpiries) {
         const f = await selectOption(expiry, future1.strike, true)
         if (f) return f
@@ -111,9 +106,9 @@ export async function GET() {
       return null
     })()
 
-    // EARLIER
-    const earlierExpiries = uniqueExpiries.slice(0, curExpiryIdx).reverse()
+    // EARLIER 1
     const earlier1 = await (async () => {
+      const earlierExpiries = monthlyExpiries.slice(0, curExpiryIdx).reverse()
       for (const expiry of earlierExpiries) {
         const f = await selectOption(expiry, CURRENT_STRIKE, false)
         if (f) return f
@@ -121,10 +116,11 @@ export async function GET() {
       return null
     })()
 
+    // EARLIER 2
     const earlier2 = await (async () => {
       if (!earlier1) return null
-      const idx = earlierExpiries.indexOf(earlier1.expiry)
-      const nextExpiries = earlierExpiries.slice(idx + 1)
+      const idx = monthlyExpiries.indexOf(earlier1.expiry)
+      const nextExpiries = monthlyExpiries.slice(0, idx).reverse()
       for (const expiry of nextExpiries) {
         const f = await selectOption(expiry, earlier1.strike, false)
         if (f) return f
@@ -132,12 +128,14 @@ export async function GET() {
       return null
     })()
 
+    const spot = await fetchSpotAlphaVantage(UNDERLYING)
+
     return NextResponse.json([{
       ticker: UNDERLYING,
       spot,
       strike: CURRENT_STRIKE,
       expiry: CURRENT_EXPIRY,
-      currentCallPrice,
+      currentCallPrice: 0,
       future: [
         future1 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0 },
         future2 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0 }
