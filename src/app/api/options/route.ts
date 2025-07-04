@@ -14,9 +14,17 @@ function padStrike(strike: number) {
 
 function isThirdFriday(dateStr: string): boolean {
   const date = new Date(dateStr)
-  if (date.getDay() !== 5) return false // non è venerdì
+  if (date.getDay() !== 5) return false
   const day = date.getDate()
   return day >= 15 && day <= 21
+}
+
+function formatExpiryLabel(dateStr: string): string {
+  const date = new Date(dateStr)
+  const mesi = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
+  const mese = mesi[date.getMonth()]
+  const anno = date.getFullYear().toString().slice(2)
+  return `${mese} ${anno}`
 }
 
 async function fetchContracts(): Promise<any[]> {
@@ -26,9 +34,11 @@ async function fetchContracts(): Promise<any[]> {
   while (url) {
     const res: Response = await fetch(url)
     if (!res.ok) throw new Error(`Errore fetch contracts: ${res.status}`)
+
     const json: any = await res.json()
     if (json.results) contracts.push(...json.results)
-    url = json.next_url ? json.next_url + `&apiKey=${POLYGON_API_KEY}` : null
+
+    url = json.next_url ? `${json.next_url}&apiKey=${POLYGON_API_KEY}` : null
   }
 
   console.log(`✅ Contratti totali scaricati: ${contracts.length}`)
@@ -36,16 +46,16 @@ async function fetchContracts(): Promise<any[]> {
 }
 
 async function fetchBid(symbol: string): Promise<number | null> {
-  const res = await fetch(`https://api.polygon.io/v3/snapshot/options/${symbol}?apiKey=${POLYGON_API_KEY}`)
+  const res: Response = await fetch(`https://api.polygon.io/v3/snapshot/options/${symbol}?apiKey=${POLYGON_API_KEY}`)
   if (!res.ok) return null
-  const json = await res.json()
+  const json: any = await res.json()
   return json?.results?.last_quote?.bid ?? null
 }
 
 async function fetchSpotAlphaVantage(ticker: string): Promise<number> {
-  const res = await fetch(`https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${ticker}&apikey=${ALPHA_VANTAGE_API_KEY}`)
+  const res: Response = await fetch(`https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${ticker}&apikey=${ALPHA_VANTAGE_API_KEY}`)
   if (!res.ok) throw new Error('Errore fetch spot')
-  const json = await res.json()
+  const json: any = await res.json()
   return parseFloat(json?.["Global Quote"]?.["05. price"] ?? '0')
 }
 
@@ -95,7 +105,7 @@ export async function GET() {
       if (!match) return null
       const bid = await fetchBid(match.ticker)
       return {
-        label: `${expiry.slice(5)} C${selectedStrike}`,
+        label: `${formatExpiryLabel(expiry)} C${selectedStrike}`,
         strike: selectedStrike,
         price: bid ?? 0,
         expiry,
@@ -160,12 +170,12 @@ export async function GET() {
       expiry: CURRENT_EXPIRY,
       currentCallPrice,
       future: [
-        future1 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0 },
-        future2 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0 }
+        future1 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '' },
+        future2 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '' }
       ],
       earlier: [
-        earlier1 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0 },
-        earlier2 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0 }
+        earlier1 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '' },
+        earlier2 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '' }
       ]
     }]
 
@@ -175,5 +185,3 @@ export async function GET() {
     return NextResponse.json([], { status: 500 })
   }
 }
-
-

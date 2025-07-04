@@ -4,14 +4,21 @@
 
 import React, { useEffect, useState } from 'react'
 
+interface OptionEntry {
+  label: string
+  price: number
+  strike: number
+  expiry: string
+}
+
 interface OptionData {
   ticker: string
   spot: number
   strike: number
   expiry: string
   currentCallPrice: number
-  earlier: { label: string; price: number; strike: number }[]
-  future: { label: string; price: number; strike: number }[]
+  earlier: OptionEntry[]
+  future: OptionEntry[]
 }
 
 export default function Page() {
@@ -65,6 +72,11 @@ export default function Page() {
     </button>
   )
 
+  const isFattibile = (opt: OptionEntry, item: OptionData) =>
+    item.spot < opt.strike &&
+    opt.strike >= item.spot * 1.04 &&
+    opt.price >= item.currentCallPrice * 0.9
+
   return (
     <div className="min-h-screen bg-black text-white p-2 flex flex-col gap-4 text-sm leading-tight">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
@@ -72,11 +84,6 @@ export default function Page() {
           const deltaPct = ((item.strike - item.spot) / item.spot) * 100
           const deltaColor = deltaPct < 4 ? 'text-red-500' : 'text-green-500'
           const boxColor = 'bg-blue-700 text-white font-bold'
-
-          const isFattibile = (opt: any) =>
-            item.spot < opt.strike &&
-            opt.strike >= item.spot * 1.04 &&
-            opt.price >= item.currentCallPrice * 0.9
 
           return (
             <div key={index} className="bg-zinc-900 border border-zinc-800 shadow-md rounded-lg p-3">
@@ -112,8 +119,10 @@ export default function Page() {
               {item.future.map((opt, i) => (
                 <div key={i} className="flex items-center justify-between mb-0.5">
                   <span className="flex items-center gap-1 text-white">
-                    {isFattibile(opt) && <span className="text-green-400">🟢</span>}
-                    <span>{opt.label} - {renderPriceWithDelta(opt.price, item.currentCallPrice, item.spot)}</span>
+                    {isFattibile(opt, item) && <span className="text-green-400">🟢</span>}
+                    <span title={opt.expiry}>
+                      {opt.label} - {renderPriceWithDelta(opt.price, item.currentCallPrice, item.spot)}
+                    </span>
                   </span>
                   <div className="flex items-center gap-1">
                     <button className="bg-blue-700 text-white font-bold px-1.5 py-0.5 rounded text-xs">ROLLA</button>
@@ -133,8 +142,10 @@ export default function Page() {
               {item.earlier.map((opt, i) => (
                 <div key={i} className="flex items-center justify-between mb-0.5">
                   <span className="flex items-center gap-1 text-white">
-                    {isFattibile(opt) && <span className="text-green-400">🟢</span>}
-                    <span>{opt.label} - {renderPriceWithDelta(opt.price, item.currentCallPrice, item.spot)}</span>
+                    {isFattibile(opt, item) && <span className="text-green-400">🟢</span>}
+                    <span title={opt.expiry}>
+                      {opt.label} - {renderPriceWithDelta(opt.price, item.currentCallPrice, item.spot)}
+                    </span>
                   </span>
                   <div className="flex items-center gap-1">
                     <button className="bg-blue-700 text-white font-bold px-1.5 py-0.5 rounded text-xs">ROLLA</button>
@@ -160,4 +171,3 @@ export default function Page() {
     </div>
   )
 }
-
