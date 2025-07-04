@@ -1,5 +1,3 @@
-// src/app/page.tsx
-
 'use client'
 
 import React, { useEffect, useState } from 'react'
@@ -27,6 +25,7 @@ export default function Page() {
   const [selectedYear, setSelectedYear] = useState('')
   const [selectedMonth, setSelectedMonth] = useState('')
   const [selectedStrike, setSelectedStrike] = useState<number | null>(null)
+  const [showDropdown, setShowDropdown] = useState(false)
 
   const fetchData = async () => {
     try {
@@ -64,6 +63,7 @@ export default function Page() {
       earlier: []
     }))
     setData(updated)
+    setShowDropdown(false)
   }
 
   useEffect(() => {
@@ -101,7 +101,41 @@ export default function Page() {
             <div key={index} className="bg-zinc-900 border border-zinc-800 shadow-md rounded-lg p-3">
               <div className="flex justify-between items-center mb-1">
                 <h2 className="text-base font-bold text-red-500">{item.ticker}</h2>
+                <button
+                  onClick={() => setShowDropdown(!showDropdown)}
+                  className="bg-white/10 hover:bg-white/20 text-white text-xs font-medium px-2 py-1 rounded"
+                >
+                  🔄 UPDATE CURRENT CALL
+                </button>
               </div>
+
+              {showDropdown && (
+                <div className="grid grid-cols-3 gap-2 mb-2">
+                  <select value={selectedYear} onChange={e => setSelectedYear(e.target.value)} className="bg-zinc-800 text-white p-1">
+                    <option value="">Anno</option>
+                    {Object.keys(chain).map(y => <option key={y}>{y}</option>)}
+                  </select>
+
+                  <select value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} className="bg-zinc-800 text-white p-1">
+                    <option value="">Mese</option>
+                    {selectedYear && Object.keys(chain[selectedYear] || {}).map(m => <option key={m}>{m}</option>)}
+                  </select>
+
+                  <select value={selectedStrike ?? ''} onChange={e => setSelectedStrike(Number(e.target.value))} className="bg-zinc-800 text-white p-1">
+                    <option value="">Strike</option>
+                    {selectedYear && selectedMonth && (chain[selectedYear]?.[selectedMonth] || []).map(s => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+
+                  <button
+                    onClick={updateCurrentCall}
+                    className="col-span-3 mt-1 bg-green-700 hover:bg-green-800 text-white text-xs font-medium px-2 py-1 rounded"
+                  >
+                    ✔️ Conferma nuova CALL
+                  </button>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-1 mb-2">
                 <div className="p-1 bg-blue-700 font-bold">Spot</div>
@@ -115,35 +149,6 @@ export default function Page() {
                 <div className="p-1 bg-blue-700 font-bold">Prezzo Call attuale</div>
                 <div className="p-1 bg-blue-700">{item.currentCallPrice.toFixed(2)}</div>
               </div>
-
-              <div className="mb-2">
-                <label className="text-xs">Anno:</label>
-                <select value={selectedYear} onChange={e => setSelectedYear(e.target.value)} className="ml-2 bg-zinc-800 text-white">
-                  <option value="">--</option>
-                  {Object.keys(chain).map(y => <option key={y}>{y}</option>)}
-                </select>
-
-                <label className="text-xs ml-2">Mese:</label>
-                <select value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} className="ml-2 bg-zinc-800 text-white">
-                  <option value="">--</option>
-                  {selectedYear && Object.keys(chain[selectedYear] || {}).map(m => <option key={m}>{m}</option>)}
-                </select>
-
-                <label className="text-xs ml-2">Strike:</label>
-                <select value={selectedStrike ?? ''} onChange={e => setSelectedStrike(Number(e.target.value))} className="ml-2 bg-zinc-800 text-white">
-                  <option value="">--</option>
-                  {selectedYear && selectedMonth && (chain[selectedYear]?.[selectedMonth] || []).map(s => (
-                    <option key={s} value={s}>{s}</option>
-                  ))}
-                </select>
-              </div>
-
-              <button
-                onClick={updateCurrentCall}
-                className="w-full bg-white/10 hover:bg-white/20 text-white text-xs font-medium px-2 py-1 rounded mb-2"
-              >
-                🔄 UPDATE CURRENT CALL
-              </button>
 
               <div className="mb-1 font-semibold bg-orange-500 text-white text-center rounded py-0.5">Future</div>
               {item.future.map((opt, i) => (
@@ -171,3 +176,4 @@ export default function Page() {
     </div>
   )
 }
+
