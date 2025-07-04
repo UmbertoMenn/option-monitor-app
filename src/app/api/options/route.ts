@@ -5,7 +5,7 @@ import { NextResponse } from 'next/server'
 const API_KEY = process.env.POLYGON_API_KEY!
 const CONTRACTS_URL = 'https://api.polygon.io/v3/reference/options/contracts'
 
-// Call attuale pre-configurata
+// Parametri predefiniti
 const UNDERLYING = 'NVDA'
 const CURRENT_EXPIRY = '2025-11-21'
 const CURRENT_STRIKE = 170
@@ -21,42 +21,38 @@ function formatSymbol(expiry: string, strike: number) {
 
 async function fetchContracts(): Promise<any[]> {
   const url = `${CONTRACTS_URL}?underlying_ticker=${UNDERLYING}&contract_type=call&limit=1000&apiKey=${API_KEY}`
-  console.log("URL chiamata contracts:", url)
   const res = await fetch(url)
   if (!res.ok) {
     const text = await res.text()
-    console.error("Errore dettagliato:", res.status, text)
+    console.error("Errore fetch contracts:", res.status, text)
     throw new Error('Errore fetch contracts')
   }
   const json = await res.json()
   return json.results!
 }
 
-async function fetchBid(symbol: string): Promise<number | null> {
-  const res = await fetch(`https://api.polygon.io/v3/snapshot/options/${symbol}?apiKey=${API_KEY}`)
-  if (!res.ok) return null
+async function fetchClosePrice(expiry: string, strike: number): Promise<number | null> {
+  const url = `https://api.polygon.io/v3/snapshot/options/${UNDERLYING}?expiration_date=${expiry}&strike_price=${strike}&contract_type=call&apiKey=${API_KEY}`
+  const res = await fetch(url)
+  if (!res.ok) {
+    const text = await res.text()
+    console.error("Errore snapshot:", res.status, text)
+    return null
+  }
   const json = await res.json()
-  return json?.results?.last_quote?.bid ?? null
+  return json?.results?.[0]?.day?.c ?? null
 }
 
 export async function GET() {
   try {
     const contracts = await fetchContracts()
-    console.log("Esempio ticker disponibili:", contracts.slice(0, 20).map(c => c.ticker))
 
     contracts.sort((a: any, b: any) =>
       a.expiration_date.localeCompare(b.expiration_date) ||
       a.strike_price - b.strike_price
     )
 
-    const currentOpra = formatSymbol(CURRENT_EXPIRY, CURRENT_STRIKE)
     const paddedStrike = padStrike(CURRENT_STRIKE)
-    console.log("Ticker cercato (OPRA):", currentOpra)
-    console.log("Strike pad:", paddedStrike)
-
-    const possibili = contracts.filter((c: any) => c.expiration_date === CURRENT_EXPIRY)
-    console.log("Contratti con expiry giusta:", possibili.map(c => c.ticker))
-
     const currentIndex = contracts.findIndex((c: any) =>
       c.expiration_date === CURRENT_EXPIRY &&
       c.ticker.includes(paddedStrike)
@@ -65,23 +61,10 @@ export async function GET() {
     if (currentIndex < 0) throw new Error('Call attuale non trovata')
 
     const currentCall = contracts[currentIndex]
+    const currentClosePrice = await fetchClosePrice(CURRENT_EXPIRY, CURRENT_STRIKE)
 
-    // Fetch prezzo spot dal nuovo endpoint
-    const spotUrl = `https://api.polygon.io/v2/last/trade/stocks/${UNDERLYING}?apiKey=${API_KEY}`
-    console.log("Fetching spot price from:", spotUrl)
-
-    const spotRes = await fetch(spotUrl)
-    if (!spotRes.ok) {
-      const text = await spotRes.text()
-      console.error("Errore fetch spot:", spotRes.status, text)
-      throw new Error('Errore fetch spot price')
-    }
-
-    const spotJson = await spotRes.json()
-    const spot = spotJson?.results?.p ?? 0
-
-    const currentBid = await fetchBid(currentCall.ticker)
-    const currentCallPrice = currentBid ?? 0
+    // Rimuovo il prezzo spot intraday e lascio 0 temporaneamente
+    const spot = 0
 
     const uniqueExpiries = Array.from(new Set(contracts.map((c: any) => c.expiration_date))).sort()
     const curExpiryIdx = uniqueExpiries.indexOf(CURRENT_EXPIRY)
@@ -96,11 +79,11 @@ export async function GET() {
         higher ? a.strike_price - b.strike_price : b.strike_price - a.strike_price
       )
       const c0 = sorted[0]
-      const bid = await fetchBid(c0.ticker)
+      const closePrice = await fetchClosePrice(c0.expiration_date, c0.strike_price)
       return {
         label: `${expiry.slice(5)} C${c0.strike_price}`,
         strike: c0.strike_price,
-        price: bid ?? 0,
+        price: closePrice ?? 0,
         expiry
       }
     }
@@ -126,7 +109,7 @@ export async function GET() {
       spot,
       strike: CURRENT_STRIKE,
       expiry: CURRENT_EXPIRY,
-      currentCallPrice,
+      currentCallPrice: currentClosePrice ?? 0,
       future: [
         future1 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0 },
         future2 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0 }
