@@ -74,6 +74,14 @@ function buildExpiriesMap(contracts: any[]) {
   return map
 }
 
+type OptionObj = {
+  label: string
+  strike: number
+  price: number
+  expiry: string
+  ticker: string
+}
+
 export async function GET() {
   try {
     const contracts = await fetchContracts()
@@ -95,7 +103,7 @@ export async function GET() {
     const monthlyExpiries = Object.keys(expiriesMap).sort()
     const curIdx = monthlyExpiries.indexOf(CURRENT_EXPIRY)
 
-    async function findOption(expiry: string, strikeRef: number, higher: boolean) {
+    async function findOption(expiry: string, strikeRef: number, higher: boolean): Promise<OptionObj | null> {
       const strikes = expiriesMap[expiry]
       if (!strikes) return null
       const filtered = strikes.filter(s => higher ? s > strikeRef : s < strikeRef)
@@ -113,9 +121,11 @@ export async function GET() {
       }
     }
 
-    // FUTURE 1
-    let future1 = null
-    let future2 = null
+    let future1: OptionObj | null = null,
+        future2: OptionObj | null = null,
+        earlier1: OptionObj | null = null,
+        earlier2: OptionObj | null = null
+
     for (let i = curIdx + 1; i < monthlyExpiries.length; i++) {
       const f1 = await findOption(monthlyExpiries[i], CURRENT_STRIKE, true)
       if (f1) {
@@ -125,7 +135,6 @@ export async function GET() {
       }
     }
 
-    // FUTURE 2
     if (future1) {
       const idx1 = monthlyExpiries.indexOf(future1.expiry)
       for (let i = idx1 + 1; i < monthlyExpiries.length; i++) {
@@ -138,9 +147,6 @@ export async function GET() {
       }
     }
 
-    // EARLIER 1
-    let earlier1 = null
-    let earlier2 = null
     for (let i = curIdx - 1; i >= 0; i--) {
       const e1 = await findOption(monthlyExpiries[i], CURRENT_STRIKE, false)
       if (e1) {
@@ -150,7 +156,6 @@ export async function GET() {
       }
     }
 
-    // EARLIER 2
     if (earlier1) {
       const idx1 = monthlyExpiries.indexOf(earlier1.expiry)
       for (let i = idx1 - 1; i >= 0; i--) {
@@ -170,12 +175,12 @@ export async function GET() {
       expiry: CURRENT_EXPIRY,
       currentCallPrice,
       future: [
-        future1 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '' },
-        future2 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '' }
+        future1 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '', ticker: '' },
+        future2 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '', ticker: '' }
       ],
       earlier: [
-        earlier1 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '' },
-        earlier2 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '' }
+        earlier1 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '', ticker: '' },
+        earlier2 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '', ticker: '' }
       ]
     }]
 

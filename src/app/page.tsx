@@ -23,24 +23,52 @@ interface OptionData {
 
 export default function Page() {
   const [data, setData] = useState<OptionData[]>([])
+  const [chain, setChain] = useState<Record<string, Record<string, number[]>>>({})
+  const [selectedYear, setSelectedYear] = useState('')
+  const [selectedMonth, setSelectedMonth] = useState('')
+  const [selectedStrike, setSelectedStrike] = useState<number | null>(null)
 
   const fetchData = async () => {
     try {
       const res = await fetch('/api/options')
-      if (!res.ok) throw new Error('Network response was not ok')
       const json = await res.json()
-      if (Array.isArray(json)) {
-        setData(json)
-      } else {
-        console.warn('Unexpected API response format')
-      }
+      if (Array.isArray(json)) setData(json)
     } catch (err) {
-      console.error('Errore caricamento dati, uso fallback:', err instanceof Error ? err.message : err)
+      console.error('Errore fetch /api/options')
     }
+  }
+
+  const fetchChain = async () => {
+    try {
+      const res = await fetch('/api/chain')
+      const json = await res.json()
+      setChain(json)
+    } catch (err) {
+      console.error('Errore fetch /api/chain')
+    }
+  }
+
+  const updateCurrentCall = () => {
+    if (!selectedYear || !selectedMonth || !selectedStrike) return
+    const label = `${selectedMonth} ${selectedYear.slice(2)} C${selectedStrike}`
+    const expiryDate = new Date(`${selectedYear}-${(
+      ['GEN','FEB','MAR','APR','MAG','GIU','LUG','AGO','SET','OTT','NOV','DIC'].indexOf(selectedMonth)+1
+    ).toString().padStart(2,'0')}-20`) // solo label visivo
+
+    const updated = data.map(d => ({
+      ...d,
+      strike: selectedStrike,
+      expiry: expiryDate.toISOString().slice(0, 10),
+      currentCallPrice: d.currentCallPrice * (selectedStrike / d.strike), // mock di prezzo
+      future: [],
+      earlier: []
+    }))
+    setData(updated)
   }
 
   useEffect(() => {
     fetchData()
+    fetchChain()
   }, [])
 
   const renderPriceWithDelta = (price: number, currentCallPrice: number, spot: number) => {
@@ -50,27 +78,12 @@ export default function Page() {
     return (
       <>
         {price.toFixed(2)}{' '}
-        <span
-          className={color}
-          title="Premio percentuale mensile aggiuntivo/riduttivo rispetto all'opzione attuale, diviso il prezzo spot del sottostante"
-        >
+        <span className={color}>
           / {sign}{diffPct.toFixed(1)}%
         </span>
       </>
     )
   }
-
-  const arrowButton = (direction: 'up' | 'down', label: string, onClick: () => void) => (
-    <button
-      onClick={onClick}
-      className={`px-1 py-0.5 rounded text-xs ${
-        direction === 'up' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
-      }`}
-      title={label}
-    >
-      {direction === 'up' ? '↑' : '↓'}
-    </button>
-  )
 
   const isFattibile = (opt: OptionEntry, item: OptionData) =>
     item.spot < opt.strike &&
@@ -83,90 +96,77 @@ export default function Page() {
         {data.map((item, index) => {
           const deltaPct = ((item.strike - item.spot) / item.spot) * 100
           const deltaColor = deltaPct < 4 ? 'text-red-500' : 'text-green-500'
-          const boxColor = 'bg-blue-700 text-white font-bold'
 
           return (
             <div key={index} className="bg-zinc-900 border border-zinc-800 shadow-md rounded-lg p-3">
               <div className="flex justify-between items-center mb-1">
                 <h2 className="text-base font-bold text-red-500">{item.ticker}</h2>
-                <button
-                  onClick={fetchData}
-                  className="w-1/2 bg-white/10 hover:bg-white/20 text-white text-xs font-medium px-2 py-1 rounded text-left"
-                  title="Aggiorna manualmente i dati dell'opzione in portafoglio"
-                >
-                  🔄 UPDATE POSITION
-                </button>
               </div>
 
               <div className="grid grid-cols-2 gap-1 mb-2">
-                <div className={`p-1 ${boxColor}`}>Spot</div>
-                <div className={`p-1 ${boxColor}`}>{item.spot.toFixed(2)}</div>
-
-                <div className={`p-1 ${boxColor}`}>Strike</div>
-                <div className={`p-1 ${boxColor}`}>{item.strike.toFixed(2)}</div>
-
-                <div className={`p-1 ${boxColor}`}>Scadenza</div>
-                <div className={`p-1 ${boxColor}`}>{item.expiry}</div>
-
-                <div className={`${boxColor} p-1`}>Δ% Strike/Spot</div>
-                <div className={`p-1 ${deltaColor} font-bold`}>{deltaPct.toFixed(2)}%</div>
-
-                <div className={`${boxColor} p-1`}>Prezzo Call attuale</div>
-                <div className={`${boxColor} p-1`}>{item.currentCallPrice.toFixed(2)}</div>
+                <div className="p-1 bg-blue-700 font-bold">Spot</div>
+                <div className="p-1 bg-blue-700">{item.spot.toFixed(2)}</div>
+                <div className="p-1 bg-blue-700 font-bold">Strike</div>
+                <div className="p-1 bg-blue-700">{item.strike.toFixed(2)}</div>
+                <div className="p-1 bg-blue-700 font-bold">Scadenza</div>
+                <div className="p-1 bg-blue-700">{item.expiry}</div>
+                <div className="p-1 bg-blue-700 font-bold">Δ% Strike/Spot</div>
+                <div className={`p-1 ${deltaColor}`}>{deltaPct.toFixed(2)}%</div>
+                <div className="p-1 bg-blue-700 font-bold">Prezzo Call attuale</div>
+                <div className="p-1 bg-blue-700">{item.currentCallPrice.toFixed(2)}</div>
               </div>
+
+              <div className="mb-2">
+                <label className="text-xs">Anno:</label>
+                <select value={selectedYear} onChange={e => setSelectedYear(e.target.value)} className="ml-2 bg-zinc-800 text-white">
+                  <option value="">--</option>
+                  {Object.keys(chain).map(y => <option key={y}>{y}</option>)}
+                </select>
+
+                <label className="text-xs ml-2">Mese:</label>
+                <select value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} className="ml-2 bg-zinc-800 text-white">
+                  <option value="">--</option>
+                  {selectedYear && Object.keys(chain[selectedYear] || {}).map(m => <option key={m}>{m}</option>)}
+                </select>
+
+                <label className="text-xs ml-2">Strike:</label>
+                <select value={selectedStrike ?? ''} onChange={e => setSelectedStrike(Number(e.target.value))} className="ml-2 bg-zinc-800 text-white">
+                  <option value="">--</option>
+                  {selectedYear && selectedMonth && (chain[selectedYear]?.[selectedMonth] || []).map(s => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              </div>
+
+              <button
+                onClick={updateCurrentCall}
+                className="w-full bg-white/10 hover:bg-white/20 text-white text-xs font-medium px-2 py-1 rounded mb-2"
+              >
+                🔄 UPDATE CURRENT CALL
+              </button>
 
               <div className="mb-1 font-semibold bg-orange-500 text-white text-center rounded py-0.5">Future</div>
               {item.future.map((opt, i) => (
                 <div key={i} className="flex items-center justify-between mb-0.5">
-                  <span className="flex items-center gap-1 text-white">
+                  <span className="flex items-center gap-1">
                     {isFattibile(opt, item) && <span className="text-green-400">🟢</span>}
-                    <span title={opt.expiry}>
-                      {opt.label} - {renderPriceWithDelta(opt.price, item.currentCallPrice, item.spot)}
-                    </span>
+                    <span title={opt.expiry}>{opt.label} - {renderPriceWithDelta(opt.price, item.currentCallPrice, item.spot)}</span>
                   </span>
-                  <div className="flex items-center gap-1">
-                    <button className="bg-blue-700 text-white font-bold px-1.5 py-0.5 rounded text-xs">ROLLA</button>
-                    <div className="flex gap-0.5">
-                      {arrowButton('up', 'Strike up', () => alert('Future Strike up'))}
-                      {arrowButton('down', 'Strike down', () => alert('Future Strike down'))}
-                    </div>
-                    <div className="flex gap-0.5">
-                      {arrowButton('up', 'Month up', () => alert('Future Month up'))}
-                      {arrowButton('down', 'Month down', () => alert('Future Month down'))}
-                    </div>
-                  </div>
                 </div>
               ))}
 
               <div className="mt-2 mb-1 font-semibold bg-orange-500 text-white text-center rounded py-0.5">Earlier</div>
               {item.earlier.map((opt, i) => (
                 <div key={i} className="flex items-center justify-between mb-0.5">
-                  <span className="flex items-center gap-1 text-white">
+                  <span className="flex items-center gap-1">
                     {isFattibile(opt, item) && <span className="text-green-400">🟢</span>}
-                    <span title={opt.expiry}>
-                      {opt.label} - {renderPriceWithDelta(opt.price, item.currentCallPrice, item.spot)}
-                    </span>
+                    <span title={opt.expiry}>{opt.label} - {renderPriceWithDelta(opt.price, item.currentCallPrice, item.spot)}</span>
                   </span>
-                  <div className="flex items-center gap-1">
-                    <button className="bg-blue-700 text-white font-bold px-1.5 py-0.5 rounded text-xs">ROLLA</button>
-                    <div className="flex gap-0.5">
-                      {arrowButton('up', 'Strike up', () => alert('Earlier Strike up'))}
-                      {arrowButton('down', 'Strike down', () => alert('Earlier Strike down'))}
-                    </div>
-                    <div className="flex gap-0.5">
-                      {arrowButton('up', 'Month up', () => alert('Earlier Month up'))}
-                      {arrowButton('down', 'Month down', () => alert('Earlier Month down'))}
-                    </div>
-                  </div>
                 </div>
               ))}
             </div>
           )
         })}
-      </div>
-
-      <div className="bg-zinc-800 border border-zinc-700 rounded-lg p-4 text-white text-sm">
-        <p className="text-center text-gray-400 italic">Spazio per strumenti aggiuntivi</p>
       </div>
     </div>
   )
