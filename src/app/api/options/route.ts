@@ -25,7 +25,7 @@ async function fetchContracts(): Promise<any[]> {
   const res = await fetch(url)
   if (!res.ok) {
     const text = await res.text()
-    console.error("Errore fetch contracts:", res.status, text)
+    console.error("❌ Errore fetch contracts:", res.status, text)
     throw new Error('Errore fetch contracts')
   }
   const json = await res.json()
@@ -44,12 +44,34 @@ async function fetchSpotAlphaVantage(ticker: string): Promise<number> {
   const res = await fetch(url)
   if (!res.ok) {
     const text = await res.text()
-    console.error("Errore fetch spot (Alpha Vantage):", res.status, text)
+    console.error("❌ Errore fetch spot (Alpha Vantage):", res.status, text)
     throw new Error('Errore fetch spot price')
   }
   const json = await res.json()
   const price = parseFloat(json?.["Global Quote"]?.["05. price"] ?? '0')
   return isNaN(price) ? 0 : price
+}
+
+async function selectOption(contracts: any[], expiry: string, strikeRef: number, higher: boolean) {
+  const candidates = contracts.filter(c =>
+    c.expiration_date === expiry &&
+    (higher ? c.strike_price > strikeRef : c.strike_price < strikeRef)
+  )
+  console.log(`📊 ${candidates.length} opzioni trovate su ${expiry} con strike ${higher ? '>' : '<'} ${strikeRef}`)
+
+  if (candidates.length === 0) return null
+  const sorted = candidates.sort((a, b) =>
+    higher ? a.strike_price - b.strike_price : b.strike_price - a.strike_price
+  )
+  const best = sorted[0]
+  const bid = await fetchBid(best.ticker)
+  console.log(`🎯 Opzione selezionata: ${best.ticker} | Strike ${best.strike_price} | Expiry ${expiry}`)
+  return {
+    label: `${expiry.slice(5)} C${best.strike_price}`,
+    strike: best.strike_price,
+    price: bid ?? 0,
+    expiry: expiry
+  }
 }
 
 export async function GET() {
@@ -65,32 +87,18 @@ export async function GET() {
     const monthlyExpiries = allExpiries.filter(isThirdFriday)
     const curExpiryIdx = monthlyExpiries.indexOf(CURRENT_EXPIRY)
 
-    async function selectOption(expiry: string, strikeRef: number, higher: boolean) {
-      const candidates = contracts.filter(c =>
-        c.expiration_date === expiry &&
-        (higher ? c.strike_price > strikeRef : c.strike_price < strikeRef)
-      )
-      if (candidates.length === 0) return null
-      const sorted = candidates.sort((a, b) =>
-        higher ? a.strike_price - b.strike_price : b.strike_price - a.strike_price
-      )
-      const best = sorted[0]
-      const bid = await fetchBid(best.ticker)
-      return {
-        label: `${expiry.slice(5)} C${best.strike_price}`,
-        strike: best.strike_price,
-        price: bid ?? 0,
-        expiry: expiry
-      }
-    }
-
     // FUTURE 1
     const future1 = await (async () => {
       const futureExpiries = monthlyExpiries.slice(curExpiryIdx + 1)
       for (const expiry of futureExpiries) {
-        const f = await selectOption(expiry, CURRENT_STRIKE, true)
-        if (f) return f
+        console.log(`➡️ Cercando FUTURE 1 su expiry ${expiry}, strike > ${CURRENT_STRIKE}`)
+        const f = await selectOption(contracts, expiry, CURRENT_STRIKE, true)
+        if (f) {
+          console.log(`✅ FUTURE 1 trovata: ${f.label}`)
+          return f
+        }
       }
+      console.log(`❌ FUTURE 1 non trovata`)
       return null
     })()
 
@@ -100,9 +108,14 @@ export async function GET() {
       const idx = monthlyExpiries.indexOf(future1.expiry)
       const nextExpiries = monthlyExpiries.slice(idx + 1)
       for (const expiry of nextExpiries) {
-        const f = await selectOption(expiry, future1.strike, true)
-        if (f) return f
+        console.log(`➡️ Cercando FUTURE 2 su expiry ${expiry}, strike > ${future1.strike}`)
+        const f = await selectOption(contracts, expiry, future1.strike, true)
+        if (f) {
+          console.log(`✅ FUTURE 2 trovata: ${f.label}`)
+          return f
+        }
       }
+      console.log(`❌ FUTURE 2 non trovata`)
       return null
     })()
 
@@ -110,7 +123,7 @@ export async function GET() {
     const earlier1 = await (async () => {
       const earlierExpiries = monthlyExpiries.slice(0, curExpiryIdx).reverse()
       for (const expiry of earlierExpiries) {
-        const f = await selectOption(expiry, CURRENT_STRIKE, false)
+        const f = await selectOption(contracts, expiry, CURRENT_STRIKE, false)
         if (f) return f
       }
       return null
@@ -122,7 +135,7 @@ export async function GET() {
       const idx = monthlyExpiries.indexOf(earlier1.expiry)
       const nextExpiries = monthlyExpiries.slice(0, idx).reverse()
       for (const expiry of nextExpiries) {
-        const f = await selectOption(expiry, earlier1.strike, false)
+        const f = await selectOption(contracts, expiry, earlier1.strike, false)
         if (f) return f
       }
       return null
@@ -146,7 +159,7 @@ export async function GET() {
       ]
     }])
   } catch (err: any) {
-    console.error('Errore route options:', err.message)
+    console.error('❌ Errore route options:', err.message)
     return NextResponse.json([], { status: 500 })
   }
 }
