@@ -37,6 +37,18 @@ async function fetchBid(symbol: string): Promise<number | null> {
   return json?.results?.last_quote?.bid ?? null
 }
 
+async function fetchSpotYahoo(ticker: string): Promise<number> {
+  const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${ticker}`
+  const res = await fetch(url)
+  if (!res.ok) {
+    const text = await res.text()
+    console.error("Errore fetch spot (Yahoo):", res.status, text)
+    throw new Error('Errore fetch spot price')
+  }
+  const json = await res.json()
+  return json?.quoteResponse?.result?.[0]?.regularMarketPrice ?? 0
+}
+
 export async function GET() {
   try {
     const contracts = await fetchContracts()
@@ -56,16 +68,7 @@ export async function GET() {
 
     const currentCall = contracts[currentIndex]
 
-    // ✅ Fetch spot price in tempo reale
-    const spotUrl = `https://api.polygon.io/v2/last/trade/stocks/${UNDERLYING}?apiKey=${API_KEY}`
-    const spotRes = await fetch(spotUrl)
-    if (!spotRes.ok) {
-      const txt = await spotRes.text()
-      console.error("Errore fetch spot:", spotRes.status, txt)
-      throw new Error("Errore fetch spot price")
-    }
-    const spotJson = await spotRes.json()
-    const spot = spotJson?.results?.p ?? 0
+    const spot = await fetchSpotYahoo(UNDERLYING)
 
     const currentBid = await fetchBid(currentCall.ticker)
     const currentCallPrice = currentBid ?? 0
