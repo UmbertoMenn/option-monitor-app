@@ -11,20 +11,24 @@ const CURRENT_EXPIRY = '2025-11-21'
 const CURRENT_STRIKE = 170
 
 function padStrike(strike: number) {
-  const s = Math.round(strike * 1000).toString()
-  return s.padStart(8, '0')
+  // es: 170 -> "00170000"
+  return (strike * 1000).toFixed(0).padStart(8, '0')
 }
 
 function formatSymbol(expiry: string, strike: number) {
   const [y, m, d] = expiry.split('-')
-  // YYMMDD + C + strike000
   return `${UNDERLYING}${y.slice(2)}${m}${d}C${padStrike(strike)}`
 }
 
 async function fetchContracts(): Promise<any[]> {
   const url = `${CONTRACTS_URL}?underlying_ticker=${UNDERLYING}&contract_type=call&limit=1000&apiKey=${API_KEY}`
+  console.log("URL chiamata contracts:", url)
   const res = await fetch(url)
-  if (!res.ok) throw new Error('Errore fetch contracts')
+  if (!res.ok) {
+    const text = await res.text()
+    console.error("Errore dettagliato:", res.status, text)
+    throw new Error('Errore fetch contracts')
+  }
   const json = await res.json()
   return json.results!
 }
@@ -33,16 +37,22 @@ async function fetchBid(symbol: string): Promise<number | null> {
   const res = await fetch(`https://api.polygon.io/v3/snapshot/options/${symbol}?apiKey=${API_KEY}`)
   if (!res.ok) return null
   const json = await res.json()
-  return json?.results.last_quote?.bid ?? null
+  return json?.results?.last_quote?.bid ?? null
 }
 
 export async function GET() {
   try {
     const contracts = await fetchContracts()
-    // ordina per expiry e strike
-    contracts.sort((a: any, b: any) => a.expiration_date.localeCompare(b.expiration_date) || a.strike_price - b.strike_price)
+    console.log("Esempio contratti:", contracts.slice(0, 5))
+
+    contracts.sort((a: any, b: any) =>
+      a.expiration_date.localeCompare(b.expiration_date) ||
+      a.strike_price - b.strike_price
+    )
 
     const currentOpra = formatSymbol(CURRENT_EXPIRY, CURRENT_STRIKE)
+    console.log("Cerco OPRA:", currentOpra)
+
     const currentIndex = contracts.findIndex((c: any) => c.ticker === currentOpra)
     if (currentIndex < 0) throw new Error('Call attuale non trovata')
 
@@ -54,11 +64,9 @@ export async function GET() {
     const currentBid = await fetchBid(currentOpra)
     const currentCallPrice = currentBid ?? 0
 
-    // Lista scadenze future ed earlier
     const uniqueExpiries = Array.from(new Set(contracts.map((c: any) => c.expiration_date))).sort()
     const curExpiryIdx = uniqueExpiries.indexOf(CURRENT_EXPIRY)
 
-    // Funzione per trovare opzione con primo strike > o < di riferimento
     async function selectOption(expiry: string, strikeRef: number, higher: boolean) {
       const candidates = contracts.filter((c: any) =>
         c.expiration_date === expiry &&
@@ -78,10 +86,10 @@ export async function GET() {
       }
     }
 
-    // Calcolo future & earlier
     const future1 = curExpiryIdx + 1 < uniqueExpiries.length
       ? await selectOption(uniqueExpiries[curExpiryIdx + 1], CURRENT_STRIKE, true)
       : null
+
     const future2 = future1 && curExpiryIdx + 2 < uniqueExpiries.length
       ? await selectOption(uniqueExpiries[curExpiryIdx + 2], future1.strike, true)
       : null
@@ -89,6 +97,7 @@ export async function GET() {
     const earlier1 = curExpiryIdx - 1 >= 0
       ? await selectOption(uniqueExpiries[curExpiryIdx - 1], CURRENT_STRIKE, false)
       : null
+
     const earlier2 = earlier1 && curExpiryIdx - 2 >= 0
       ? await selectOption(uniqueExpiries[curExpiryIdx - 2], earlier1.strike, false)
       : null
