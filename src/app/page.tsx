@@ -49,22 +49,56 @@ export default function Page() {
 
   const updateCurrentCall = () => {
     if (!selectedYear || !selectedMonth || !selectedStrike) return
-
     const label = `${selectedMonth} ${selectedYear.slice(2)} C${selectedStrike}`
     const expiryDate = new Date(`${selectedYear}-${(
       ['GEN','FEB','MAR','APR','MAG','GIU','LUG','AGO','SET','OTT','NOV','DIC'].indexOf(selectedMonth)+1
-    ).toString().padStart(2,'0')}-20`)
+    ).toString().padStart(2,'0')}-20`).toISOString().slice(0, 10)
+
+    // Calcola nuove future ed earlier
+    const allExpiries = Object.keys(chain[selectedYear] || {}).sort((a, b) => (
+      ['GEN','FEB','MAR','APR','MAG','GIU','LUG','AGO','SET','OTT','NOV','DIC'].indexOf(a) -
+      ['GEN','FEB','MAR','APR','MAG','GIU','LUG','AGO','SET','OTT','NOV','DIC'].indexOf(b)
+    ))
+    const currentMonthIndex = allExpiries.indexOf(selectedMonth)
+
+    const future: OptionEntry[] = []
+    const earlier: OptionEntry[] = []
+
+    if (currentMonthIndex < allExpiries.length - 1) {
+      const fMonth = allExpiries[currentMonthIndex + 1]
+      const fStrikeList = chain[selectedYear]?.[fMonth] || []
+      const fStrike = fStrikeList.find(s => s > selectedStrike!)
+      if (fStrike) future.push({
+        label: `${fMonth} ${selectedYear.slice(2)} C${fStrike}`,
+        strike: fStrike,
+        price: 0,
+        expiry: `${selectedYear}-${(allExpiries.indexOf(fMonth)+1).toString().padStart(2,'0')}-20`
+      })
+    }
+
+    if (currentMonthIndex > 0) {
+      const eMonth = allExpiries[currentMonthIndex - 1]
+      const eStrikeList = chain[selectedYear]?.[eMonth] || []
+      const eStrike = [...eStrikeList].reverse().find(s => s < selectedStrike!)
+      if (eStrike) earlier.push({
+        label: `${eMonth} ${selectedYear.slice(2)} C${eStrike}`,
+        strike: eStrike,
+        price: 0,
+        expiry: `${selectedYear}-${(allExpiries.indexOf(eMonth)+1).toString().padStart(2,'0')}-20`
+      })
+    }
 
     const updated = data.map(d => ({
       ...d,
-      strike: selectedStrike,
-      expiry: expiryDate.toISOString().slice(0, 10),
-      currentCallPrice: d.currentCallPrice * (selectedStrike / d.strike),
+      strike: selectedStrike!,
+      expiry: expiryDate,
+      currentCallPrice: d.currentCallPrice * (selectedStrike! / d.strike),
+      future,
+      earlier
     }))
 
     setData(updated)
     setShowDropdown(false)
-    fetchData() // 🔁 ricarica future/earlier con la nuova call
   }
 
   useEffect(() => {
