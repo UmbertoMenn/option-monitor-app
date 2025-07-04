@@ -1,10 +1,7 @@
-// src/app/api/options/route.ts
-
 import { NextResponse } from 'next/server'
 
 const POLYGON_API_KEY = process.env.POLYGON_API_KEY!
 const ALPHA_VANTAGE_API_KEY = process.env.ALPHA_VANTAGE_API_KEY!
-
 const UNDERLYING = 'NVDA'
 const CURRENT_EXPIRY = '2025-11-21'
 const CURRENT_STRIKE = 170
@@ -22,11 +19,7 @@ function formatSymbol(expiry: string, strike: number) {
 async function fetchContracts(): Promise<any[]> {
   const url = `${CONTRACTS_URL}?underlying_ticker=${UNDERLYING}&contract_type=call&limit=1000&apiKey=${POLYGON_API_KEY}`
   const res = await fetch(url)
-  if (!res.ok) {
-    const text = await res.text()
-    console.error("Errore fetch contracts:", res.status, text)
-    throw new Error('Errore fetch contracts')
-  }
+  if (!res.ok) throw new Error('Errore fetch contracts')
   const json = await res.json()
   return json.results!
 }
@@ -39,38 +32,26 @@ async function fetchBid(symbol: string): Promise<number | null> {
 }
 
 async function fetchSpotAlphaVantage(ticker: string): Promise<number> {
-  const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${ticker}&apikey=${ALPHA_VANTAGE_API_KEY}`
-  const res = await fetch(url)
-  if (!res.ok) {
-    const text = await res.text()
-    console.error("Errore fetch spot (Alpha Vantage):", res.status, text)
-    throw new Error('Errore fetch spot price')
-  }
+  const res = await fetch(`https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${ticker}&apikey=${ALPHA_VANTAGE_API_KEY}`)
+  if (!res.ok) throw new Error('Errore fetch spot price')
   const json = await res.json()
-  const price = parseFloat(json?.["Global Quote"]?.["05. price"] ?? '0')
-  return isNaN(price) ? 0 : price
+  return parseFloat(json?.["Global Quote"]?.["05. price"] ?? '0')
 }
 
 export async function GET() {
   try {
     const contracts = await fetchContracts()
-
     contracts.sort((a: any, b: any) =>
       a.expiration_date.localeCompare(b.expiration_date) ||
       a.strike_price - b.strike_price
     )
 
-    const paddedStrike = padStrike(CURRENT_STRIKE)
-    const currentIndex = contracts.findIndex((c: any) =>
-      c.expiration_date === CURRENT_EXPIRY &&
-      c.ticker.includes(paddedStrike)
-    )
-
+    const currentOpra = formatSymbol(CURRENT_EXPIRY, CURRENT_STRIKE)
+    const currentIndex = contracts.findIndex((c: any) => c.ticker === currentOpra)
     if (currentIndex < 0) throw new Error('Call attuale non trovata')
 
-    const currentCall = contracts[currentIndex]
     const spot = await fetchSpotAlphaVantage(UNDERLYING)
-    const currentBid = await fetchBid(currentCall.ticker)
+    const currentBid = await fetchBid(currentOpra)
     const currentCallPrice = currentBid ?? 0
 
     const uniqueExpiries = Array.from(new Set(contracts.map((c: any) => c.expiration_date))).sort()
@@ -95,42 +76,41 @@ export async function GET() {
       }
     }
 
-    // ⚠️ Ricerca dinamica delle future anche su scadenze non consecutive
-    const futureExpiries = uniqueExpiries.slice(curExpiryIdx + 1)
-
+    // FUTURE 1: primo strike superiore a CURRENT_STRIKE con scadenza successiva
     const future1 = await (async () => {
-      for (const expiry of futureExpiries) {
-        const f = await selectOption(expiry, CURRENT_STRIKE, true)
-        if (f) return f
+      for (const expiry of uniqueExpiries.slice(curExpiryIdx + 1)) {
+        const opt = await selectOption(expiry, CURRENT_STRIKE, true)
+        if (opt) return opt
       }
       return null
     })()
 
+    // FUTURE 2: primo strike superiore a future1.strike con scadenza > future1.expiry
     const future2 = await (async () => {
       if (!future1) return null
-      for (const expiry of futureExpiries) {
-        const f = await selectOption(expiry, future1.strike, true)
-        if (f) return f
+      const startIdx = uniqueExpiries.indexOf(future1.expiry) + 1
+      for (const expiry of uniqueExpiries.slice(startIdx)) {
+        const opt = await selectOption(expiry, future1.strike, true)
+        if (opt) return opt
       }
       return null
     })()
 
-    // EARLIER
-    const earlierExpiries = uniqueExpiries.slice(0, curExpiryIdx).reverse()
-
+    // EARLIER 1: primo strike inferiore con scadenza precedente
     const earlier1 = await (async () => {
-      for (const expiry of earlierExpiries) {
-        const f = await selectOption(expiry, CURRENT_STRIKE, false)
-        if (f) return f
+      for (const expiry of uniqueExpiries.slice(0, curExpiryIdx).reverse()) {
+        const opt = await selectOption(expiry, CURRENT_STRIKE, false)
+        if (opt) return opt
       }
       return null
     })()
 
+    // EARLIER 2: secondo strike inferiore con scadenza precedente
     const earlier2 = await (async () => {
       if (!earlier1) return null
-      for (const expiry of earlierExpiries) {
-        const f = await selectOption(expiry, earlier1.strike, false)
-        if (f) return f
+      for (const expiry of uniqueExpiries.slice(0, curExpiryIdx).reverse()) {
+        const opt = await selectOption(expiry, earlier1.strike, false)
+        if (opt) return opt
       }
       return null
     })()
