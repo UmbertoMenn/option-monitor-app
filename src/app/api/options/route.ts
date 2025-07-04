@@ -66,8 +66,8 @@ export async function GET() {
 
     const currentCall = contracts[currentIndex]
 
-    // Fetch prezzo spot con controllo .ok
-    const spotUrl = `https://api.polygon.io/v3/last/trade/${UNDERLYING}?apiKey=${API_KEY}`
+    // Fetch prezzo spot dal nuovo endpoint
+    const spotUrl = `https://api.polygon.io/v2/last/trade/stocks/${UNDERLYING}?apiKey=${API_KEY}`
     console.log("Fetching spot price from:", spotUrl)
 
     const spotRes = await fetch(spotUrl)
@@ -78,7 +78,7 @@ export async function GET() {
     }
 
     const spotJson = await spotRes.json()
-    const spot = spotJson?.results?.price ?? 0
+    const spot = spotJson?.results?.p ?? 0
 
     const currentBid = await fetchBid(currentCall.ticker)
     const currentCallPrice = currentBid ?? 0
