@@ -52,13 +52,13 @@ export default function Page() {
     const label = `${selectedMonth} ${selectedYear.slice(2)} C${selectedStrike}`
     const expiryDate = new Date(`${selectedYear}-${(
       ['GEN','FEB','MAR','APR','MAG','GIU','LUG','AGO','SET','OTT','NOV','DIC'].indexOf(selectedMonth)+1
-    ).toString().padStart(2,'0')}-20`) // solo label visivo
+    ).toString().padStart(2,'0')}-20`)
 
     const updated = data.map(d => ({
       ...d,
       strike: selectedStrike,
       expiry: expiryDate.toISOString().slice(0, 10),
-      currentCallPrice: d.currentCallPrice * (selectedStrike / d.strike), // mock di prezzo
+      currentCallPrice: d.currentCallPrice * (selectedStrike / d.strike),
       future: [],
       earlier: []
     }))
@@ -111,17 +111,38 @@ export default function Page() {
 
               {showDropdown && (
                 <div className="grid grid-cols-3 gap-2 mb-2">
-                  <select value={selectedYear} onChange={e => setSelectedYear(e.target.value)} className="bg-zinc-800 text-white p-1">
+                  <select
+                    value={selectedYear}
+                    onChange={e => {
+                      setSelectedYear(e.target.value)
+                      setSelectedMonth('')
+                      setSelectedStrike(null)
+                    }}
+                    className="bg-zinc-800 text-white p-1"
+                  >
                     <option value="">Anno</option>
-                    {Object.keys(chain).map(y => <option key={y}>{y}</option>)}
+                    {Object.keys(chain).map(y => <option key={y} value={y}>{y}</option>)}
                   </select>
 
-                  <select value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} className="bg-zinc-800 text-white p-1">
+                  <select
+                    value={selectedMonth}
+                    onChange={e => {
+                      setSelectedMonth(e.target.value)
+                      setSelectedStrike(null)
+                    }}
+                    className="bg-zinc-800 text-white p-1"
+                    disabled={!selectedYear}
+                  >
                     <option value="">Mese</option>
-                    {selectedYear && Object.keys(chain[selectedYear] || {}).map(m => <option key={m}>{m}</option>)}
+                    {selectedYear && Object.keys(chain[selectedYear] || {}).map(m => <option key={m} value={m}>{m}</option>)}
                   </select>
 
-                  <select value={selectedStrike ?? ''} onChange={e => setSelectedStrike(Number(e.target.value))} className="bg-zinc-800 text-white p-1">
+                  <select
+                    value={selectedStrike ?? ''}
+                    onChange={e => setSelectedStrike(Number(e.target.value))}
+                    className="bg-zinc-800 text-white p-1"
+                    disabled={!selectedMonth}
+                  >
                     <option value="">Strike</option>
                     {selectedYear && selectedMonth && (chain[selectedYear]?.[selectedMonth] || []).map(s => (
                       <option key={s} value={s}>{s}</option>
