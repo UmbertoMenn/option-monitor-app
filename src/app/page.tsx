@@ -49,12 +49,12 @@ export default function Page() {
 
   const updateCurrentCall = () => {
     if (!selectedYear || !selectedMonth || !selectedStrike) return
+
     const label = `${selectedMonth} ${selectedYear.slice(2)} C${selectedStrike}`
     const expiryDate = new Date(`${selectedYear}-${(
       ['GEN','FEB','MAR','APR','MAG','GIU','LUG','AGO','SET','OTT','NOV','DIC'].indexOf(selectedMonth)+1
     ).toString().padStart(2,'0')}-20`).toISOString().slice(0, 10)
 
-    // Calcola nuove future ed earlier
     const allExpiries = Object.keys(chain[selectedYear] || {}).sort((a, b) => (
       ['GEN','FEB','MAR','APR','MAG','GIU','LUG','AGO','SET','OTT','NOV','DIC'].indexOf(a) -
       ['GEN','FEB','MAR','APR','MAG','GIU','LUG','AGO','SET','OTT','NOV','DIC'].indexOf(b)
@@ -64,28 +64,34 @@ export default function Page() {
     const future: OptionEntry[] = []
     const earlier: OptionEntry[] = []
 
-    if (currentMonthIndex < allExpiries.length - 1) {
-      const fMonth = allExpiries[currentMonthIndex + 1]
+    for (let i = 1; i <= 2; i++) {
+      const fMonth = allExpiries[currentMonthIndex + i]
+      if (!fMonth) continue
       const fStrikeList = chain[selectedYear]?.[fMonth] || []
       const fStrike = fStrikeList.find(s => s > selectedStrike!)
-      if (fStrike) future.push({
-        label: `${fMonth} ${selectedYear.slice(2)} C${fStrike}`,
-        strike: fStrike,
-        price: 0,
-        expiry: `${selectedYear}-${(allExpiries.indexOf(fMonth)+1).toString().padStart(2,'0')}-20`
-      })
+      if (fStrike) {
+        future.push({
+          label: `${fMonth} ${selectedYear.slice(2)} C${fStrike}`,
+          strike: fStrike,
+          price: 0,
+          expiry: `${selectedYear}-${(allExpiries.indexOf(fMonth)+1).toString().padStart(2,'0')}-20`
+        })
+      }
     }
 
-    if (currentMonthIndex > 0) {
-      const eMonth = allExpiries[currentMonthIndex - 1]
+    for (let i = 1; i <= 2; i++) {
+      const eMonth = allExpiries[currentMonthIndex - i]
+      if (!eMonth) continue
       const eStrikeList = chain[selectedYear]?.[eMonth] || []
       const eStrike = [...eStrikeList].reverse().find(s => s < selectedStrike!)
-      if (eStrike) earlier.push({
-        label: `${eMonth} ${selectedYear.slice(2)} C${eStrike}`,
-        strike: eStrike,
-        price: 0,
-        expiry: `${selectedYear}-${(allExpiries.indexOf(eMonth)+1).toString().padStart(2,'0')}-20`
-      })
+      if (eStrike) {
+        earlier.push({
+          label: `${eMonth} ${selectedYear.slice(2)} C${eStrike}`,
+          strike: eStrike,
+          price: 0,
+          expiry: `${selectedYear}-${(allExpiries.indexOf(eMonth)+1).toString().padStart(2,'0')}-20`
+        })
+      }
     }
 
     const updated = data.map(d => ({
@@ -232,4 +238,3 @@ export default function Page() {
     </div>
   )
 }
-
