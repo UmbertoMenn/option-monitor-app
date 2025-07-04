@@ -57,7 +57,6 @@ export async function GET() {
     const possibili = contracts.filter((c: any) => c.expiration_date === CURRENT_EXPIRY)
     console.log("Contratti con expiry giusta:", possibili.map(c => c.ticker))
 
-    // Fallback match per ticker con paddedStrike e expiry corretti
     const currentIndex = contracts.findIndex((c: any) =>
       c.expiration_date === CURRENT_EXPIRY &&
       c.ticker.includes(paddedStrike)
@@ -66,7 +65,18 @@ export async function GET() {
     if (currentIndex < 0) throw new Error('Call attuale non trovata')
 
     const currentCall = contracts[currentIndex]
-    const spotRes = await fetch(`https://api.polygon.io/v3/last/trade/${UNDERLYING}?apiKey=${API_KEY}`)
+
+    // Fetch prezzo spot con controllo .ok
+    const spotUrl = `https://api.polygon.io/v3/last/trade/${UNDERLYING}?apiKey=${API_KEY}`
+    console.log("Fetching spot price from:", spotUrl)
+
+    const spotRes = await fetch(spotUrl)
+    if (!spotRes.ok) {
+      const text = await spotRes.text()
+      console.error("Errore fetch spot:", spotRes.status, text)
+      throw new Error('Errore fetch spot price')
+    }
+
     const spotJson = await spotRes.json()
     const spot = spotJson?.results?.price ?? 0
 
