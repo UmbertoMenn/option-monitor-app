@@ -1,11 +1,15 @@
 import { NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
+
+const supabase = createClient(
+  'https://nzduzobajwbufsfieujm.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+)
 
 const POLYGON_API_KEY = process.env.POLYGON_API_KEY!
 const ALPHA_VANTAGE_API_KEY = process.env.ALPHA_VANTAGE_API_KEY!
 
 const UNDERLYING = 'NVDA'
-const CURRENT_EXPIRY = '2025-11-21'
-const CURRENT_STRIKE = 170
 const CONTRACTS_URL = 'https://api.polygon.io/v3/reference/options/contracts'
 
 function padStrike(strike: number) {
@@ -34,14 +38,11 @@ async function fetchContracts(): Promise<any[]> {
   while (url) {
     const res: Response = await fetch(url)
     if (!res.ok) throw new Error(`Errore fetch contracts: ${res.status}`)
-
     const json: any = await res.json()
     if (json.results) contracts.push(...json.results)
-
     url = json.next_url ? `${json.next_url}&apiKey=${POLYGON_API_KEY}` : null
   }
 
-  console.log(`✅ Contratti totali scaricati: ${contracts.length}`)
   return contracts
 }
 
@@ -91,6 +92,14 @@ type OptionObj = {
 
 export async function GET() {
   try {
+    // 🔍 STEP 1: Legge dati da Supabase (call attuale salvata)
+    const { data: pos, error: posErr } = await supabase.from('positions').select('*').eq('id', 1).single()
+    if (posErr || !pos) throw new Error('Nessuna call salvata su Supabase')
+
+    const CURRENT_EXPIRY = pos.expiry
+    const CURRENT_STRIKE = pos.strike
+
+    // 🔍 STEP 2: Scarica tutti i contratti da Polygon
     const contracts = await fetchContracts()
     contracts.sort((a, b) =>
       a.expiration_date.localeCompare(b.expiration_date) || a.strike_price - b.strike_price
@@ -101,7 +110,7 @@ export async function GET() {
       c.expiration_date === CURRENT_EXPIRY &&
       c.ticker.includes(paddedStrike)
     )
-    if (!current) throw new Error('Call attuale non trovata')
+    if (!current) throw new Error('Call attuale non trovata nei contracts')
 
     const spot = await fetchSpotAlphaVantage(UNDERLYING)
     const currentCallPrice = (await fetchAsk(current.ticker)) ?? 0
@@ -137,7 +146,6 @@ export async function GET() {
       const f1 = await findOption(monthlyExpiries[i], CURRENT_STRIKE, true)
       if (f1) {
         future1 = f1
-        console.log('🎯 Future 1:', f1.ticker, f1.strike, f1.expiry)
         break
       }
     }
@@ -148,7 +156,6 @@ export async function GET() {
         const f2 = await findOption(monthlyExpiries[i], future1.strike, true)
         if (f2) {
           future2 = f2
-          console.log('🎯 Future 2:', f2.ticker, f2.strike, f2.expiry)
           break
         }
       }
@@ -158,7 +165,6 @@ export async function GET() {
       const e1 = await findOption(monthlyExpiries[i], CURRENT_STRIKE, false)
       if (e1) {
         earlier1 = e1
-        console.log('🎯 Earlier 1:', e1.ticker, e1.strike, e1.expiry)
         break
       }
     }
@@ -169,7 +175,6 @@ export async function GET() {
         const e2 = await findOption(monthlyExpiries[i], earlier1.strike, false)
         if (e2) {
           earlier2 = e2
-          console.log('🎯 Earlier 2:', e2.ticker, e2.strike, e2.expiry)
           break
         }
       }
@@ -193,7 +198,7 @@ export async function GET() {
 
     return NextResponse.json(output)
   } catch (err: any) {
-    console.error('❌ Errore route options:', err.message)
+    console.error('❌ Errore route /api/options:', err.message)
     return NextResponse.json([], { status: 500 })
   }
 }
