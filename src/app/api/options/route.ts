@@ -11,10 +11,6 @@ const ALPHA_VANTAGE_API_KEY = process.env.ALPHA_VANTAGE_API_KEY!
 const UNDERLYING = 'NVDA'
 const CONTRACTS_URL = 'https://api.polygon.io/v3/reference/options/contracts'
 
-function padStrike(strike: number) {
-  return (strike * 1000).toFixed(0).padStart(8, '0')
-}
-
 function isThirdFriday(dateStr: string): boolean {
   const date = new Date(dateStr)
   if (date.getDay() !== 5) return false
@@ -84,14 +80,6 @@ function buildExpiriesMap(contracts: any[]) {
   return map
 }
 
-type OptionObj = {
-  label: string
-  strike: number
-  price: number
-  expiry: string
-  ticker: string
-}
-
 export async function GET() {
   try {
     const { data: rows, error } = await supabase
@@ -111,10 +99,9 @@ export async function GET() {
       a.expiration_date.localeCompare(b.expiration_date) || a.strike_price - b.strike_price
     )
 
-    const paddedStrike = padStrike(CURRENT_STRIKE)
     const current = contracts.find(c =>
       c.expiration_date === CURRENT_EXPIRY &&
-      c.ticker.includes(paddedStrike)
+      c.strike_price === CURRENT_STRIKE
     )
     if (!current) throw new Error('Call attuale non trovata')
 
@@ -125,7 +112,7 @@ export async function GET() {
     const monthlyExpiries = Object.keys(expiriesMap).sort()
     const curIdx = monthlyExpiries.indexOf(CURRENT_EXPIRY)
 
-    async function findOption(expiry: string, strikeRef: number, higher: boolean): Promise<OptionObj | null> {
+    async function findOption(expiry: string, strikeRef: number, higher: boolean) {
       const strikes = expiriesMap[expiry]
       if (!strikes) return null
       const filtered = strikes.filter(s => higher ? s > strikeRef : s < strikeRef)
@@ -143,10 +130,7 @@ export async function GET() {
       }
     }
 
-    let future1: OptionObj | null = null,
-        future2: OptionObj | null = null,
-        earlier1: OptionObj | null = null,
-        earlier2: OptionObj | null = null
+    let future1 = null, future2 = null, earlier1 = null, earlier2 = null
 
     for (let i = curIdx + 1; i < monthlyExpiries.length; i++) {
       const f1 = await findOption(monthlyExpiries[i], CURRENT_STRIKE, true)
