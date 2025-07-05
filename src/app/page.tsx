@@ -47,7 +47,7 @@ export default function Page() {
     }
   }
 
-  const updateCurrentCall = async () => {
+  const updateCurrentCall = () => {
     if (!selectedYear || !selectedMonth || !selectedStrike) return
 
     const label = `${selectedMonth} ${selectedYear.slice(2)} C${selectedStrike}`
@@ -55,25 +55,12 @@ export default function Page() {
       ['GEN','FEB','MAR','APR','MAG','GIU','LUG','AGO','SET','OTT','NOV','DIC'].indexOf(selectedMonth)+1
     ).toString().padStart(2,'0')}-20`).toISOString().slice(0, 10)
 
-    const updatedData = await Promise.all(data.map(async item => {
-      const newPrice = item.currentCallPrice * (selectedStrike! / item.strike)
-
-      await fetch('/api/update-call', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ticker: item.ticker,
-          strike: selectedStrike,
-          expiry: expiryDate,
-          currentCallPrice: newPrice
-        })
-      })
-
+    const updatedData = data.map(item => {
       const currentMonthIndex = ['GEN','FEB','MAR','APR','MAG','GIU','LUG','AGO','SET','OTT','NOV','DIC'].indexOf(selectedMonth)
       const future: OptionEntry[] = []
       const earlier: OptionEntry[] = []
 
-      // Future
+      // Handle future options
       let futureCount = 0
       let monthIndex = currentMonthIndex
       let year = Number(selectedYear)
@@ -99,7 +86,7 @@ export default function Page() {
         }
       }
 
-      // Earlier
+      // Handle earlier options
       let earlierCount = 0
       monthIndex = currentMonthIndex
       year = Number(selectedYear)
@@ -129,11 +116,11 @@ export default function Page() {
         ...item,
         strike: selectedStrike!,
         expiry: expiryDate,
-        currentCallPrice: newPrice,
+        currentCallPrice: item.currentCallPrice * (selectedStrike! / item.strike),
         future,
         earlier
       }
-    }))
+    })
 
     setData(updatedData)
     setSelectedYear('')
