@@ -94,15 +94,15 @@ type OptionObj = {
 
 export async function GET() {
   try {
-    const { data: saved, error } = await supabase
+    const { data: rows, error } = await supabase
       .from('positions')
       .select('*')
-      .order('updated_at', { ascending: false })
+      .order('id', { ascending: false })
       .limit(1)
-      .single()
 
-    if (error || !saved) throw new Error('Errore fetch positions da Supabase')
+    if (error || !rows || rows.length === 0) throw new Error('Errore fetch positions da Supabase')
 
+    const saved = rows[0]
     const CURRENT_EXPIRY = saved.expiry
     const CURRENT_STRIKE = saved.strike
 
