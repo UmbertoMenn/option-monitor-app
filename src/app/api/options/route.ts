@@ -26,6 +26,28 @@ function formatExpiryLabel(dateStr: string): string {
   return `${mese} ${anno}`
 }
 
+function normalizeExpiry(expiry: string): string {
+  if (expiry.length === 7) {
+    const [year, month] = expiry.split('-').map(Number)
+    const thirdFriday = getThirdFriday(year, month)
+    return thirdFriday.toISOString().split('T')[0]
+  }
+  return expiry
+}
+
+function getThirdFriday(year: number, month: number): Date {
+  let count = 0
+  for (let day = 1; day <= 31; day++) {
+    const date = new Date(year, month - 1, day)
+    if (date.getMonth() !== month - 1) break
+    if (date.getDay() === 5) {
+      count++
+      if (count === 3) return date
+    }
+  }
+  return new Date(year, month - 1, 15)
+}
+
 async function fetchContracts(): Promise<any[]> {
   let contracts: any[] = []
   let url: string | null = `${CONTRACTS_URL}?underlying_ticker=${UNDERLYING}&contract_type=call&limit=1000&apiKey=${POLYGON_API_KEY}`
@@ -88,15 +110,14 @@ export async function GET() {
       .order('id', { ascending: false })
       .limit(1)
 
-    if (error) throw new Error('Errore fetch positions da Supabase: ' + error.message)
-    if (!rows || rows.length === 0) throw new Error('Nessuna riga trovata in Supabase')
-    console.log('✅ Riga letta da Supabase:', rows[0])
+    if (error || !rows || rows.length === 0) throw new Error('Errore fetch positions da Supabase')
 
     const saved = rows[0]
-    const CURRENT_EXPIRY = saved.expiry.slice(0, 10)
-    const CURRENT_STRIKE = Number(saved.strike)
-    console.log('✅ CURRENT EXPIRY:', CURRENT_EXPIRY)
-    console.log('✅ CURRENT STRIKE:', CURRENT_STRIKE)
+    const CURRENT_EXPIRY = normalizeExpiry(saved.expiry)
+    const CURRENT_STRIKE = saved.strike
+
+    console.log('📥 CURRENT EXPIRY:', CURRENT_EXPIRY)
+    console.log('📥 CURRENT STRIKE:', CURRENT_STRIKE)
 
     const contracts = await fetchContracts()
     contracts.sort((a, b) =>
