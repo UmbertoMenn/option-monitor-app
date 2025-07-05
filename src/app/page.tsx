@@ -25,13 +25,15 @@ const supabase = createClient(
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im56ZHV6b2JhandidWZzZmlldWptIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE3MDQwNTksImV4cCI6MjA2NzI4MDA1OX0.c4A5ipwx5AXzuCPH7Au8Czr_nrh4hLwerFwU51HlkTs'
 )
 
+const POLYGON_API_KEY = 'AhReYNdDsuxdvIoUzJwyE4eF7Tkq6Ry5'
+
 export default function Page() {
   const [data, setData] = useState<OptionData[]>([])
   const [chain, setChain] = useState<Record<string, Record<string, number[]>>>({})
   const [selectedYear, setSelectedYear] = useState('')
   const [selectedMonth, setSelectedMonth] = useState('')
   const [selectedStrike, setSelectedStrike] = useState<number | null>(null)
-  const [showDropdown, setShowDropdown] = useState(false)
+  const [showDropdownIndex, setShowDropdownIndex] = useState<number | null>(null)
 
   const fetchData = async () => {
     try {
@@ -53,93 +55,100 @@ export default function Page() {
     }
   }
 
-  const updateCurrentCall = async () => {
+  const fetchOptionPrice = async (symbol: string): Promise<number> => {
+    try {
+      const res = await fetch(`https://api.polygon.io/v3/snapshot/options/${symbol}?apiKey=${POLYGON_API_KEY}`)
+      const json = await res.json()
+      return json?.results?.[0]?.last_quote?.bid ?? 0
+    } catch (err) {
+      console.error(`Errore nel fetch del prezzo per ${symbol}`)
+      return 0
+    }
+  }
+
+  const updateCurrentCall = async (index: number) => {
     if (!selectedYear || !selectedMonth || !selectedStrike) return
 
-    const label = `${selectedMonth} ${selectedYear.slice(2)} C${selectedStrike}`
     const expiryDate = new Date(`${selectedYear}-${(
       ['GEN','FEB','MAR','APR','MAG','GIU','LUG','AGO','SET','OTT','NOV','DIC'].indexOf(selectedMonth)+1
     ).toString().padStart(2,'0')}-20`).toISOString().slice(0, 10)
 
     await supabase.from('positions').delete().neq('id', 0)
     await supabase.from('positions').insert({
-      ticker: 'NVDA',
+      ticker: data[index].ticker,
       strike: selectedStrike,
       expiry: expiryDate
     })
 
-    const updatedData = data.map(item => {
-      const currentMonthIndex = ['GEN','FEB','MAR','APR','MAG','GIU','LUG','AGO','SET','OTT','NOV','DIC'].indexOf(selectedMonth)
-      const future: OptionEntry[] = []
-      const earlier: OptionEntry[] = []
+    const updatedItem = { ...data[index] }
+    const currentMonthIndex = ['GEN','FEB','MAR','APR','MAG','GIU','LUG','AGO','SET','OTT','NOV','DIC'].indexOf(selectedMonth)
+    const future: OptionEntry[] = []
+    const earlier: OptionEntry[] = []
 
-      // Handle future options
-      let futureCount = 0
-      let monthIndex = currentMonthIndex
-      let year = Number(selectedYear)
+    let futureCount = 0
+    let monthIndex = currentMonthIndex
+    let year = Number(selectedYear)
 
-      while (futureCount < 2) {
-        monthIndex++
-        if (monthIndex >= 12) {
-          year++
-          if (!chain[year]) break
-          monthIndex = 0
-        }
-        const futureMonth = ['GEN','FEB','MAR','APR','MAG','GIU','LUG','AGO','SET','OTT','NOV','DIC'][monthIndex]
-        const fStrikeList = chain[year]?.[futureMonth] || []
-        const fStrike = fStrikeList.find(s => s > selectedStrike!)
-        if (fStrike) {
-          future.push({
-            label: `${futureMonth} ${String(year).slice(2)} C${fStrike}`,
-            strike: fStrike,
-            price: 0,
-            expiry: `${year}-${(monthIndex+1).toString().padStart(2,'0')}-20`
-          })
-          futureCount++
-        }
+    while (futureCount < 2) {
+      monthIndex++
+      if (monthIndex >= 12) {
+        year++
+        if (!chain[year]) break
+        monthIndex = 0
       }
-
-      // Handle earlier options
-      let earlierCount = 0
-      monthIndex = currentMonthIndex
-      year = Number(selectedYear)
-
-      while (earlierCount < 2) {
-        monthIndex--
-        if (monthIndex < 0) {
-          year--
-          if (!chain[year]) break
-          monthIndex = 11
-        }
-        const earlierMonth = ['GEN','FEB','MAR','APR','MAG','GIU','LUG','AGO','SET','OTT','NOV','DIC'][monthIndex]
-        const eStrikeList = chain[year]?.[earlierMonth] || []
-        const eStrike = [...eStrikeList].reverse().find(s => s < selectedStrike!)
-        if (eStrike) {
-          earlier.push({
-            label: `${earlierMonth} ${String(year).slice(2)} C${eStrike}`,
-            strike: eStrike,
-            price: 0,
-            expiry: `${year}-${(monthIndex+1).toString().padStart(2,'0')}-20`
-          })
-          earlierCount++
-        }
+      const futureMonth = ['GEN','FEB','MAR','APR','MAG','GIU','LUG','AGO','SET','OTT','NOV','DIC'][monthIndex]
+      const fStrikeList = chain[year]?.[futureMonth] || []
+      const fStrike = fStrikeList.find(s => s > selectedStrike!)
+      if (fStrike) {
+        const optSymbol = `O:${data[index].ticker.toUpperCase()}${String(year).slice(2)}${(monthIndex+1).toString().padStart(2, '0')}20C${fStrike.toFixed(0).padStart(8, '0')}`
+        const price = await fetchOptionPrice(optSymbol)
+        future.push({
+          label: `${futureMonth} ${String(year).slice(2)} C${fStrike}`,
+          strike: fStrike,
+          price,
+          expiry: `${year}-${(monthIndex+1).toString().padStart(2,'0')}-20`
+        })
+        futureCount++
       }
+    }
 
-      return {
-        ...item,
-        strike: selectedStrike!,
-        expiry: expiryDate,
-        currentCallPrice: item.currentCallPrice * (selectedStrike! / item.strike),
-        future,
-        earlier
+    let earlierCount = 0
+    monthIndex = currentMonthIndex
+    year = Number(selectedYear)
+
+    while (earlierCount < 2) {
+      monthIndex--
+      if (monthIndex < 0) {
+        year--
+        if (!chain[year]) break
+        monthIndex = 11
       }
-    })
+      const earlierMonth = ['GEN','FEB','MAR','APR','MAG','GIU','LUG','AGO','SET','OTT','NOV','DIC'][monthIndex]
+      const eStrikeList = chain[year]?.[earlierMonth] || []
+      const eStrike = [...eStrikeList].reverse().find(s => s < selectedStrike!)
+      if (eStrike) {
+        const optSymbol = `O:${data[index].ticker.toUpperCase()}${String(year).slice(2)}${(monthIndex+1).toString().padStart(2, '0')}20C${eStrike.toFixed(0).padStart(8, '0')}`
+        const price = await fetchOptionPrice(optSymbol)
+        earlier.push({
+          label: `${earlierMonth} ${String(year).slice(2)} C${eStrike}`,
+          strike: eStrike,
+          price,
+          expiry: `${year}-${(monthIndex+1).toString().padStart(2,'0')}-20`
+        })
+        earlierCount++
+      }
+    }
 
-    setData(updatedData)
-    setSelectedYear('')
-    setSelectedMonth('')
-    setSelectedStrike(null)
-    setShowDropdown(false)
+    updatedItem.strike = selectedStrike!
+    updatedItem.expiry = expiryDate
+    updatedItem.currentCallPrice = updatedItem.currentCallPrice * (selectedStrike! / updatedItem.strike)
+    updatedItem.future = future
+    updatedItem.earlier = earlier
+
+    const newData = [...data]
+    newData[index] = updatedItem
+    setData(newData)
+    setShowDropdownIndex(null)
   }
 
   useEffect(() => {
@@ -176,14 +185,14 @@ export default function Page() {
               <div className="flex justify-between items-center mb-1">
                 <h2 className="text-base font-bold text-red-500">{item.ticker}</h2>
                 <button
-                  onClick={() => setShowDropdown(!showDropdown)}
+                  onClick={() => setShowDropdownIndex(index)}
                   className="bg-white/10 hover:bg-white/20 text-white text-xs font-medium px-2 py-1 rounded"
                 >
-                  🔄 UPDATE CURRENT CALL
+                  🔄 ROLLA
                 </button>
               </div>
 
-              {showDropdown && (
+              {showDropdownIndex === index && (
                 <div className="grid grid-cols-3 gap-2 mb-2">
                   <select
                     value={selectedYear}
@@ -224,7 +233,7 @@ export default function Page() {
                   </select>
 
                   <button
-                    onClick={updateCurrentCall}
+                    onClick={() => updateCurrentCall(index)}
                     className="col-span-3 mt-1 bg-green-700 hover:bg-green-800 text-white text-xs font-medium px-2 py-1 rounded"
                   >
                     ✔️ Conferma nuova CALL
