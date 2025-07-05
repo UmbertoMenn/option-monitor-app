@@ -101,7 +101,7 @@ export async function GET() {
       .limit(1)
       .single()
 
-    if (error || !saved) throw new Error('Errore fetch current_call da Supabase')
+    if (error || !saved) throw new Error('Errore fetch positions da Supabase')
 
     const CURRENT_EXPIRY = saved.expiry
     const CURRENT_STRIKE = saved.strike
