@@ -52,6 +52,13 @@ async function fetchBid(symbol: string): Promise<number | null> {
   return json?.results?.last_quote?.bid ?? null
 }
 
+async function fetchAsk(symbol: string): Promise<number | null> {
+  const res: Response = await fetch(`https://api.polygon.io/v3/snapshot/options/${symbol}?apiKey=${POLYGON_API_KEY}`)
+  if (!res.ok) return null
+  const json: any = await res.json()
+  return json?.results?.last_quote?.ask ?? null
+}
+
 async function fetchSpotAlphaVantage(ticker: string): Promise<number> {
   const res: Response = await fetch(`https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${ticker}&apikey=${ALPHA_VANTAGE_API_KEY}`)
   if (!res.ok) throw new Error('Errore fetch spot')
@@ -97,7 +104,7 @@ export async function GET() {
     if (!current) throw new Error('Call attuale non trovata')
 
     const spot = await fetchSpotAlphaVantage(UNDERLYING)
-    const currentCallPrice = (await fetchBid(current.ticker)) ?? 0
+    const currentCallPrice = (await fetchAsk(current.ticker)) ?? 0
 
     const expiriesMap = buildExpiriesMap(contracts)
     const monthlyExpiries = Object.keys(expiriesMap).sort()
