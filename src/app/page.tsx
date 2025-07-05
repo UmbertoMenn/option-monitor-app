@@ -47,7 +47,7 @@ export default function Page() {
     }
   }
 
-  const updateCurrentCall = () => {
+  const updateCurrentCall = async () => {
     if (!selectedYear || !selectedMonth || !selectedStrike) return
 
     const label = `${selectedMonth} ${selectedYear.slice(2)} C${selectedStrike}`
@@ -60,7 +60,6 @@ export default function Page() {
       const future: OptionEntry[] = []
       const earlier: OptionEntry[] = []
 
-      // Handle future options
       let futureCount = 0
       let monthIndex = currentMonthIndex
       let year = Number(selectedYear)
@@ -86,7 +85,6 @@ export default function Page() {
         }
       }
 
-      // Handle earlier options
       let earlierCount = 0
       monthIndex = currentMonthIndex
       year = Number(selectedYear)
@@ -127,24 +125,27 @@ export default function Page() {
     setSelectedMonth('')
     setSelectedStrike(null)
     setShowDropdown(false)
+
+    const confirmRes = await fetch('/api/update-call', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ticker: data[0].ticker,
+        strike: selectedStrike,
+        expiry: expiryDate,
+        currentCallPrice: data[0].currentCallPrice * (selectedStrike! / data[0].strike)
+      })
+    })
+    const confirmJson = await confirmRes.json()
+    if (!confirmJson.success) {
+      console.error('Errore salvataggio su Supabase')
+    }
   }
 
   useEffect(() => {
     fetchData()
     fetchChain()
   }, [])
-
-  const renderPriceWithDelta = (price: number, currentCallPrice: number, spot: number) => {
-    const diffPct = ((price - currentCallPrice) / spot) * 100
-    const color = diffPct >= 0 ? 'text-green-400' : 'text-red-400'
-    const sign = diffPct >= 0 ? '+' : ''
-    return (
-      <>
-        {price.toFixed(2)}{' '}
-        <span className={color}>/ {sign}{diffPct.toFixed(1)}%</span>
-      </>
-    )
-  }
 
   const isFattibile = (opt: OptionEntry, item: OptionData) =>
     item.spot < opt.strike &&
@@ -237,7 +238,7 @@ export default function Page() {
                 <div key={i} className="flex items-center justify-between mb-0.5">
                   <span className="flex items-center gap-1">
                     {isFattibile(opt, item) && <span className="text-green-400">🟢</span>}
-                    <span title={opt.expiry}>{opt.label} - {renderPriceWithDelta(opt.price, item.currentCallPrice, item.spot)}</span>
+                    <span title={opt.expiry}>{opt.label} - {opt.price.toFixed(2)}</span>
                   </span>
                 </div>
               ))}
@@ -247,7 +248,7 @@ export default function Page() {
                 <div key={i} className="flex items-center justify-between mb-0.5">
                   <span className="flex items-center gap-1">
                     {isFattibile(opt, item) && <span className="text-green-400">🟢</span>}
-                    <span title={opt.expiry}>{opt.label} - {renderPriceWithDelta(opt.price, item.currentCallPrice, item.spot)}</span>
+                    <span title={opt.expiry}>{opt.label} - {opt.price.toFixed(2)}</span>
                   </span>
                 </div>
               ))}

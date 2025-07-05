@@ -1,11 +1,14 @@
 import { NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
+
+const supabaseUrl = process.env.SUPABASE_URL!
+const supabaseAnonKey = process.env.SUPABASE_ANON_KEY!
+const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 const POLYGON_API_KEY = process.env.POLYGON_API_KEY!
 const ALPHA_VANTAGE_API_KEY = process.env.ALPHA_VANTAGE_API_KEY!
 
 const UNDERLYING = 'NVDA'
-const CURRENT_EXPIRY = '2025-11-21'
-const CURRENT_STRIKE = 170
 const CONTRACTS_URL = 'https://api.polygon.io/v3/reference/options/contracts'
 
 function padStrike(strike: number) {
@@ -91,6 +94,18 @@ type OptionObj = {
 
 export async function GET() {
   try {
+    const { data: saved, error } = await supabase
+      .from('positions')
+      .select('*')
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .single()
+
+    if (error || !saved) throw new Error('Errore fetch current_call da Supabase')
+
+    const CURRENT_EXPIRY = saved.expiry
+    const CURRENT_STRIKE = saved.strike
+
     const contracts = await fetchContracts()
     contracts.sort((a, b) =>
       a.expiration_date.localeCompare(b.expiration_date) || a.strike_price - b.strike_price
@@ -137,7 +152,6 @@ export async function GET() {
       const f1 = await findOption(monthlyExpiries[i], CURRENT_STRIKE, true)
       if (f1) {
         future1 = f1
-        console.log('🎯 Future 1:', f1.ticker, f1.strike, f1.expiry)
         break
       }
     }
@@ -148,7 +162,6 @@ export async function GET() {
         const f2 = await findOption(monthlyExpiries[i], future1.strike, true)
         if (f2) {
           future2 = f2
-          console.log('🎯 Future 2:', f2.ticker, f2.strike, f2.expiry)
           break
         }
       }
@@ -158,7 +171,6 @@ export async function GET() {
       const e1 = await findOption(monthlyExpiries[i], CURRENT_STRIKE, false)
       if (e1) {
         earlier1 = e1
-        console.log('🎯 Earlier 1:', e1.ticker, e1.strike, e1.expiry)
         break
       }
     }
@@ -169,7 +181,6 @@ export async function GET() {
         const e2 = await findOption(monthlyExpiries[i], earlier1.strike, false)
         if (e2) {
           earlier2 = e2
-          console.log('🎯 Earlier 2:', e2.ticker, e2.strike, e2.expiry)
           break
         }
       }
