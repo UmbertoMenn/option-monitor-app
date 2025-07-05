@@ -88,11 +88,15 @@ export async function GET() {
       .order('id', { ascending: false })
       .limit(1)
 
-    if (error || !rows || rows.length === 0) throw new Error('Errore fetch positions da Supabase')
+    if (error) throw new Error('Errore fetch positions da Supabase: ' + error.message)
+    if (!rows || rows.length === 0) throw new Error('Nessuna riga trovata in Supabase')
+    console.log('✅ Riga letta da Supabase:', rows[0])
 
     const saved = rows[0]
-    const CURRENT_EXPIRY = saved.expiry
-    const CURRENT_STRIKE = saved.strike
+    const CURRENT_EXPIRY = saved.expiry.slice(0, 10)
+    const CURRENT_STRIKE = Number(saved.strike)
+    console.log('✅ CURRENT EXPIRY:', CURRENT_EXPIRY)
+    console.log('✅ CURRENT STRIKE:', CURRENT_STRIKE)
 
     const contracts = await fetchContracts()
     contracts.sort((a, b) =>
