@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
+import { createClient } from '@supabase/supabase-js'
 
 interface OptionEntry {
   label: string
@@ -19,13 +20,18 @@ interface OptionData {
   future: OptionEntry[]
 }
 
+const supabase = createClient(
+  'https://nzduzobajwbufsfieujm.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im56ZHV6b2JhandidWZzZmlldWptIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE3MDQwNTksImV4cCI6MjA2NzI4MDA1OX0.c4A5ipwx5AXzuCPH7Au8Czr_nrh4hLwerFwU51HlkTs'
+)
+
 export default function Page() {
   const [data, setData] = useState<OptionData[]>([])
   const [chain, setChain] = useState<Record<string, Record<string, number[]>>>({})
-  const [selectedYear, setSelectedYear] = useState('')
-  const [selectedMonth, setSelectedMonth] = useState('')
+  const [selectedExpiry, setSelectedExpiry] = useState<string>('')
   const [selectedStrike, setSelectedStrike] = useState<number | null>(null)
-  const [showDropdown, setShowDropdown] = useState(false)
+
+  const monthNames = ['GEN','FEB','MAR','APR','MAG','GIU','LUG','AGO','SET','OTT','NOV','DIC']
 
   const fetchData = async () => {
     try {
@@ -47,86 +53,78 @@ export default function Page() {
     }
   }
 
-  const updateCurrentCall = () => {
-    if (!selectedYear || !selectedMonth || !selectedStrike) return
+  const handleSelect = async (expiry: string, strike: number) => {
+    const [year, month] = expiry.split('-')
+    const label = `${monthNames[parseInt(month)-1]} ${year.slice(2)} C${strike}`
+    const future: OptionEntry[] = []
+    const earlier: OptionEntry[] = []
+    const currentMonthIndex = monthNames.indexOf(monthNames[parseInt(month)-1])
 
-    const label = `${selectedMonth} ${selectedYear.slice(2)} C${selectedStrike}`
-    const expiryDate = new Date(`${selectedYear}-${(
-      ['GEN','FEB','MAR','APR','MAG','GIU','LUG','AGO','SET','OTT','NOV','DIC'].indexOf(selectedMonth)+1
-    ).toString().padStart(2,'0')}-20`).toISOString().slice(0, 10)
-
-    const updatedData = data.map(item => {
-      const currentMonthIndex = ['GEN','FEB','MAR','APR','MAG','GIU','LUG','AGO','SET','OTT','NOV','DIC'].indexOf(selectedMonth)
-      const future: OptionEntry[] = []
-      const earlier: OptionEntry[] = []
-
-      // Handle future options
-      let futureCount = 0
-      let monthIndex = currentMonthIndex
-      let year = Number(selectedYear)
-
-      while (futureCount < 2) {
-        monthIndex++
-        if (monthIndex >= 12) {
-          year++
-          if (!chain[year]) break
-          monthIndex = 0
-        }
-        const futureMonth = ['GEN','FEB','MAR','APR','MAG','GIU','LUG','AGO','SET','OTT','NOV','DIC'][monthIndex]
-        const fStrikeList = chain[year]?.[futureMonth] || []
-        const fStrike = fStrikeList.find(s => s > selectedStrike!)
-        if (fStrike) {
-          future.push({
-            label: `${futureMonth} ${String(year).slice(2)} C${fStrike}`,
-            strike: fStrike,
-            price: 0,
-            expiry: `${year}-${(monthIndex+1).toString().padStart(2,'0')}-20`
-          })
-          futureCount++
-        }
+    let fCount = 0
+    let fYear = parseInt(year)
+    let fMonthIndex = currentMonthIndex
+    while (fCount < 2) {
+      fMonthIndex++
+      if (fMonthIndex > 11) {
+        fYear++
+        fMonthIndex = 0
       }
-
-      // Handle earlier options
-      let earlierCount = 0
-      monthIndex = currentMonthIndex
-      year = Number(selectedYear)
-
-      while (earlierCount < 2) {
-        monthIndex--
-        if (monthIndex < 0) {
-          year--
-          if (!chain[year]) break
-          monthIndex = 11
-        }
-        const earlierMonth = ['GEN','FEB','MAR','APR','MAG','GIU','LUG','AGO','SET','OTT','NOV','DIC'][monthIndex]
-        const eStrikeList = chain[year]?.[earlierMonth] || []
-        const eStrike = [...eStrikeList].reverse().find(s => s < selectedStrike!)
-        if (eStrike) {
-          earlier.push({
-            label: `${earlierMonth} ${String(year).slice(2)} C${eStrike}`,
-            strike: eStrike,
-            price: 0,
-            expiry: `${year}-${(monthIndex+1).toString().padStart(2,'0')}-20`
-          })
-          earlierCount++
-        }
+      const fMonth = monthNames[fMonthIndex]
+      const fStrikeList = chain[fYear]?.[fMonth] || []
+      const fStrike = fStrikeList.find(s => s > strike)
+      if (fStrike) {
+        future.push({
+          label: `${fMonth} ${String(fYear).slice(2)} C${fStrike}`,
+          strike: fStrike,
+          price: 0,
+          expiry: `${fYear}-${(fMonthIndex+1).toString().padStart(2,'0')}-20`
+        })
+        fCount++
       }
+    }
 
-      return {
-        ...item,
-        strike: selectedStrike!,
-        expiry: expiryDate,
-        currentCallPrice: item.currentCallPrice * (selectedStrike! / item.strike),
-        future,
-        earlier
+    let eCount = 0
+    let eYear = parseInt(year)
+    let eMonthIndex = currentMonthIndex
+    while (eCount < 2) {
+      eMonthIndex--
+      if (eMonthIndex < 0) {
+        eYear--
+        eMonthIndex = 11
       }
+      const eMonth = monthNames[eMonthIndex]
+      const eStrikeList = chain[eYear]?.[eMonth] || []
+      const eStrike = [...eStrikeList].reverse().find(s => s < strike)
+      if (eStrike) {
+        earlier.push({
+          label: `${eMonth} ${String(eYear).slice(2)} C${eStrike}`,
+          strike: eStrike,
+          price: 0,
+          expiry: `${eYear}-${(eMonthIndex+1).toString().padStart(2,'0')}-20`
+        })
+        eCount++
+      }
+    }
+
+    await supabase.from('positions').delete().neq('id', 0)
+    await supabase.from('positions').insert({
+      ticker: 'NVDA',
+      strike,
+      expiry
     })
 
-    setData(updatedData)
-    setSelectedYear('')
-    setSelectedMonth('')
-    setSelectedStrike(null)
-    setShowDropdown(false)
+    const updated = data.map(d => ({
+      ...d,
+      strike,
+      expiry,
+      currentCallPrice: d.currentCallPrice * (strike / d.strike),
+      future,
+      earlier
+    }))
+
+    setData(updated)
+    setSelectedExpiry(expiry)
+    setSelectedStrike(strike)
   }
 
   useEffect(() => {
@@ -152,105 +150,85 @@ export default function Page() {
     opt.price >= item.currentCallPrice * 0.9
 
   return (
-    <div className="min-h-screen bg-black text-white p-2 flex flex-col gap-4 text-sm leading-tight">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+    <div className="min-h-screen bg-black text-white p-4">
+      <h1 className="text-xl font-bold mb-6">📅 Seleziona Opzione CALL</h1>
+      <div className="overflow-x-auto space-y-8 mb-10">
+        {Object.entries(chain).map(([year, months]) => (
+          <div key={year}>
+            <div className="text-lg font-semibold text-zinc-300 mb-2">Anno {year}</div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+              {Object.entries(months).map(([month, strikes]) => (
+                <div key={month} className="border border-zinc-700 rounded-lg shadow-md">
+                  <div className="bg-zinc-800 text-white px-3 py-2 font-semibold text-center rounded-t-lg">
+                    {month}
+                  </div>
+                  <div className="divide-y divide-zinc-700">
+                    {strikes.map(strike => {
+                      const expiry = `${year}-${(monthNames.indexOf(month)+1).toString().padStart(2,'0')}`
+                      const isSelected = selectedExpiry === expiry && selectedStrike === strike
+                      return (
+                        <button
+                          key={strike}
+                          onClick={() => handleSelect(expiry, strike)}
+                          className={`w-full px-4 py-2 text-sm hover:bg-zinc-700 transition-colors duration-150 ${isSelected ? 'bg-green-600 text-white font-bold' : 'text-white'}`}
+                        >
+                          CALL {strike}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {data.map((item, index) => {
           const deltaPct = ((item.strike - item.spot) / item.spot) * 100
           const deltaColor = deltaPct < 4 ? 'text-red-500' : 'text-green-500'
 
           return (
-            <div key={index} className="bg-zinc-900 border border-zinc-800 shadow-md rounded-lg p-3">
-              <div className="flex justify-between items-center mb-1">
-                <h2 className="text-base font-bold text-red-500">{item.ticker}</h2>
-                <button
-                  onClick={() => setShowDropdown(!showDropdown)}
-                  className="bg-white/10 hover:bg-white/20 text-white text-xs font-medium px-2 py-1 rounded"
-                >
-                  🔄 UPDATE CURRENT CALL
-                </button>
+            <div key={index} className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
+              <h2 className="text-lg font-bold text-red-400 mb-2">{item.ticker}</h2>
+
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div className="font-bold">Spot</div>
+                <div>{item.spot.toFixed(2)}</div>
+                <div className="font-bold">Strike</div>
+                <div>{item.strike.toFixed(2)}</div>
+                <div className="font-bold">Scadenza</div>
+                <div>{item.expiry}</div>
+                <div className="font-bold">Δ% Strike/Spot</div>
+                <div className={deltaColor}>{deltaPct.toFixed(2)}%</div>
+                <div className="font-bold">Prezzo Call attuale</div>
+                <div>{item.currentCallPrice.toFixed(2)}</div>
               </div>
 
-              {showDropdown && (
-                <div className="grid grid-cols-3 gap-2 mb-2">
-                  <select
-                    value={selectedYear}
-                    onChange={e => {
-                      setSelectedYear(e.target.value)
-                      setSelectedMonth('')
-                      setSelectedStrike(null)
-                    }}
-                    className="bg-zinc-800 text-white p-1"
-                  >
-                    <option value="">Anno</option>
-                    {Object.keys(chain).map(y => <option key={y} value={y}>{y}</option>)}
-                  </select>
-
-                  <select
-                    value={selectedMonth}
-                    onChange={e => {
-                      setSelectedMonth(e.target.value)
-                      setSelectedStrike(null)
-                    }}
-                    className="bg-zinc-800 text-white p-1"
-                    disabled={!selectedYear}
-                  >
-                    <option value="">Mese</option>
-                    {selectedYear && Object.keys(chain[selectedYear] || {}).map(m => <option key={m} value={m}>{m}</option>)}
-                  </select>
-
-                  <select
-                    value={selectedStrike ?? ''}
-                    onChange={e => setSelectedStrike(Number(e.target.value))}
-                    className="bg-zinc-800 text-white p-1"
-                    disabled={!selectedMonth}
-                  >
-                    <option value="">Strike</option>
-                    {selectedYear && selectedMonth && (chain[selectedYear]?.[selectedMonth] || []).map(s => (
-                      <option key={s} value={s}>{s}</option>
-                    ))}
-                  </select>
-
-                  <button
-                    onClick={updateCurrentCall}
-                    className="col-span-3 mt-1 bg-green-700 hover:bg-green-800 text-white text-xs font-medium px-2 py-1 rounded"
-                  >
-                    ✔️ Conferma nuova CALL
-                  </button>
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-1 mb-2">
-                <div className="p-1 bg-blue-700 font-bold">Spot</div>
-                <div className="p-1 bg-blue-700">{item.spot.toFixed(2)}</div>
-                <div className="p-1 bg-blue-700 font-bold">Strike</div>
-                <div className="p-1 bg-blue-700">{item.strike.toFixed(2)}</div>
-                <div className="p-1 bg-blue-700 font-bold">Scadenza</div>
-                <div className="p-1 bg-blue-700">{item.expiry}</div>
-                <div className="p-1 bg-blue-700 font-bold">Δ% Strike/Spot</div>
-                <div className={`p-1 ${deltaColor}`}>{deltaPct.toFixed(2)}%</div>
-                <div className="p-1 bg-blue-700 font-bold">Prezzo Call attuale</div>
-                <div className="p-1 bg-blue-700">{item.currentCallPrice.toFixed(2)}</div>
+              <div className="mt-4">
+                <div className="font-semibold bg-orange-500 text-white text-center py-1 rounded">Future</div>
+                {item.future.map((opt, i) => (
+                  <div key={i} className="flex items-center justify-between text-sm py-1">
+                    <span className="flex items-center gap-1">
+                      {isFattibile(opt, item) && <span className="text-green-400">🟢</span>}
+                      <span title={opt.expiry}>{opt.label} - {renderPriceWithDelta(opt.price, item.currentCallPrice, item.spot)}</span>
+                    </span>
+                  </div>
+                ))}
               </div>
 
-              <div className="mb-1 font-semibold bg-orange-500 text-white text-center rounded py-0.5">Future</div>
-              {item.future.map((opt, i) => (
-                <div key={i} className="flex items-center justify-between mb-0.5">
-                  <span className="flex items-center gap-1">
-                    {isFattibile(opt, item) && <span className="text-green-400">🟢</span>}
-                    <span title={opt.expiry}>{opt.label} - {renderPriceWithDelta(opt.price, item.currentCallPrice, item.spot)}</span>
-                  </span>
-                </div>
-              ))}
-
-              <div className="mt-2 mb-1 font-semibold bg-orange-500 text-white text-center rounded py-0.5">Earlier</div>
-              {item.earlier.map((opt, i) => (
-                <div key={i} className="flex items-center justify-between mb-0.5">
-                  <span className="flex items-center gap-1">
-                    {isFattibile(opt, item) && <span className="text-green-400">🟢</span>}
-                    <span title={opt.expiry}>{opt.label} - {renderPriceWithDelta(opt.price, item.currentCallPrice, item.spot)}</span>
-                  </span>
-                </div>
-              ))}
+              <div className="mt-4">
+                <div className="font-semibold bg-orange-500 text-white text-center py-1 rounded">Earlier</div>
+                {item.earlier.map((opt, i) => (
+                  <div key={i} className="flex items-center justify-between text-sm py-1">
+                    <span className="flex items-center gap-1">
+                      {isFattibile(opt, item) && <span className="text-green-400">🟢</span>}
+                      <span title={opt.expiry}>{opt.label} - {renderPriceWithDelta(opt.price, item.currentCallPrice, item.spot)}</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
           )
         })}
@@ -258,4 +236,3 @@ export default function Page() {
     </div>
   )
 }
-
