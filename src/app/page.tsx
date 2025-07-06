@@ -20,6 +20,24 @@ interface OptionData {
   invalid?: boolean
 }
 
+function getThirdFriday(year: number, monthIndex: number): string {
+  let count = 0
+  for (let day = 1; day <= 31; day++) {
+    const date = new Date(year, monthIndex, day)
+    if (date.getMonth() !== monthIndex) break
+    if (date.getDay() === 5) {
+      count++
+      if (count === 3) {
+        const yyyy = date.getFullYear()
+        const mm = String(date.getMonth() + 1).padStart(2, '0')
+        const dd = String(date.getDate()).padStart(2, '0')
+        return `${yyyy}-${mm}-${dd}`
+      }
+    }
+  }
+  return `${year}-${String(monthIndex + 1).padStart(2, '0')}-15` // fallback
+}
+
 export default function Page() {
   const [data, setData] = useState<OptionData[]>([])
   const [chain, setChain] = useState<Record<string, Record<string, number[]>>>({})
