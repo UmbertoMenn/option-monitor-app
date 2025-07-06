@@ -52,9 +52,22 @@ export default function Page() {
     if (!selectedYear || !selectedMonth || !selectedStrike) return
 
     const label = `${selectedMonth} ${selectedYear.slice(2)} C${selectedStrike}`
-    const expiryDate = new Date(`${selectedYear}-${(
-      ['GEN','FEB','MAR','APR','MAG','GIU','LUG','AGO','SET','OTT','NOV','DIC'].indexOf(selectedMonth)+1
-    ).toString().padStart(2,'0')}-20`).toISOString().slice(0, 10)
+function getThirdFriday(year: number, monthIndex: number): string {
+  let count = 0
+  for (let day = 1; day <= 31; day++) {
+    const d = new Date(year, monthIndex, day)
+    if (d.getMonth() !== monthIndex) break
+    if (d.getDay() === 5) {
+      count++
+      if (count === 3) {
+        return d.toISOString().slice(0, 10)
+      }
+    }
+  }
+  return '' // fallback
+}
+
+const expiryDate = getThirdFriday(Number(selectedYear), ['GEN','FEB','MAR','APR','MAG','GIU','LUG','AGO','SET','OTT','NOV','DIC'].indexOf(selectedMonth))
 
     const updatedData = data.map(item => {
       const currentMonthIndex = ['GEN','FEB','MAR','APR','MAG','GIU','LUG','AGO','SET','OTT','NOV','DIC'].indexOf(selectedMonth)
