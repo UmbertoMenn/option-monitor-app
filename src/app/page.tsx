@@ -331,39 +331,59 @@ const expiryDate = getThirdFriday(Number(selectedYear), ['GEN','FEB','MAR','APR'
               </div>
 
               <div className="mb-1 font-semibold bg-orange-500 text-white text-center rounded py-0.5">Future</div>
-              {item.future.map((opt, i) => (
-  <div key={i} className="flex items-center justify-between mb-1">
-    <span className="flex items-center gap-1">
-      {isFattibile(opt, item) && <span className="text-green-400">🟢</span>}
-      <span title={opt.expiry}>{opt.label} - {opt.price.toFixed(2)}</span>
-    </span>
-    <div className="flex gap-1 items-center">
-      <button className="bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold px-2 py-0.5 rounded">ROLLA</button>
-      <button className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded">🔼</button>
-      <button className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded">🔽</button>
-      <button className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded">◀️</button>
-      <button className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded">▶️</button>
+{item.future.map((opt, i) => {
+  const delta = ((opt.price - item.currentCallPrice) / item.spot) * 100
+  const deltaColor = delta >= 0 ? 'text-green-400' : 'text-red-400'
+  const deltaSign = delta >= 0 ? '+' : ''
+  return (
+    <div key={i} className="flex items-center justify-between mb-1">
+      <span className="flex items-center gap-1">
+        {isFattibile(opt, item) && <span className="text-green-400">🟢</span>}
+        <span title={opt.expiry}>
+          {opt.label} - {opt.price.toFixed(2)} /
+          <span title="Premio aggiuntivo/riduttivo rispetto alla call attuale, diviso il prezzo spot" className={`ml-1 ${deltaColor}`}>
+            {deltaSign}{delta.toFixed(2)}%
+          </span>
+        </span>
+      </span>
+      <div className="flex gap-1 items-center">
+        <button className="bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold px-2 py-0.5 rounded">ROLLA</button>
+        <button title="Strike Up" className="bg-green-700 hover:bg-green-800 text-white text-xs px-1 rounded">🔼</button>
+        <button title="Strike Down" className="bg-red-700 hover:bg-red-800 text-white text-xs px-1 rounded">🔽</button>
+        <button title="Month Back" className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded">◀️</button>
+        <button title="Month Forward" className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded">▶️</button>
+      </div>
     </div>
-  </div>
-))}
+  )
+})}
 
 
               <div className="mt-2 mb-1 font-semibold bg-orange-500 text-white text-center rounded py-0.5">Earlier</div>
-{item.earlier.map((opt, i) => (
-  <div key={i} className="flex items-center justify-between mb-1">
-    <span className="flex items-center gap-1">
-      {isFattibile(opt, item) && <span className="text-green-400">🟢</span>}
-      <span title={opt.expiry}>{opt.label} - {opt.price.toFixed(2)}</span>
-    </span>
-    <div className="flex gap-1 items-center">
-      <button className="bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold px-2 py-0.5 rounded">ROLLA</button>
-      <button className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded">🔼</button>
-      <button className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded">🔽</button>
-      <button className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded">◀️</button>
-      <button className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded">▶️</button>
+{item.earlier.map((opt, i) => {
+  const delta = ((opt.price - item.currentCallPrice) / item.spot) * 100
+  const deltaColor = delta >= 0 ? 'text-green-400' : 'text-red-400'
+  const deltaSign = delta >= 0 ? '+' : ''
+  return (
+    <div key={i} className="flex items-center justify-between mb-1">
+      <span className="flex items-center gap-1">
+        {isFattibile(opt, item) && <span className="text-green-400">🟢</span>}
+        <span title={opt.expiry}>
+          {opt.label} - {opt.price.toFixed(2)} /
+          <span title="Premio aggiuntivo/riduttivo rispetto alla call attuale, diviso il prezzo spot" className={`ml-1 ${deltaColor}`}>
+            {deltaSign}{delta.toFixed(2)}%
+          </span>
+        </span>
+      </span>
+      <div className="flex gap-1 items-center">
+        <button className="bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold px-2 py-0.5 rounded">ROLLA</button>
+        <button title="Strike Up" className="bg-green-700 hover:bg-green-800 text-white text-xs px-1 rounded">🔼</button>
+        <button title="Strike Down" className="bg-red-700 hover:bg-red-800 text-white text-xs px-1 rounded">🔽</button>
+        <button title="Month Back" className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded">◀️</button>
+        <button title="Month Forward" className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded">▶️</button>
+      </div>
     </div>
-  </div>
-))}
+  )
+})}
             </div>
           )
         })}
