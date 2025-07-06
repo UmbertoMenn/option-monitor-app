@@ -158,23 +158,72 @@ export default function Page() {
     <div className="min-h-screen bg-black text-white p-2 flex flex-col gap-4 text-sm leading-tight">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
         {data.map((item, index) => {
+          const deltaPct = ((item.strike - item.spot) / item.spot) * 100
+          const deltaColor = deltaPct < 4 ? 'text-red-500' : 'text-green-500'
+
           if (item.invalid) {
             return (
-              <div key={index} className="bg-red-900 border border-red-700 shadow-md rounded-lg p-3">
-                <h2 className="text-white text-base font-bold mb-2">⚠️ Errore caricamento CALL</h2>
-                <p className="text-sm mb-2">La call corrente salvata su Supabase non è più disponibile o ha dati errati.</p>
+              <div key={index} className="bg-red-800 text-white rounded-lg p-4 shadow-md flex flex-col gap-2">
+                <div className="font-bold text-lg">⚠️ Errore caricamento CALL</div>
+                <div>La call corrente salvata su Supabase non è più disponibile o ha dati errati.</div>
                 <button
                   onClick={() => setShowDropdown(true)}
-                  className="bg-yellow-600 hover:bg-yellow-700 text-white text-xs font-medium px-2 py-1 rounded"
+                  className="bg-yellow-500 hover:bg-yellow-600 text-black font-bold py-1 px-2 rounded w-fit"
                 >
-                  🔄 Seleziona nuova call
+                  📂 Seleziona nuova call
                 </button>
+
+                {showDropdown && (
+                  <div className="grid grid-cols-3 gap-2">
+                    <select
+                      value={selectedYear}
+                      onChange={e => {
+                        setSelectedYear(e.target.value)
+                        setSelectedMonth('')
+                        setSelectedStrike(null)
+                      }}
+                      className="bg-zinc-800 text-white p-1"
+                    >
+                      <option value="">Anno</option>
+                      {Object.keys(chain).map(y => <option key={y} value={y}>{y}</option>)}
+                    </select>
+
+                    <select
+                      value={selectedMonth}
+                      onChange={e => {
+                        setSelectedMonth(e.target.value)
+                        setSelectedStrike(null)
+                      }}
+                      className="bg-zinc-800 text-white p-1"
+                      disabled={!selectedYear}
+                    >
+                      <option value="">Mese</option>
+                      {selectedYear && Object.keys(chain[selectedYear] || {}).map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
+
+                    <select
+                      value={selectedStrike ?? ''}
+                      onChange={e => setSelectedStrike(Number(e.target.value))}
+                      className="bg-zinc-800 text-white p-1"
+                      disabled={!selectedMonth}
+                    >
+                      <option value="">Strike</option>
+                      {selectedYear && selectedMonth && (chain[selectedYear]?.[selectedMonth] || []).map(s => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+
+                    <button
+                      onClick={updateCurrentCall}
+                      className="col-span-3 mt-1 bg-green-700 hover:bg-green-800 text-white text-xs font-medium px-2 py-1 rounded"
+                    >
+                      ✔️ Conferma nuova CALL
+                    </button>
+                  </div>
+                )}
               </div>
             )
           }
-
-          const deltaPct = ((item.strike - item.spot) / item.spot) * 100
-          const deltaColor = deltaPct < 4 ? 'text-red-500' : 'text-green-500'
 
           return (
             <div key={index} className="bg-zinc-900 border border-zinc-800 shadow-md rounded-lg p-3">
