@@ -55,10 +55,8 @@ async function fetchContracts(): Promise<any[]> {
   while (url) {
     const res: Response = await fetch(url)
     if (!res.ok) throw new Error(`Errore fetch contracts: ${res.status}`)
-
     const json: any = await res.json()
     if (json.results) contracts.push(...json.results)
-
     url = json.next_url ? `${json.next_url}&apiKey=${POLYGON_API_KEY}` : null
   }
 
@@ -125,10 +123,15 @@ export async function GET() {
     )
 
     const current = contracts.find(c =>
-      c.expiration_date === CURRENT_EXPIRY &&
-      c.strike_price === CURRENT_STRIKE
+      isThirdFriday(c.expiration_date) &&
+      Math.abs(c.strike_price - CURRENT_STRIKE) < 0.01 &&
+      normalizeExpiry(c.expiration_date) === CURRENT_EXPIRY
     )
-    if (!current) throw new Error('Call attuale non trovata')
+
+    if (!current) {
+      console.warn('❗ Call attuale non trovata con expiry:', CURRENT_EXPIRY, 'e strike:', CURRENT_STRIKE)
+      return NextResponse.json([], { status: 200 })
+    }
 
     const spot = await fetchSpotAlphaVantage(UNDERLYING)
     const currentCallPrice = (await fetchAsk(current.ticker)) ?? 0
