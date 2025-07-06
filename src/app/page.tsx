@@ -175,6 +175,8 @@ export default function Page() {
     }
   }
 
+  const [pendingRoll, setPendingRoll] = useState<OptionEntry | null>(null)
+
   const handleRollaClick = async (opt: OptionEntry) => {
     const [year, month, day] = opt.expiry.split('-')
     const selectedYear = year
@@ -280,7 +282,34 @@ export default function Page() {
     opt.strike >= item.spot * 1.04 &&
     opt.price >= item.currentCallPrice * 0.9
 
-  return (
+return (
+  <>
+    {pendingRoll && (
+      <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+        <div className="bg-zinc-900 border border-zinc-700 text-white rounded-lg p-4 shadow-xl w-full max-w-xs">
+          <div className="text-lg font-semibold mb-3 text-center">⚠️ Sei sicuro di voler rollare?</div>
+          <div className="text-sm text-center mb-4 text-zinc-400">{pendingRoll.label} - {pendingRoll.expiry}</div>
+          <div className="flex justify-between gap-3">
+            <button
+              onClick={() => setPendingRoll(null)}
+              className="flex-1 bg-red-700 hover:bg-red-800 text-white py-1 rounded"
+            >
+              ❌ No
+            </button>
+            <button
+              onClick={async () => {
+                await handleRollaClick(pendingRoll)
+                setPendingRoll(null)
+              }}
+              className="flex-1 bg-green-700 hover:bg-green-800 text-white py-1 rounded"
+            >
+              ✅ Sì
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
     <div className="min-h-screen bg-black text-white p-2 flex flex-col gap-4 text-sm leading-tight">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
         {data.map((item, index) => {
@@ -450,7 +479,7 @@ export default function Page() {
                     </span>
                     <div className="flex gap-1 items-center">
                       <button
-                        onClick={() => handleRollaClick(opt)}
+                        onClick={() => setPendingRoll(opt)}
                         className="bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold px-2 py-0.5 rounded"
                         title="Aggiorna la call attuale con questa opzione"
                       >
@@ -491,7 +520,7 @@ export default function Page() {
                     </span>
                     <div className="flex gap-1 items-center">
                       <button
-                        onClick={() => handleRollaClick(opt)}
+                        onClick={() => setPendingRoll(opt)}
                         className="bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold px-2 py-0.5 rounded"
                         title="Aggiorna la call attuale con questa opzione"
                       >
@@ -510,5 +539,5 @@ export default function Page() {
         })}
       </div>
     </div>
-  )
-}
+  </>
+)}
