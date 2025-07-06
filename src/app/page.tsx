@@ -17,6 +17,7 @@ interface OptionData {
   currentCallPrice: number
   earlier: OptionEntry[]
   future: OptionEntry[]
+  invalid?: boolean
 }
 
 export default function Page() {
@@ -116,7 +117,8 @@ export default function Page() {
         expiry: expiryDate,
         currentCallPrice: item.currentCallPrice * (selectedStrike! / item.strike),
         future,
-        earlier
+        earlier,
+        invalid: false
       }
     })
 
@@ -156,6 +158,21 @@ export default function Page() {
     <div className="min-h-screen bg-black text-white p-2 flex flex-col gap-4 text-sm leading-tight">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
         {data.map((item, index) => {
+          if (item.invalid) {
+            return (
+              <div key={index} className="bg-red-900 border border-red-700 shadow-md rounded-lg p-3">
+                <h2 className="text-white text-base font-bold mb-2">⚠️ Errore caricamento CALL</h2>
+                <p className="text-sm mb-2">La call corrente salvata su Supabase non è più disponibile o ha dati errati.</p>
+                <button
+                  onClick={() => setShowDropdown(true)}
+                  className="bg-yellow-600 hover:bg-yellow-700 text-white text-xs font-medium px-2 py-1 rounded"
+                >
+                  🔄 Seleziona nuova call
+                </button>
+              </div>
+            )
+          }
+
           const deltaPct = ((item.strike - item.spot) / item.spot) * 100
           const deltaColor = deltaPct < 4 ? 'text-red-500' : 'text-green-500'
 

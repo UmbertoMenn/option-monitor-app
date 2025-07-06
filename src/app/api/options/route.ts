@@ -130,7 +130,16 @@ export async function GET() {
 
     if (!current) {
       console.warn('❗ Call attuale non trovata con expiry:', CURRENT_EXPIRY, 'e strike:', CURRENT_STRIKE)
-      return NextResponse.json([], { status: 200 })
+      return NextResponse.json([{
+        ticker: UNDERLYING,
+        spot: 0,
+        strike: CURRENT_STRIKE,
+        expiry: CURRENT_EXPIRY,
+        currentCallPrice: 0,
+        future: [],
+        earlier: [],
+        invalid: true
+      }])
     }
 
     const spot = await fetchSpotAlphaVantage(UNDERLYING)
