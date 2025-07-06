@@ -36,16 +36,13 @@ function normalizeExpiry(expiry: string): string {
 }
 
 function getThirdFriday(year: number, month: number): Date {
-  let count = 0
-  for (let day = 1; day <= 31; day++) {
-    const date = new Date(year, month - 1, day)
-    if (date.getMonth() !== month - 1) break
-    if (date.getDay() === 5) {
-      count++
-      if (count === 3) return date
-    }
+  const firstDay = new Date(year, month - 1, 1)
+  const firstFriday = new Date(firstDay)
+  while (firstFriday.getDay() !== 5) {
+    firstFriday.setDate(firstFriday.getDate() + 1)
   }
-  return new Date(year, month - 1, 15)
+  firstFriday.setDate(firstFriday.getDate() + 14) // add 14 days to reach 3rd Friday
+  return firstFriday
 }
 
 async function fetchContracts(): Promise<any[]> {

@@ -26,6 +26,10 @@ function normalizeExpiry(expiry: string): string {
     const [year, month] = expiry.split('-').map(Number)
     return getThirdFriday(year, month)
   }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(expiry)) {
+    const [year, month] = expiry.split('-').map(Number)
+    return getThirdFriday(year, month)
+  }
   return expiry
 }
 
@@ -44,18 +48,29 @@ export async function POST(req: Request) {
       )
     }
 
-    console.log('📤 Salvataggio:', { ticker, strike, normalizedExpiry, currentCallPrice })
+    console.log('📤 Nuovo salvataggio:', {
+      ticker,
+      strike,
+      normalizedExpiry,
+      currentCallPrice,
+    })
 
-    const { error } = await supabase
-      .from('positions')
-      .upsert([{ id: 1, ticker, strike, expiry: normalizedExpiry, currentCallPrice }])
+    const { error } = await supabase.from('positions').insert([
+      {
+        ticker,
+        strike,
+        expiry: normalizedExpiry,
+        currentCallPrice,
+        created_at: new Date().toISOString()
+      }
+    ])
 
     if (error) {
-      console.error('❌ Errore Supabase UPSERT:', error.message)
+      console.error('❌ Errore Supabase INSERT:', error.message)
       return NextResponse.json({ success: false }, { status: 500 })
     }
 
-    console.log('✅ Riga aggiornata su Supabase')
+    console.log('✅ Nuova riga inserita su Supabase')
     return NextResponse.json({ success: true })
   } catch (err: any) {
     console.error('❌ Errore route update-call:', err.message)
