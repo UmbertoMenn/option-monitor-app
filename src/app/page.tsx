@@ -70,25 +70,25 @@ export default function Page() {
     if (!selectedYear || !selectedMonth || !selectedStrike) return
 
     const label = `${selectedMonth} ${selectedYear.slice(2)} C${selectedStrike}`
-function getThirdFriday(year: number, monthIndex: number): string {
-  let count = 0
-  for (let day = 1; day <= 31; day++) {
-    const d = new Date(year, monthIndex, day)
-    if (d.getMonth() !== monthIndex) break
-    if (d.getDay() === 5) {
-      count++
-      if (count === 3) {
-        return d.toISOString().slice(0, 10)
+    function getThirdFriday(year: number, monthIndex: number): string {
+      let count = 0
+      for (let day = 1; day <= 31; day++) {
+        const d = new Date(year, monthIndex, day)
+        if (d.getMonth() !== monthIndex) break
+        if (d.getDay() === 5) {
+          count++
+          if (count === 3) {
+            return d.toISOString().slice(0, 10)
+          }
+        }
       }
+      return '' // fallback
     }
-  }
-  return '' // fallback
-}
 
-const expiryDate = getThirdFriday(Number(selectedYear), ['GEN','FEB','MAR','APR','MAG','GIU','LUG','AGO','SET','OTT','NOV','DIC'].indexOf(selectedMonth))
+    const expiryDate = getThirdFriday(Number(selectedYear), ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC'].indexOf(selectedMonth))
 
     const updatedData = data.map(item => {
-      const currentMonthIndex = ['GEN','FEB','MAR','APR','MAG','GIU','LUG','AGO','SET','OTT','NOV','DIC'].indexOf(selectedMonth)
+      const currentMonthIndex = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC'].indexOf(selectedMonth)
       const future: OptionEntry[] = []
       const earlier: OptionEntry[] = []
 
@@ -103,7 +103,7 @@ const expiryDate = getThirdFriday(Number(selectedYear), ['GEN','FEB','MAR','APR'
           if (!chain[year]) break
           monthIndex = 0
         }
-        const futureMonth = ['GEN','FEB','MAR','APR','MAG','GIU','LUG','AGO','SET','OTT','NOV','DIC'][monthIndex]
+        const futureMonth = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC'][monthIndex]
         const fStrikeList = chain[year]?.[futureMonth] || []
         const fStrike = fStrikeList.find(s => s > selectedStrike!)
         if (fStrike) {
@@ -111,7 +111,7 @@ const expiryDate = getThirdFriday(Number(selectedYear), ['GEN','FEB','MAR','APR'
             label: `${futureMonth} ${String(year).slice(2)} C${fStrike}`,
             strike: fStrike,
             price: 0,
-            expiry: `${year}-${(monthIndex+1).toString().padStart(2,'0')}-20`
+            expiry: `${year}-${(monthIndex + 1).toString().padStart(2, '0')}-20`
           })
           futureCount++
         }
@@ -128,7 +128,7 @@ const expiryDate = getThirdFriday(Number(selectedYear), ['GEN','FEB','MAR','APR'
           if (!chain[year]) break
           monthIndex = 11
         }
-        const earlierMonth = ['GEN','FEB','MAR','APR','MAG','GIU','LUG','AGO','SET','OTT','NOV','DIC'][monthIndex]
+        const earlierMonth = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC'][monthIndex]
         const eStrikeList = chain[year]?.[earlierMonth] || []
         const eStrike = [...eStrikeList].reverse().find(s => s < selectedStrike!)
         if (eStrike) {
@@ -136,7 +136,7 @@ const expiryDate = getThirdFriday(Number(selectedYear), ['GEN','FEB','MAR','APR'
             label: `${earlierMonth} ${String(year).slice(2)} C${eStrike}`,
             strike: eStrike,
             price: 0,
-            expiry: `${year}-${(monthIndex+1).toString().padStart(2,'0')}-20`
+            expiry: `${year}-${(monthIndex + 1).toString().padStart(2, '0')}-20`
           })
           earlierCount++
         }
@@ -169,6 +169,101 @@ const expiryDate = getThirdFriday(Number(selectedYear), ['GEN','FEB','MAR','APR'
         currentCallPrice: data[0].currentCallPrice * (selectedStrike! / data[0].strike)
       })
     })
+    const confirmJson = await confirmRes.json()
+    if (!confirmJson.success) {
+      console.error('Errore salvataggio su Supabase')
+    }
+  }
+
+  const handleRollaClick = async (opt: OptionEntry) => {
+    const [year, month, day] = opt.expiry.split('-')
+    const selectedYear = year
+    const selectedMonthIndex = Number(month) - 1
+    const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
+    const selectedMonth = monthNames[selectedMonthIndex]
+    const selectedStrike = opt.strike
+
+    const expiryDate = getThirdFriday(Number(selectedYear), selectedMonthIndex)
+
+    const updatedData = data.map(item => {
+      const currentMonthIndex = selectedMonthIndex
+      const future: OptionEntry[] = []
+      const earlier: OptionEntry[] = []
+
+      let futureCount = 0
+      let monthIndex = currentMonthIndex
+      let year = Number(selectedYear)
+
+      while (futureCount < 2) {
+        monthIndex++
+        if (monthIndex >= 12) {
+          year++
+          if (!chain[year]) break
+          monthIndex = 0
+        }
+        const futureMonth = monthNames[monthIndex]
+        const fStrikeList = chain[year]?.[futureMonth] || []
+        const fStrike = fStrikeList.find(s => s > selectedStrike)
+        if (fStrike) {
+          future.push({
+            label: `${futureMonth} ${String(year).slice(2)} C${fStrike}`,
+            strike: fStrike,
+            price: 0,
+            expiry: `${year}-${(monthIndex + 1).toString().padStart(2, '0')}-20`
+          })
+          futureCount++
+        }
+      }
+
+      let earlierCount = 0
+      monthIndex = currentMonthIndex
+      year = Number(selectedYear)
+
+      while (earlierCount < 2) {
+        monthIndex--
+        if (monthIndex < 0) {
+          year--
+          if (!chain[year]) break
+          monthIndex = 11
+        }
+        const earlierMonth = monthNames[monthIndex]
+        const eStrikeList = chain[year]?.[earlierMonth] || []
+        const eStrike = [...eStrikeList].reverse().find(s => s < selectedStrike)
+        if (eStrike) {
+          earlier.push({
+            label: `${earlierMonth} ${String(year).slice(2)} C${eStrike}`,
+            strike: eStrike,
+            price: 0,
+            expiry: `${year}-${(monthIndex + 1).toString().padStart(2, '0')}-20`
+          })
+          earlierCount++
+        }
+      }
+
+      return {
+        ...item,
+        strike: selectedStrike,
+        expiry: expiryDate,
+        currentCallPrice: item.currentCallPrice * (selectedStrike / item.strike),
+        future,
+        earlier,
+        invalid: false
+      }
+    })
+
+    setData(updatedData)
+
+    const confirmRes = await fetch('/api/update-call', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ticker: data[0].ticker,
+        strike: selectedStrike,
+        expiry: expiryDate,
+        currentCallPrice: data[0].currentCallPrice * (selectedStrike / data[0].strike)
+      })
+    })
+
     const confirmJson = await confirmRes.json()
     if (!confirmJson.success) {
       console.error('Errore salvataggio su Supabase')
@@ -331,59 +426,85 @@ const expiryDate = getThirdFriday(Number(selectedYear), ['GEN','FEB','MAR','APR'
               </div>
 
               <div className="mb-1 font-semibold bg-orange-500 text-white text-center rounded py-0.5">Future</div>
-{item.future.map((opt, i) => {
-  const delta = ((opt.price - item.currentCallPrice) / item.spot) * 100
-  const deltaColor = delta >= 0 ? 'text-green-400' : 'text-red-400'
-  const deltaSign = delta >= 0 ? '+' : ''
-  return (
-    <div key={i} className="flex items-center justify-between mb-1">
-      <span className="flex items-center gap-1">
-        {isFattibile(opt, item) && <span className="text-green-400">🟢</span>}
-        <span title={opt.expiry}>
-          {opt.label} - {opt.price.toFixed(2)} /
-          <span title="Premio aggiuntivo/riduttivo rispetto alla call attuale, diviso il prezzo spot" className={`ml-1 ${deltaColor}`}>
-            {deltaSign}{delta.toFixed(2)}%
-          </span>
-        </span>
-      </span>
-      <div className="flex gap-1 items-center">
-        <button className="bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold px-2 py-0.5 rounded">ROLLA</button>
-        <button title="Strike Up" className="bg-green-700 hover:bg-green-800 text-white text-xs px-1 rounded">🔼</button>
-        <button title="Strike Down" className="bg-red-700 hover:bg-red-800 text-white text-xs px-1 rounded">🔽</button>
-        <button title="Month Back" className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded">◀️</button>
-        <button title="Month Forward" className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded">▶️</button>
-      </div>
-    </div>
-  )
-})}
+              {item.future.map((opt, i) => {
+                const delta = ((opt.price - item.currentCallPrice) / item.spot) * 100
+                const deltaColor = delta >= 0 ? 'text-green-400' : 'text-red-400'
+                const deltaSign = delta >= 0 ? '+' : ''
+                return (
+                  <div key={i} className="flex items-center justify-between mb-1">
+                    <span className="flex items-center gap-1">
+                      {isFattibile(opt, item) && (
+                        <span
+                          className="text-green-400"
+                          title="Fattibile: strike ≥ spot + 4%, prezzo ≥ 90% del prezzo call attuale"
+                        >
+                          🟢
+                        </span>
+                      )}
+                      <span title={opt.expiry}>
+                        {opt.label} - {opt.price.toFixed(2)} /
+                        <span title="Premio aggiuntivo/riduttivo rispetto alla call attuale, diviso il prezzo spot" className={`ml-1 ${deltaColor}`}>
+                          {deltaSign}{delta.toFixed(2)}%
+                        </span>
+                      </span>
+                    </span>
+                    <div className="flex gap-1 items-center">
+                      <button
+                        onClick={() => handleRollaClick(opt)}
+                        className="bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold px-2 py-0.5 rounded"
+                        title="Aggiorna la call attuale con questa opzione"
+                      >
+                        ROLLA
+                      </button>
+                      <button title="Strike Up" className="bg-green-700 hover:bg-green-800 text-white text-xs px-1 rounded">🔼</button>
+                      <button title="Strike Down" className="bg-red-700 hover:bg-red-800 text-white text-xs px-1 rounded">🔽</button>
+                      <button title="Month Back" className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded">◀️</button>
+                      <button title="Month Forward" className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded">▶️</button>
+                    </div>
+                  </div>
+                )
+              })}
 
 
               <div className="mt-2 mb-1 font-semibold bg-orange-500 text-white text-center rounded py-0.5">Earlier</div>
-{item.earlier.map((opt, i) => {
-  const delta = ((opt.price - item.currentCallPrice) / item.spot) * 100
-  const deltaColor = delta >= 0 ? 'text-green-400' : 'text-red-400'
-  const deltaSign = delta >= 0 ? '+' : ''
-  return (
-    <div key={i} className="flex items-center justify-between mb-1">
-      <span className="flex items-center gap-1">
-        {isFattibile(opt, item) && <span className="text-green-400">🟢</span>}
-        <span title={opt.expiry}>
-          {opt.label} - {opt.price.toFixed(2)} /
-          <span title="Premio aggiuntivo/riduttivo rispetto alla call attuale, diviso il prezzo spot" className={`ml-1 ${deltaColor}`}>
-            {deltaSign}{delta.toFixed(2)}%
-          </span>
-        </span>
-      </span>
-      <div className="flex gap-1 items-center">
-        <button className="bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold px-2 py-0.5 rounded">ROLLA</button>
-        <button title="Strike Up" className="bg-green-700 hover:bg-green-800 text-white text-xs px-1 rounded">🔼</button>
-        <button title="Strike Down" className="bg-red-700 hover:bg-red-800 text-white text-xs px-1 rounded">🔽</button>
-        <button title="Month Back" className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded">◀️</button>
-        <button title="Month Forward" className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded">▶️</button>
-      </div>
-    </div>
-  )
-})}
+              {item.earlier.map((opt, i) => {
+                const delta = ((opt.price - item.currentCallPrice) / item.spot) * 100
+                const deltaColor = delta >= 0 ? 'text-green-400' : 'text-red-400'
+                const deltaSign = delta >= 0 ? '+' : ''
+                return (
+                  <div key={i} className="flex items-center justify-between mb-1">
+                    <span className="flex items-center gap-1">
+                      {isFattibile(opt, item) && (
+                        <span
+                          className="text-green-400"
+                          title="Fattibile: strike ≥ spot + 4%, prezzo ≥ 90% del prezzo call attuale"
+                        >
+                          🟢
+                        </span>
+                      )}
+                      <span title={opt.expiry}>
+                        {opt.label} - {opt.price.toFixed(2)} /
+                        <span title="Premio aggiuntivo/riduttivo rispetto alla call attuale, diviso il prezzo spot" className={`ml-1 ${deltaColor}`}>
+                          {deltaSign}{delta.toFixed(2)}%
+                        </span>
+                      </span>
+                    </span>
+                    <div className="flex gap-1 items-center">
+                      <button
+                        onClick={() => handleRollaClick(opt)}
+                        className="bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold px-2 py-0.5 rounded"
+                        title="Aggiorna la call attuale con questa opzione"
+                      >
+                        ROLLA
+                      </button>
+                      <button title="Strike Up" className="bg-green-700 hover:bg-green-800 text-white text-xs px-1 rounded">🔼</button>
+                      <button title="Strike Down" className="bg-red-700 hover:bg-red-800 text-white text-xs px-1 rounded">🔽</button>
+                      <button title="Month Back" className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded">◀️</button>
+                      <button title="Month Forward" className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded">▶️</button>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           )
         })}
