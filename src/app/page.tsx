@@ -282,54 +282,118 @@ export default function Page() {
     opt.strike >= item.spot * 1.04 &&
     opt.price >= item.currentCallPrice * 0.9
 
-return (
-  <>
-    {pendingRoll && (
-      <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
-        <div className="bg-zinc-900 border border-zinc-700 text-white rounded-lg p-4 shadow-xl w-full max-w-xs">
-          <div className="text-lg font-semibold mb-3 text-center">⚠️ Sei sicuro di voler rollare?</div>
-          <div className="text-sm text-center mb-4 text-zinc-400">{pendingRoll.label} - {pendingRoll.expiry}</div>
-          <div className="flex justify-between gap-3">
-            <button
-              onClick={() => setPendingRoll(null)}
-              className="flex-1 bg-red-700 hover:bg-red-800 text-white py-1 rounded"
-            >
-              ❌ No
-            </button>
-            <button
-              onClick={async () => {
-                await handleRollaClick(pendingRoll)
-                setPendingRoll(null)
-              }}
-              className="flex-1 bg-green-700 hover:bg-green-800 text-white py-1 rounded"
-            >
-              ✅ Sì
-            </button>
+  return (
+    <>
+      {pendingRoll && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+          <div className="bg-zinc-900 border border-zinc-700 text-white rounded-lg p-4 shadow-xl w-full max-w-xs">
+            <div className="text-lg font-semibold mb-3 text-center">⚠️ Sei sicuro di voler rollare?</div>
+            <div className="text-sm text-center mb-4 text-zinc-400">{pendingRoll.label} - {pendingRoll.expiry}</div>
+            <div className="flex justify-between gap-3">
+              <button
+                onClick={() => setPendingRoll(null)}
+                className="flex-1 bg-red-700 hover:bg-red-800 text-white py-1 rounded"
+              >
+                ❌ No
+              </button>
+              <button
+                onClick={async () => {
+                  await handleRollaClick(pendingRoll)
+                  setPendingRoll(null)
+                }}
+                className="flex-1 bg-green-700 hover:bg-green-800 text-white py-1 rounded"
+              >
+                ✅ Sì
+              </button>
+            </div>
           </div>
         </div>
-      </div>
-    )}
+      )}
 
-    <div className="min-h-screen bg-black text-white p-2 flex flex-col gap-4 text-sm leading-tight">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-        {data.map((item, index) => {
-          const deltaPct = ((item.strike - item.spot) / item.spot) * 100
-          const deltaColor = deltaPct < 4 ? 'text-red-500' : 'text-green-500'
+      <div className="min-h-screen bg-black text-white p-2 flex flex-col gap-4 text-sm leading-tight">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+          {data.map((item, index) => {
+            const deltaPct = ((item.strike - item.spot) / item.spot) * 100
+            const deltaColor = deltaPct < 4 ? 'text-red-500' : 'text-green-500'
 
-          if (item.invalid) {
+            if (item.invalid) {
+              return (
+                <div key={index} className="bg-red-800 text-white rounded-lg p-4 shadow-md flex flex-col gap-2">
+                  <div className="font-bold text-lg">⚠️ Errore caricamento CALL</div>
+                  <div>La call corrente salvata su Supabase non è più disponibile o ha dati errati.</div>
+                  <button
+                    onClick={() => setShowDropdown(true)}
+                    className="bg-yellow-500 hover:bg-yellow-600 text-black font-bold py-1 px-2 rounded w-fit"
+                  >
+                    📂 Seleziona nuova call
+                  </button>
+
+                  {showDropdown && (
+                    <div className="grid grid-cols-3 gap-2">
+                      <select
+                        value={selectedYear}
+                        onChange={e => {
+                          setSelectedYear(e.target.value)
+                          setSelectedMonth('')
+                          setSelectedStrike(null)
+                        }}
+                        className="bg-zinc-800 text-white p-1"
+                      >
+                        <option value="">Anno</option>
+                        {Object.keys(chain).map(y => <option key={y} value={y}>{y}</option>)}
+                      </select>
+
+                      <select
+                        value={selectedMonth}
+                        onChange={e => {
+                          setSelectedMonth(e.target.value)
+                          setSelectedStrike(null)
+                        }}
+                        className="bg-zinc-800 text-white p-1"
+                        disabled={!selectedYear}
+                      >
+                        <option value="">Mese</option>
+                        {selectedYear && Object.keys(chain[selectedYear] || {}).map(m => <option key={m} value={m}>{m}</option>)}
+                      </select>
+
+                      <select
+                        value={selectedStrike ?? ''}
+                        onChange={e => setSelectedStrike(Number(e.target.value))}
+                        className="bg-zinc-800 text-white p-1"
+                        disabled={!selectedMonth}
+                      >
+                        <option value="">Strike</option>
+                        {selectedYear && selectedMonth && (chain[selectedYear]?.[selectedMonth] || []).map(s => (
+                          <option key={s} value={s}>{s}</option>
+                        ))}
+                      </select>
+
+                      <button
+                        onClick={updateCurrentCall}
+                        className="col-span-3 mt-1 bg-green-700 hover:bg-green-800 text-white text-xs font-medium px-2 py-1 rounded"
+                      >
+                        ✔️ Conferma nuova CALL
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )
+            }
+
             return (
-              <div key={index} className="bg-red-800 text-white rounded-lg p-4 shadow-md flex flex-col gap-2">
-                <div className="font-bold text-lg">⚠️ Errore caricamento CALL</div>
-                <div>La call corrente salvata su Supabase non è più disponibile o ha dati errati.</div>
-                <button
-                  onClick={() => setShowDropdown(true)}
-                  className="bg-yellow-500 hover:bg-yellow-600 text-black font-bold py-1 px-2 rounded w-fit"
-                >
-                  📂 Seleziona nuova call
-                </button>
+              <div key={index} className="bg-zinc-900 border border-zinc-800 shadow-md rounded-lg p-3">
+                <div className="flex justify-between items-center mb-1">
+                  <h2 className="text-base font-bold text-red-500">{item.ticker}</h2>
+                  <button
+                    onClick={() => setShowDropdown(!showDropdown)}
+                    className="bg-white/10 hover:bg-white/20 text-white text-xs font-medium px-2 py-1 rounded"
+                  >
+                    🔄 UPDATE CURRENT CALL
+                  </button>
+                </div>
 
                 {showDropdown && (
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-3 gap-2 mb-2">
                     <select
                       value={selectedYear}
                       onChange={e => {
@@ -376,168 +440,213 @@ return (
                     </button>
                   </div>
                 )}
+
+                <div className="grid grid-cols-2 gap-1 mb-2">
+                  <div className="p-1 bg-blue-700 font-bold">Spot</div>
+                  <div className="p-1 bg-blue-700">{item.spot.toFixed(2)}</div>
+                  <div className="p-1 bg-blue-700 font-bold">Strike</div>
+                  <div className="p-1 bg-blue-700">{item.strike.toFixed(2)}</div>
+                  <div className="p-1 bg-blue-700 font-bold">Scadenza</div>
+                  <div className="p-1 bg-blue-700">{item.expiry}</div>
+                  <div className="p-1 bg-blue-700 font-bold">Δ% Strike/Spot</div>
+                  <div className={`p-1 ${deltaColor}`}>{deltaPct.toFixed(2)}%</div>
+                  <div className="p-1 bg-blue-700 font-bold">Prezzo Call attuale</div>
+                  <div className="p-1 bg-blue-700">{item.currentCallPrice.toFixed(2)}</div>
+                </div>
+
+                <div className="mb-1 font-semibold bg-orange-500 text-white text-center rounded py-0.5">Future</div>
+                {item.future.map((opt, i) => {
+                  const delta = ((opt.price - item.currentCallPrice) / item.spot) * 100
+                  const deltaColor = delta >= 0 ? 'text-green-400' : 'text-red-400'
+                  const deltaSign = delta >= 0 ? '+' : ''
+                  return (
+                    <div key={i} className="flex items-center justify-between mb-1">
+                      <span className="flex items-center gap-1">
+                        {isFattibile(opt, item) && (
+                          <span
+                            className="text-green-400"
+                            title="Fattibile: strike ≥ spot + 4%, prezzo ≥ 90% del prezzo call attuale"
+                          >
+                            🟢
+                          </span>
+                        )}
+                        <span title={opt.expiry}>
+                          {opt.label} - {opt.price.toFixed(2)} /
+                          <span title="Premio aggiuntivo/riduttivo rispetto alla call attuale, diviso il prezzo spot" className={`ml-1 ${deltaColor}`}>
+                            {deltaSign}{delta.toFixed(2)}%
+                          </span>
+                        </span>
+                      </span>
+                      <div className="flex gap-1 items-center">
+                        <button
+                          onClick={() => setPendingRoll(opt)}
+                          className="bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold px-2 py-0.5 rounded"
+                          title="Aggiorna la call attuale con questa opzione"
+                        >
+                          ROLLA
+                        </button>
+                        <button
+                          title="Strike Up"
+                          className="bg-green-700 hover:bg-green-800 text-white text-xs px-1 rounded"
+                          onClick={() => {
+                            const [year, month] = opt.expiry.split('-')
+                            const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
+                            const monthIndex = Number(month) - 1
+                            const chainStrikes = chain[Number(year)]?.[monthNames[monthIndex]] || []
+                            const nextStrike = chainStrikes.find(s => s > opt.strike)
+                            if (!nextStrike) return
+
+                            const updatedOpt = {
+                              ...opt,
+                              strike: nextStrike,
+                              label: `${monthNames[monthIndex]} ${year.slice(2)} C${nextStrike}`
+                            }
+
+                            const updatedData = [...data]
+                            updatedData[index] = {
+                              ...data[index],
+                              future: item.future.map((o, j) => j === i ? updatedOpt : o),
+                              earlier: item.earlier
+                            }
+                            setData(updatedData)
+                          }}
+                        >
+                          🔼
+                        </button>
+                        <button
+                          title="Strike Down"
+                          className="bg-red-700 hover:bg-red-800 text-white text-xs px-1 rounded"
+                          onClick={() => {
+                            const [year, month] = opt.expiry.split('-')
+                            const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
+                            const monthIndex = Number(month) - 1
+                            const chainStrikes = chain[Number(year)]?.[monthNames[monthIndex]] || []
+                            const prevStrike = [...chainStrikes].reverse().find(s => s < opt.strike)
+                            if (!prevStrike) return
+
+                            const updatedOpt = {
+                              ...opt,
+                              strike: prevStrike,
+                              label: `${monthNames[monthIndex]} ${year.slice(2)} C${prevStrike}`
+                            }
+
+                            const updatedData = [...data]
+                            updatedData[index] = {
+                              ...data[index],
+                              future: item.future.map((o, j) => j === i ? updatedOpt : o),
+                              earlier: item.earlier
+                            }
+                            setData(updatedData)
+                          }}
+                        >
+                          🔽
+                        </button>
+                        <button title="Month Back" className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded">◀️</button>
+                        <button title="Month Forward" className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded">▶️</button>
+                      </div>
+                    </div>
+                  )
+                })}
+
+
+                <div className="mt-2 mb-1 font-semibold bg-orange-500 text-white text-center rounded py-0.5">Earlier</div>
+                {item.earlier.map((opt, i) => {
+                  const delta = ((opt.price - item.currentCallPrice) / item.spot) * 100
+                  const deltaColor = delta >= 0 ? 'text-green-400' : 'text-red-400'
+                  const deltaSign = delta >= 0 ? '+' : ''
+                  return (
+                    <div key={i} className="flex items-center justify-between mb-1">
+                      <span className="flex items-center gap-1">
+                        {isFattibile(opt, item) && (
+                          <span
+                            className="text-green-400"
+                            title="Fattibile: strike ≥ spot + 4%, prezzo ≥ 90% del prezzo call attuale"
+                          >
+                            🟢
+                          </span>
+                        )}
+                        <span title={opt.expiry}>
+                          {opt.label} - {opt.price.toFixed(2)} /
+                          <span title="Premio aggiuntivo/riduttivo rispetto alla call attuale, diviso il prezzo spot" className={`ml-1 ${deltaColor}`}>
+                            {deltaSign}{delta.toFixed(2)}%
+                          </span>
+                        </span>
+                      </span>
+                      <div className="flex gap-1 items-center">
+                        <button
+                          onClick={() => setPendingRoll(opt)}
+                          className="bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold px-2 py-0.5 rounded"
+                          title="Aggiorna la call attuale con questa opzione"
+                        >
+                          ROLLA
+                        </button>
+                        <button
+                          title="Strike Up"
+                          className="bg-green-700 hover:bg-green-800 text-white text-xs px-1 rounded"
+                          onClick={() => {
+                            const [year, month] = opt.expiry.split('-')
+                            const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
+                            const monthIndex = Number(month) - 1
+                            const chainStrikes = chain[Number(year)]?.[monthNames[monthIndex]] || []
+                            const nextStrike = chainStrikes.find(s => s > opt.strike)
+                            if (!nextStrike) return
+
+                            const updatedOpt = {
+                              ...opt,
+                              strike: nextStrike,
+                              label: `${monthNames[monthIndex]} ${year.slice(2)} C${nextStrike}`
+                            }
+
+                            const updatedData = [...data]
+                            updatedData[index] = {
+                              ...data[index],
+                              future: item.future.map((o, j) => j === i ? updatedOpt : o),
+                              earlier: item.earlier
+                            }
+                            setData(updatedData)
+                          }}
+                        >
+                          🔼
+                        </button>
+                        <button
+                          title="Strike Down"
+                          className="bg-red-700 hover:bg-red-800 text-white text-xs px-1 rounded"
+                          onClick={() => {
+                            const [year, month] = opt.expiry.split('-')
+                            const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
+                            const monthIndex = Number(month) - 1
+                            const chainStrikes = chain[Number(year)]?.[monthNames[monthIndex]] || []
+                            const prevStrike = [...chainStrikes].reverse().find(s => s < opt.strike)
+                            if (!prevStrike) return
+
+                            const updatedOpt = {
+                              ...opt,
+                              strike: prevStrike,
+                              label: `${monthNames[monthIndex]} ${year.slice(2)} C${prevStrike}`
+                            }
+
+                            const updatedData = [...data]
+                            updatedData[index] = {
+                              ...data[index],
+                              future: item.future.map((o, j) => j === i ? updatedOpt : o),
+                              earlier: item.earlier
+                            }
+                            setData(updatedData)
+                          }}
+                        >
+                          🔽
+                        </button>
+                        <button title="Month Back" className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded">◀️</button>
+                        <button title="Month Forward" className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded">▶️</button>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             )
-          }
-
-          return (
-            <div key={index} className="bg-zinc-900 border border-zinc-800 shadow-md rounded-lg p-3">
-              <div className="flex justify-between items-center mb-1">
-                <h2 className="text-base font-bold text-red-500">{item.ticker}</h2>
-                <button
-                  onClick={() => setShowDropdown(!showDropdown)}
-                  className="bg-white/10 hover:bg-white/20 text-white text-xs font-medium px-2 py-1 rounded"
-                >
-                  🔄 UPDATE CURRENT CALL
-                </button>
-              </div>
-
-              {showDropdown && (
-                <div className="grid grid-cols-3 gap-2 mb-2">
-                  <select
-                    value={selectedYear}
-                    onChange={e => {
-                      setSelectedYear(e.target.value)
-                      setSelectedMonth('')
-                      setSelectedStrike(null)
-                    }}
-                    className="bg-zinc-800 text-white p-1"
-                  >
-                    <option value="">Anno</option>
-                    {Object.keys(chain).map(y => <option key={y} value={y}>{y}</option>)}
-                  </select>
-
-                  <select
-                    value={selectedMonth}
-                    onChange={e => {
-                      setSelectedMonth(e.target.value)
-                      setSelectedStrike(null)
-                    }}
-                    className="bg-zinc-800 text-white p-1"
-                    disabled={!selectedYear}
-                  >
-                    <option value="">Mese</option>
-                    {selectedYear && Object.keys(chain[selectedYear] || {}).map(m => <option key={m} value={m}>{m}</option>)}
-                  </select>
-
-                  <select
-                    value={selectedStrike ?? ''}
-                    onChange={e => setSelectedStrike(Number(e.target.value))}
-                    className="bg-zinc-800 text-white p-1"
-                    disabled={!selectedMonth}
-                  >
-                    <option value="">Strike</option>
-                    {selectedYear && selectedMonth && (chain[selectedYear]?.[selectedMonth] || []).map(s => (
-                      <option key={s} value={s}>{s}</option>
-                    ))}
-                  </select>
-
-                  <button
-                    onClick={updateCurrentCall}
-                    className="col-span-3 mt-1 bg-green-700 hover:bg-green-800 text-white text-xs font-medium px-2 py-1 rounded"
-                  >
-                    ✔️ Conferma nuova CALL
-                  </button>
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-1 mb-2">
-                <div className="p-1 bg-blue-700 font-bold">Spot</div>
-                <div className="p-1 bg-blue-700">{item.spot.toFixed(2)}</div>
-                <div className="p-1 bg-blue-700 font-bold">Strike</div>
-                <div className="p-1 bg-blue-700">{item.strike.toFixed(2)}</div>
-                <div className="p-1 bg-blue-700 font-bold">Scadenza</div>
-                <div className="p-1 bg-blue-700">{item.expiry}</div>
-                <div className="p-1 bg-blue-700 font-bold">Δ% Strike/Spot</div>
-                <div className={`p-1 ${deltaColor}`}>{deltaPct.toFixed(2)}%</div>
-                <div className="p-1 bg-blue-700 font-bold">Prezzo Call attuale</div>
-                <div className="p-1 bg-blue-700">{item.currentCallPrice.toFixed(2)}</div>
-              </div>
-
-              <div className="mb-1 font-semibold bg-orange-500 text-white text-center rounded py-0.5">Future</div>
-              {item.future.map((opt, i) => {
-                const delta = ((opt.price - item.currentCallPrice) / item.spot) * 100
-                const deltaColor = delta >= 0 ? 'text-green-400' : 'text-red-400'
-                const deltaSign = delta >= 0 ? '+' : ''
-                return (
-                  <div key={i} className="flex items-center justify-between mb-1">
-                    <span className="flex items-center gap-1">
-                      {isFattibile(opt, item) && (
-                        <span
-                          className="text-green-400"
-                          title="Fattibile: strike ≥ spot + 4%, prezzo ≥ 90% del prezzo call attuale"
-                        >
-                          🟢
-                        </span>
-                      )}
-                      <span title={opt.expiry}>
-                        {opt.label} - {opt.price.toFixed(2)} /
-                        <span title="Premio aggiuntivo/riduttivo rispetto alla call attuale, diviso il prezzo spot" className={`ml-1 ${deltaColor}`}>
-                          {deltaSign}{delta.toFixed(2)}%
-                        </span>
-                      </span>
-                    </span>
-                    <div className="flex gap-1 items-center">
-                      <button
-                        onClick={() => setPendingRoll(opt)}
-                        className="bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold px-2 py-0.5 rounded"
-                        title="Aggiorna la call attuale con questa opzione"
-                      >
-                        ROLLA
-                      </button>
-                      <button title="Strike Up" className="bg-green-700 hover:bg-green-800 text-white text-xs px-1 rounded">🔼</button>
-                      <button title="Strike Down" className="bg-red-700 hover:bg-red-800 text-white text-xs px-1 rounded">🔽</button>
-                      <button title="Month Back" className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded">◀️</button>
-                      <button title="Month Forward" className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded">▶️</button>
-                    </div>
-                  </div>
-                )
-              })}
-
-
-              <div className="mt-2 mb-1 font-semibold bg-orange-500 text-white text-center rounded py-0.5">Earlier</div>
-              {item.earlier.map((opt, i) => {
-                const delta = ((opt.price - item.currentCallPrice) / item.spot) * 100
-                const deltaColor = delta >= 0 ? 'text-green-400' : 'text-red-400'
-                const deltaSign = delta >= 0 ? '+' : ''
-                return (
-                  <div key={i} className="flex items-center justify-between mb-1">
-                    <span className="flex items-center gap-1">
-                      {isFattibile(opt, item) && (
-                        <span
-                          className="text-green-400"
-                          title="Fattibile: strike ≥ spot + 4%, prezzo ≥ 90% del prezzo call attuale"
-                        >
-                          🟢
-                        </span>
-                      )}
-                      <span title={opt.expiry}>
-                        {opt.label} - {opt.price.toFixed(2)} /
-                        <span title="Premio aggiuntivo/riduttivo rispetto alla call attuale, diviso il prezzo spot" className={`ml-1 ${deltaColor}`}>
-                          {deltaSign}{delta.toFixed(2)}%
-                        </span>
-                      </span>
-                    </span>
-                    <div className="flex gap-1 items-center">
-                      <button
-                        onClick={() => setPendingRoll(opt)}
-                        className="bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold px-2 py-0.5 rounded"
-                        title="Aggiorna la call attuale con questa opzione"
-                      >
-                        ROLLA
-                      </button>
-                      <button title="Strike Up" className="bg-green-700 hover:bg-green-800 text-white text-xs px-1 rounded">🔼</button>
-                      <button title="Strike Down" className="bg-red-700 hover:bg-red-800 text-white text-xs px-1 rounded">🔽</button>
-                      <button title="Month Back" className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded">◀️</button>
-                      <button title="Month Forward" className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded">▶️</button>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )
-        })}
+          })}
+        </div>
       </div>
-    </div>
-  </>
-)}
+    </>
+  )
+}
