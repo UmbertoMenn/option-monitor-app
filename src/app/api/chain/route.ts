@@ -22,7 +22,12 @@ async function fetchFullChain(): Promise<any[]> {
     const res: Response = await fetch(url)
     const json: { results?: any[]; next_url?: string } = await res.json()
     if (json.results) contracts.push(...json.results)
-    url = json.next_url ? `${json.next_url}&apiKey=${POLYGON_API_KEY}` : null
+    if (json.next_url) {
+      const nextCursor = new URL(json.next_url).searchParams.get('cursor')
+      url = `${CONTRACTS_URL}?underlying_ticker=${UNDERLYING}&contract_type=call&limit=1000&cursor=${nextCursor}&apiKey=${POLYGON_API_KEY}`
+    } else {
+      url = null
+    }
   }
 
   return contracts
