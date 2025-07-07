@@ -138,7 +138,7 @@ export default function Page() {
       let monthIndex = currentMonthIndex
       let year = Number(selectedYear)
 
-      while (futureCount < 2) {
+      while (futureCount < 10) {
         monthIndex++
         if (monthIndex >= 12) {
           year++
@@ -163,7 +163,7 @@ export default function Page() {
       monthIndex = currentMonthIndex
       year = Number(selectedYear)
 
-      while (earlierCount < 2) {
+      while (earlierCount < 10) {
         monthIndex--
         if (monthIndex < 0) {
           year--
@@ -238,7 +238,7 @@ export default function Page() {
       let monthIndex = currentMonthIndex
       let year = Number(selectedYear)
 
-      while (futureCount < 2) {
+      while (futureCount < 10) {
         monthIndex++
         if (monthIndex >= 12) {
           year++
@@ -263,7 +263,7 @@ export default function Page() {
       monthIndex = currentMonthIndex
       year = Number(selectedYear)
 
-      while (earlierCount < 2) {
+      while (earlierCount < 10) {
         monthIndex--
         if (monthIndex < 0) {
           year--

@@ -47,7 +47,7 @@ export async function GET() {
       const year = date.getFullYear()
       const month = date.getMonth()
 
-      if (year > 2027) continue
+      if (year > 2030) continue
 
       const yearStr = year.toString()
       const monthStr = formatMonthName(month)
