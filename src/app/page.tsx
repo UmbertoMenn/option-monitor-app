@@ -527,7 +527,8 @@ export default function Page() {
                         })
                       }}
                       title={alertsEnabled ? 'Disattiva alert' : 'Attiva alert'}
-                      className={`px-2 py-1 rounded text-lg ${alertsEnabled ? 'bg-green-600 hover:bg-green-700' : 'bg-zinc-700 hover:bg-zinc-600'} text-white`}
+                      className={`px-1 py-0.5 rounded text-sm ${alertsEnabled ? 'bg-green-600 hover:bg-green-700' : 'bg-zinc-700 hover:bg-zinc-600'
+                        } text-white`}
                     >
                       {alertsEnabled ? '🔔' : '🔕'}
                     </button>
