@@ -164,7 +164,18 @@ export async function GET() {
       }
     }
 
-    let future1 = null, future2 = null, earlier1 = null, earlier2 = null
+    type OptionEntry = {
+      label: string
+      strike: number
+      price: number
+      expiry: string
+      ticker: string
+    }
+
+    let future1: OptionEntry | null = null
+    let future2: OptionEntry | null = null
+    let earlier1: OptionEntry | null = null
+    let earlier2: OptionEntry | null = null
 
     for (let i = curIdx + 1; i < monthlyExpiries.length; i++) {
       const f1 = await findOption(monthlyExpiries[i], CURRENT_STRIKE, true)

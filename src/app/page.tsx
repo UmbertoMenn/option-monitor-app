@@ -41,6 +41,11 @@ function getThirdFriday(year: number, monthIndex: number): string {
 export default function Page() {
   const [data, setData] = useState<OptionData[]>([])
   const [chain, setChain] = useState<Record<string, Record<string, number[]>>>({})
+  const [prices, setPrices] = useState<Record<string, Record<string, {
+    bid: number
+    ask: number
+    symbol: string
+  }>>>({})
   const [selectedYear, setSelectedYear] = useState('')
   const [selectedMonth, setSelectedMonth] = useState('')
   const [selectedStrike, setSelectedStrike] = useState<number | null>(null)
@@ -63,6 +68,16 @@ export default function Page() {
       setChain(json)
     } catch (err) {
       console.error('Errore fetch /api/chain')
+    }
+  }
+
+  const fetchPrices = async () => {
+    try {
+      const res = await fetch('/api/full-prices')
+      const json = await res.json()
+      setPrices(json)
+    } catch (err) {
+      console.error('Errore fetch /api/full-prices')
     }
   }
 
@@ -110,7 +125,7 @@ export default function Page() {
           future.push({
             label: `${futureMonth} ${String(year).slice(2)} C${fStrike}`,
             strike: fStrike,
-            price: 0,
+            price: prices[`${year}-${(monthIndex + 1).toString().padStart(2, '0')}-20`]?.[fStrike.toFixed(2)]?.bid ?? 0,
             expiry: `${year}-${(monthIndex + 1).toString().padStart(2, '0')}-20`
           })
           futureCount++
@@ -135,7 +150,7 @@ export default function Page() {
           earlier.push({
             label: `${earlierMonth} ${String(year).slice(2)} C${eStrike}`,
             strike: eStrike,
-            price: 0,
+            price: prices[`${year}-${(monthIndex + 1).toString().padStart(2, '0')}-20`]?.[eStrike.toFixed(2)]?.bid ?? 0,
             expiry: `${year}-${(monthIndex + 1).toString().padStart(2, '0')}-20`
           })
           earlierCount++
@@ -146,7 +161,7 @@ export default function Page() {
         ...item,
         strike: selectedStrike!,
         expiry: expiryDate,
-        currentCallPrice: item.currentCallPrice * (selectedStrike! / item.strike),
+        currentCallPrice: prices[expiryDate]?.[selectedStrike!.toFixed(2)]?.ask ?? 0,
         future,
         earlier,
         invalid: false
@@ -166,7 +181,7 @@ export default function Page() {
         ticker: data[0].ticker,
         strike: selectedStrike,
         expiry: expiryDate,
-        currentCallPrice: data[0].currentCallPrice * (selectedStrike! / data[0].strike)
+        currentCallPrice: prices[expiryDate]?.[selectedStrike!.toFixed(2)]?.ask ?? 0,
       })
     })
     const confirmJson = await confirmRes.json()
@@ -210,7 +225,7 @@ export default function Page() {
           future.push({
             label: `${futureMonth} ${String(year).slice(2)} C${fStrike}`,
             strike: fStrike,
-            price: 0,
+            price: prices[`${year}-${(monthIndex + 1).toString().padStart(2, '0')}-20`]?.[fStrike.toFixed(2)]?.bid ?? 0,
             expiry: `${year}-${(monthIndex + 1).toString().padStart(2, '0')}-20`
           })
           futureCount++
@@ -235,7 +250,7 @@ export default function Page() {
           earlier.push({
             label: `${earlierMonth} ${String(year).slice(2)} C${eStrike}`,
             strike: eStrike,
-            price: 0,
+            price: prices[`${year}-${(monthIndex + 1).toString().padStart(2, '0')}-20`]?.[eStrike.toFixed(2)]?.bid ?? 0,
             expiry: `${year}-${(monthIndex + 1).toString().padStart(2, '0')}-20`
           })
           earlierCount++
@@ -246,7 +261,7 @@ export default function Page() {
         ...item,
         strike: selectedStrike,
         expiry: expiryDate,
-        currentCallPrice: item.currentCallPrice * (selectedStrike / item.strike),
+        currentCallPrice: prices[expiryDate]?.[selectedStrike.toFixed(2)]?.ask ?? 0,
         future,
         earlier,
         invalid: false
@@ -262,7 +277,7 @@ export default function Page() {
         ticker: data[0].ticker,
         strike: selectedStrike,
         expiry: expiryDate,
-        currentCallPrice: data[0].currentCallPrice * (selectedStrike / data[0].strike)
+        currentCallPrice: prices[expiryDate]?.[selectedStrike.toFixed(2)]?.ask ?? 0,
       })
     })
 
@@ -275,6 +290,15 @@ export default function Page() {
   useEffect(() => {
     fetchData()
     fetchChain()
+    fetchPrices()
+  }, [])
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchPrices()
+    }, 1000) // ogni secondo
+
+    return () => clearInterval(interval)
   }, [])
 
   const isFattibile = (opt: OptionEntry, item: OptionData) =>
@@ -471,7 +495,7 @@ export default function Page() {
                           </span>
                         )}
                         <span title={opt.expiry}>
-                          {opt.label} - {opt.price.toFixed(2)} /
+                          {opt.label} - {opt.price === 0 ? 'NO DATA' : opt.price.toFixed(2)} /
                           <span title="Premio aggiuntivo/riduttivo rispetto alla call attuale, diviso il prezzo spot" className={`ml-1 ${deltaColor}`}>
                             {deltaSign}{delta.toFixed(2)}%
                           </span>
@@ -566,7 +590,7 @@ export default function Page() {
                           </span>
                         )}
                         <span title={opt.expiry}>
-                          {opt.label} - {opt.price.toFixed(2)} /
+                          {opt.label} - {opt.price === 0 ? 'NO DATA' : opt.price.toFixed(2)} /
                           <span title="Premio aggiuntivo/riduttivo rispetto alla call attuale, diviso il prezzo spot" className={`ml-1 ${deltaColor}`}>
                             {deltaSign}{delta.toFixed(2)}%
                           </span>
