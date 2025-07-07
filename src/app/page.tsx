@@ -81,6 +81,33 @@ export default function Page() {
     }
   }
 
+  function shiftExpiryByMonth(current: string, direction: 'prev' | 'next'): { expiry: string, monthName: string, year: number } | null {
+    const [yearStr, monthStr] = current.split('-')
+    let year = Number(yearStr)
+    let monthIndex = Number(monthStr) - 1
+
+    if (direction === 'next') {
+      monthIndex++
+      if (monthIndex > 11) {
+        monthIndex = 0
+        year++
+      }
+    } else {
+      monthIndex--
+      if (monthIndex < 0) {
+        monthIndex = 11
+        year--
+      }
+    }
+
+    const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
+    const monthName = monthNames[monthIndex]
+    if (!chain[year] || !chain[year][monthName]) return null
+
+    const expiry = getThirdFriday(year, monthIndex)
+    return { expiry, monthName, year }
+  }
+
   const updateCurrentCall = async () => {
     if (!selectedYear || !selectedMonth || !selectedStrike) return
 
@@ -565,8 +592,65 @@ export default function Page() {
                         >
                           🔽
                         </button>
-                        <button title="Month Back" className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded">◀️</button>
-                        <button title="Month Forward" className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded">▶️</button>
+                        <button
+                          title="Month Back"
+                          className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded"
+                          onClick={() => {
+                            const shift = shiftExpiryByMonth(opt.expiry, 'prev')
+                            if (!shift) return
+
+                            const { expiry, monthName, year } = shift
+                            const strikes = chain[year]?.[monthName]
+                            if (!strikes?.includes(opt.strike)) return
+
+                            const updatedOpt = {
+                              ...opt,
+                              expiry,
+                              label: `${monthName} ${String(year).slice(2)} C${opt.strike}`,
+                              price: prices[expiry]?.[opt.strike.toFixed(2)]?.bid ?? 0
+                            }
+
+                            const updatedData = [...data]
+                            updatedData[index] = {
+                              ...data[index],
+                              future: item.future.map((o, j) => j === i ? updatedOpt : o),
+                              earlier: item.earlier
+                            }
+                            setData(updatedData)
+                          }}
+                        >
+                          ◀️
+                        </button>
+                        <button
+                          title="Month Forward"
+                          className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded"
+                          onClick={() => {
+                            const shift = shiftExpiryByMonth(opt.expiry, 'next')
+                            if (!shift) return
+
+                            const { expiry, monthName, year } = shift
+                            const strikes = chain[year]?.[monthName]
+                            if (!strikes?.includes(opt.strike)) return
+
+                            const updatedOpt = {
+                              ...opt,
+                              expiry,
+                              label: `${monthName} ${String(year).slice(2)} C${opt.strike}`,
+                              price: prices[expiry]?.[opt.strike.toFixed(2)]?.bid ?? 0
+                            }
+
+                            const updatedData = [...data]
+                            updatedData[index] = {
+                              ...data[index],
+                              future: item.future.map((o, j) => j === i ? updatedOpt : o),
+                              earlier: item.earlier
+                            }
+                            setData(updatedData)
+                          }}
+                        >
+                          ▶️
+                        </button>
+
                       </div>
                     </div>
                   )
@@ -624,8 +708,8 @@ export default function Page() {
                             const updatedData = [...data]
                             updatedData[index] = {
                               ...data[index],
-                              future: item.future.map((o, j) => j === i ? updatedOpt : o),
-                              earlier: item.earlier
+                              future: item.future,
+                              earlier: item.earlier.map((o, j) => j === i ? updatedOpt : o)
                             }
                             setData(updatedData)
                           }}
@@ -652,16 +736,72 @@ export default function Page() {
                             const updatedData = [...data]
                             updatedData[index] = {
                               ...data[index],
-                              future: item.future.map((o, j) => j === i ? updatedOpt : o),
-                              earlier: item.earlier
+                              future: item.future,
+                              earlier: item.earlier.map((o, j) => j === i ? updatedOpt : o)
                             }
                             setData(updatedData)
                           }}
                         >
                           🔽
                         </button>
-                        <button title="Month Back" className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded">◀️</button>
-                        <button title="Month Forward" className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded">▶️</button>
+                        <button
+                          title="Month Back"
+                          className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded"
+                          onClick={() => {
+                            const shift = shiftExpiryByMonth(opt.expiry, 'prev')
+                            if (!shift) return
+
+                            const { expiry, monthName, year } = shift
+                            const strikes = chain[year]?.[monthName]
+                            if (!strikes?.includes(opt.strike)) return
+
+                            const updatedOpt = {
+                              ...opt,
+                              expiry,
+                              label: `${monthName} ${String(year).slice(2)} C${opt.strike}`,
+                              price: prices[expiry]?.[opt.strike.toFixed(2)]?.bid ?? 0
+                            }
+
+                            const updatedData = [...data]
+                            updatedData[index] = {
+                              ...data[index],
+                              future: item.future,
+                              earlier: item.earlier.map((o, j) => j === i ? updatedOpt : o)
+                            }
+                            setData(updatedData)
+                          }}
+                        >
+                          ◀️
+                        </button>
+                        <button
+                          title="Month Forward"
+                          className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded"
+                          onClick={() => {
+                            const shift = shiftExpiryByMonth(opt.expiry, 'next')
+                            if (!shift) return
+
+                            const { expiry, monthName, year } = shift
+                            const strikes = chain[year]?.[monthName]
+                            if (!strikes?.includes(opt.strike)) return
+
+                            const updatedOpt = {
+                              ...opt,
+                              expiry,
+                              label: `${monthName} ${String(year).slice(2)} C${opt.strike}`,
+                              price: prices[expiry]?.[opt.strike.toFixed(2)]?.bid ?? 0
+                            }
+
+                            const updatedData = [...data]
+                            updatedData[index] = {
+                              ...data[index],
+                              future: item.future,
+                              earlier: item.earlier.map((o, j) => j === i ? updatedOpt : o)
+                            }
+                            setData(updatedData)
+                          }}
+                        >
+                          ▶️
+                        </button>
                       </div>
                     </div>
                   )
