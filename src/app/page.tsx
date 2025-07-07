@@ -81,16 +81,19 @@ export default function Page() {
     }
   }
 
-  function shiftExpiryByMonth(
-    opt: OptionEntry,
-    direction: 'next' | 'prev',
-    chain: Record<string, Record<string, number[]>>,
-    type: 'future' | 'earlier'
-  ): OptionEntry | null {
-    const [yearStr, monthStr] = opt.expiry.split('-')
-    let year = Number(yearStr)
-    let monthIndex = Number(monthStr) - 1
+function shiftExpiryByMonth(
+  opt: OptionEntry,
+  direction: 'next' | 'prev',
+  chain: Record<string, Record<string, number[]>>,
+  type: 'future' | 'earlier'
+): OptionEntry | null {
+  const [yearStr, monthStr] = opt.expiry.split('-')
+  let year = Number(yearStr)
+  let monthIndex = Number(monthStr) - 1
 
+  const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
+
+  while (true) {
     if (direction === 'next') {
       monthIndex++
       if (monthIndex > 11) {
@@ -105,19 +108,19 @@ export default function Page() {
       }
     }
 
-    const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
     const monthName = monthNames[monthIndex]
     const yearKey = year.toString()
 
-    const strikes = chain[yearKey]?.[monthName]
-    if (!strikes) return null
+    if (!chain[yearKey] || !chain[yearKey][monthName]) continue
 
+    const strikes = chain[yearKey][monthName]
     const strike = opt.strike
+
     const targetStrike = type === 'future'
       ? strikes.find(s => s > strike)
       : [...strikes].reverse().find(s => s < strike)
 
-    if (!targetStrike) return null
+    if (!targetStrike) continue
 
     const expiry = getThirdFriday(year, monthIndex)
     const label = `${monthName} ${String(year).slice(2)} C${targetStrike}`
@@ -130,6 +133,7 @@ export default function Page() {
       price
     }
   }
+}
 
 
   const updateCurrentCall = async () => {
