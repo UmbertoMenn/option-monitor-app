@@ -81,8 +81,13 @@ export default function Page() {
     }
   }
 
-  function shiftExpiryByMonth(current: string, direction: 'prev' | 'next'): { expiry: string, monthName: string, year: number } | null {
-    const [yearStr, monthStr] = current.split('-')
+  function shiftExpiryByMonth(
+    opt: OptionEntry,
+    direction: 'next' | 'prev',
+    chain: Record<string, Record<string, number[]>>,
+    type: 'future' | 'earlier'
+  ): OptionEntry | null {
+    const [yearStr, monthStr] = opt.expiry.split('-')
     let year = Number(yearStr)
     let monthIndex = Number(monthStr) - 1
 
@@ -102,11 +107,30 @@ export default function Page() {
 
     const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
     const monthName = monthNames[monthIndex]
-    if (!chain[year] || !chain[year][monthName]) return null
+    const yearKey = year.toString()
+
+    const strikes = chain[yearKey]?.[monthName]
+    if (!strikes) return null
+
+    const strike = opt.strike
+    const targetStrike = type === 'future'
+      ? strikes.find(s => s > strike)
+      : [...strikes].reverse().find(s => s < strike)
+
+    if (!targetStrike) return null
 
     const expiry = getThirdFriday(year, monthIndex)
-    return { expiry, monthName, year }
+    const label = `${monthName} ${String(year).slice(2)} C${targetStrike}`
+    const price = prices[expiry]?.[targetStrike.toFixed(2)]?.bid ?? 0
+
+    return {
+      label,
+      expiry,
+      strike: targetStrike,
+      price
+    }
   }
+
 
   const updateCurrentCall = async () => {
     if (!selectedYear || !selectedMonth || !selectedStrike) return
@@ -596,10 +620,14 @@ export default function Page() {
                           title="Month Back"
                           className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded"
                           onClick={() => {
-                            const shift = shiftExpiryByMonth(opt.expiry, 'prev')
+                            const shift = shiftExpiryByMonth(opt, 'prev', chain, 'earlier') // per earlier
                             if (!shift) return
 
-                            const { expiry, monthName, year } = shift
+                            const { expiry, strike, price, label } = shift
+                            const date = new Date(expiry)
+                            const year = date.getFullYear().toString()
+                            const monthIndex = date.getMonth()
+                            const monthName = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC'][monthIndex]
                             const strikes = chain[year]?.[monthName]
                             if (!strikes?.includes(opt.strike)) return
 
@@ -625,10 +653,14 @@ export default function Page() {
                           title="Month Forward"
                           className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded"
                           onClick={() => {
-                            const shift = shiftExpiryByMonth(opt.expiry, 'next')
+                            const shift = shiftExpiryByMonth(opt, 'next', chain, 'future') // per future
                             if (!shift) return
 
-                            const { expiry, monthName, year } = shift
+                            const { expiry, strike, price, label } = shift
+                            const date = new Date(expiry)
+                            const year = date.getFullYear().toString()
+                            const monthIndex = date.getMonth()
+                            const monthName = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC'][monthIndex]
                             const strikes = chain[year]?.[monthName]
                             if (!strikes?.includes(opt.strike)) return
 
@@ -748,10 +780,14 @@ export default function Page() {
                           title="Month Back"
                           className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded"
                           onClick={() => {
-                            const shift = shiftExpiryByMonth(opt.expiry, 'prev')
+                            const shift = shiftExpiryByMonth(opt, 'prev', chain, 'earlier') // per earlier
                             if (!shift) return
 
-                            const { expiry, monthName, year } = shift
+                            const { expiry, strike, price, label } = shift
+                            const date = new Date(expiry)
+                            const year = date.getFullYear().toString()
+                            const monthIndex = date.getMonth()
+                            const monthName = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC'][monthIndex]
                             const strikes = chain[year]?.[monthName]
                             if (!strikes?.includes(opt.strike)) return
 
@@ -777,10 +813,13 @@ export default function Page() {
                           title="Month Forward"
                           className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded"
                           onClick={() => {
-                            const shift = shiftExpiryByMonth(opt.expiry, 'next')
+                            const shift = shiftExpiryByMonth(opt, 'next', chain, 'future') // per future
                             if (!shift) return
-
-                            const { expiry, monthName, year } = shift
+                            const { expiry, strike, price, label } = shift
+                            const date = new Date(expiry)
+                            const year = date.getFullYear().toString()
+                            const monthIndex = date.getMonth()
+                            const monthName = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC'][monthIndex]
                             const strikes = chain[year]?.[monthName]
                             if (!strikes?.includes(opt.strike)) return
 
