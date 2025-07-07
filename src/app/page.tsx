@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
+import { sendTelegramMessage } from '@/lib/telegram'
 
 interface OptionEntry {
   label: string
@@ -50,6 +51,9 @@ export default function Page() {
   const [selectedMonth, setSelectedMonth] = useState('')
   const [selectedStrike, setSelectedStrike] = useState<number | null>(null)
   const [showDropdown, setShowDropdown] = useState(false)
+  const sentAlerts = useRef<{ [level: number]: boolean }>({})
+  const [alertsEnabled, setAlertsEnabled] = useState(false)
+
 
   const fetchData = async () => {
     try {
@@ -81,66 +85,66 @@ export default function Page() {
     }
   }
 
-function shiftExpiryByMonth(
-  opt: OptionEntry,
-  direction: 'next' | 'prev',
-  chain: Record<string, Record<string, number[]>>,
-  type: 'future' | 'earlier'
-): OptionEntry | null {
-  const [yearStr, monthStr] = opt.expiry.split('-')
-  let year = Number(yearStr)
-  let monthIndex = Number(monthStr) - 1
+  function shiftExpiryByMonth(
+    opt: OptionEntry,
+    direction: 'next' | 'prev',
+    chain: Record<string, Record<string, number[]>>,
+    type: 'future' | 'earlier'
+  ): OptionEntry | null {
+    const [yearStr, monthStr] = opt.expiry.split('-')
+    let year = Number(yearStr)
+    let monthIndex = Number(monthStr) - 1
 
-  const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
+    const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
 
-  let attempts = 0
-  const maxAttempts = 60 // massimo 60 mesi avanti/indietro
+    let attempts = 0
+    const maxAttempts = 60 // massimo 60 mesi avanti/indietro
 
-  while (attempts < maxAttempts) {
-    attempts++
+    while (attempts < maxAttempts) {
+      attempts++
 
-    if (direction === 'next') {
-      monthIndex++
-      if (monthIndex > 11) {
-        monthIndex = 0
-        year++
+      if (direction === 'next') {
+        monthIndex++
+        if (monthIndex > 11) {
+          monthIndex = 0
+          year++
+        }
+      } else {
+        monthIndex--
+        if (monthIndex < 0) {
+          monthIndex = 11
+          year--
+        }
       }
-    } else {
-      monthIndex--
-      if (monthIndex < 0) {
-        monthIndex = 11
-        year--
+
+      const monthName = monthNames[monthIndex]
+      const yearKey = year.toString()
+
+      if (!chain[yearKey] || !chain[yearKey][monthName]) continue
+
+      const strikes = chain[yearKey][monthName]
+      const strike = opt.strike
+
+      const targetStrike = type === 'future'
+        ? strikes.find(s => s > strike)
+        : [...strikes].reverse().find(s => s < strike)
+
+      if (!targetStrike) continue
+
+      const expiry = getThirdFriday(year, monthIndex)
+      const label = `${monthName} ${String(year).slice(2)} C${targetStrike}`
+      const price = prices[expiry]?.[targetStrike.toFixed(2)]?.bid ?? 0
+
+      return {
+        label,
+        expiry,
+        strike: targetStrike,
+        price
       }
     }
 
-    const monthName = monthNames[monthIndex]
-    const yearKey = year.toString()
-
-    if (!chain[yearKey] || !chain[yearKey][monthName]) continue
-
-    const strikes = chain[yearKey][monthName]
-    const strike = opt.strike
-
-    const targetStrike = type === 'future'
-      ? strikes.find(s => s > strike)
-      : [...strikes].reverse().find(s => s < strike)
-
-    if (!targetStrike) continue
-
-    const expiry = getThirdFriday(year, monthIndex)
-    const label = `${monthName} ${String(year).slice(2)} C${targetStrike}`
-    const price = prices[expiry]?.[targetStrike.toFixed(2)]?.bid ?? 0
-
-    return {
-      label,
-      expiry,
-      strike: targetStrike,
-      price
-    }
+    return null // nessuna opzione valida trovata entro i tentativi massimi
   }
-
-  return null // nessuna opzione valida trovata entro i tentativi massimi
-}
 
 
   const updateCurrentCall = async () => {
@@ -358,10 +362,38 @@ function shiftExpiryByMonth(
   useEffect(() => {
     const interval = setInterval(() => {
       fetchPrices()
-    }, 1000) // ogni secondo
+    }, 1000) // aggiorna ogni secondo
 
     return () => clearInterval(interval)
   }, [])
+
+  useEffect(() => {
+    if (!alertsEnabled || !data.length) return
+
+    const item = data[0]
+    const delta = Math.abs((item.strike - item.spot) / item.spot) * 100
+
+    const levels = [4, 3, 2, 1]
+
+    for (const level of levels) {
+      if (delta < level && !sentAlerts.current[level]) {
+        sentAlerts.current[level] = true
+        sendTelegramMessage(`⚠️ ALERT ${level}% – ${item.ticker}\nStrike: ${item.strike}\nSpot: ${item.spot}\nDelta: ${delta.toFixed(2)}%`)
+      }
+    }
+  }, [data, alertsEnabled])
+
+
+  useEffect(() => {
+    setData(prevData =>
+      prevData.map(item => {
+        const newAsk = prices[item.expiry]?.[item.strike.toFixed(2)]?.ask
+        return newAsk
+          ? { ...item, currentCallPrice: newAsk }
+          : item
+      })
+    )
+  }, [prices])
 
   const isFattibile = (opt: OptionEntry, item: OptionData) =>
     item.spot < opt.strike &&
@@ -470,12 +502,43 @@ function shiftExpiryByMonth(
               <div key={index} className="bg-zinc-900 border border-zinc-800 shadow-md rounded-lg p-3">
                 <div className="flex justify-between items-center mb-1">
                   <h2 className="text-base font-bold text-red-500">{item.ticker}</h2>
-                  <button
-                    onClick={() => setShowDropdown(!showDropdown)}
-                    className="bg-white/10 hover:bg-white/20 text-white text-xs font-medium px-2 py-1 rounded"
-                  >
-                    🔄 UPDATE CURRENT CALL
-                  </button>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        setAlertsEnabled(prev => {
+                          const next = !prev
+
+                          if (next) {
+                            const delta = Math.abs((item.strike - item.spot) / item.spot) * 100
+                            const newSent: { [level: number]: boolean } = {}
+                            const levels = [4, 3, 2, 1]
+                            for (const level of levels) {
+                              if (delta >= level) newSent[level] = true
+                            }
+                            sentAlerts.current = newSent
+                            sendTelegramMessage(`🔔 ALERT ATTIVATI – Spot: ${item.spot}, Strike: ${item.strike}`)
+                          } else {
+                            sentAlerts.current = {}
+                            sendTelegramMessage(`🔕 ALERT DISATTIVATI`)
+                          }
+
+                          return next
+                        })
+                      }}
+                      title={alertsEnabled ? 'Disattiva alert' : 'Attiva alert'}
+                      className={`px-2 py-1 rounded text-lg ${alertsEnabled ? 'bg-green-600 hover:bg-green-700' : 'bg-zinc-700 hover:bg-zinc-600'} text-white`}
+                    >
+                      {alertsEnabled ? '🔔' : '🔕'}
+                    </button>
+
+                    <button
+                      onClick={() => setShowDropdown(!showDropdown)}
+                      className="bg-white/10 hover:bg-white/20 text-white text-xs font-medium px-2 py-1 rounded"
+                    >
+                      🔄 UPDATE CURRENT CALL
+                    </button>
+                  </div>
                 </div>
 
                 {showDropdown && (
