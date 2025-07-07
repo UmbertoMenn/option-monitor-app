@@ -75,15 +75,16 @@ export default function Page() {
     }
   }
 
-  const fetchPrices = async () => {
-    try {
-      const res = await fetch('/api/full-prices')
-      const json = await res.json()
-      setPrices(json)
-    } catch (err) {
-      console.error('Errore fetch /api/full-prices')
-    }
+const fetchPrices = async () => {
+  try {
+    const res = await fetch('/api/full-prices')
+    const json = await res.json()
+    console.log('📦 FULL PRICES ricevuti:', json)  // 👈 LOG fondamentale
+    setPrices(json)
+  } catch (err) {
+    console.error('Errore fetch /api/full-prices', err)
   }
+}
 
   function shiftExpiryByMonth(
     opt: OptionEntry,
