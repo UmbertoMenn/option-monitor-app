@@ -20,8 +20,7 @@ export async function GET() {
     const filtered = options.filter((opt: any) => {
       return (
         opt.details?.exercise_style === 'american' &&
-        opt.details?.contract_type === 'call' &&
-        isThirdFriday(opt.details?.expiration_date)
+        opt.details?.contract_type === 'call'
       )
     })
 
