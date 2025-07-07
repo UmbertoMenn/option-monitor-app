@@ -93,7 +93,12 @@ function shiftExpiryByMonth(
 
   const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
 
-  while (true) {
+  let attempts = 0
+  const maxAttempts = 60 // massimo 60 mesi avanti/indietro
+
+  while (attempts < maxAttempts) {
+    attempts++
+
     if (direction === 'next') {
       monthIndex++
       if (monthIndex > 11) {
@@ -133,6 +138,8 @@ function shiftExpiryByMonth(
       price
     }
   }
+
+  return null // nessuna opzione valida trovata entro i tentativi massimi
 }
 
 
