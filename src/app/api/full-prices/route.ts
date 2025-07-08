@@ -2,43 +2,33 @@
 import { NextResponse } from 'next/server'
 
 const POLYGON_API_KEY = process.env.POLYGON_API_KEY!
-const SNAPSHOT_URL = `https://api.polygon.io/v3/snapshot/options/NVDA?apiKey=${POLYGON_API_KEY}`
 
-function isThirdFriday(dateStr: string): boolean {
-  const date = new Date(dateStr)
-  return date.getDay() === 5 && date.getDate() >= 15 && date.getDate() <= 21
-}
-
-export async function GET() {
+export async function GET(req: Request) {
   try {
-    const res = await fetch(SNAPSHOT_URL)
-    if (!res.ok) throw new Error(`Errore fetch snapshot: ${res.status}`)
+    const { searchParams } = new URL(req.url)
+    const symbols = searchParams.get('symbols') // es: "O:NVDA250920C00175000,O:NVDA251018C00180000,..."
+
+    if (!symbols) {
+      return NextResponse.json({ error: 'Missing symbols' }, { status: 400 })
+    }
+
+    const url = `https://api.polygon.io/v3/snapshot?tickers=${symbols}&apiKey=${POLYGON_API_KEY}`
+    const res = await fetch(url)
+
+    if (!res.ok) {
+      throw new Error(`Errore fetch snapshot: ${res.status}`)
+    }
 
     const json = await res.json()
-    const options = json?.results ?? []
+    const results = json?.results ?? []
 
-    const filtered = options.filter((opt: any) => {
-      return (
-        opt.details?.exercise_style === 'american' &&
-        opt.details?.contract_type === 'call'
-      )
-    })
+    const output: Record<string, { bid: number, ask: number }> = {}
 
-    const output: Record<string, Record<string, {
-      bid: number,
-      ask: number,
-      symbol: string
-    }>> = {}
-
-    for (const opt of filtered) {
-      const expiry = opt.details.expiration_date
-      const strike = opt.details.strike_price.toFixed(2)
+    for (const opt of results) {
+      const symbol = opt.ticker
       const bid = opt.last_quote?.bid ?? 0
       const ask = opt.last_quote?.ask ?? 0
-      const symbol = opt.details?.symbol ?? ''
-
-      if (!output[expiry]) output[expiry] = {}
-      output[expiry][strike] = { bid, ask, symbol }
+      output[symbol] = { bid, ask }
     }
 
     return NextResponse.json(output)

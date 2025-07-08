@@ -1,13 +1,28 @@
 'use client'
 
 import React, { useEffect, useState, useRef } from 'react'
-import { sendTelegramMessage } from '@/lib/telegram'
+// In page.tsx
+import { sendTelegramMessage } from './telegram'
+
+/** Converte uno strike (es. 170) in "00170000" per OPRA */
+function formatStrike(strike: number): string {
+  return String(Math.round(strike * 1000)).padStart(8, '0')
+}
+
+/** Genera il ticker OPRA da expiry "YYYY-MM-DD" + strike */
+function getSymbolFromExpiryStrike(expiry: string, strike: number): string {
+  // es. “2025-09-19” → “250919”
+  const dateKey = expiry.replace(/-/g, '').slice(2)
+  return `O:NVDA${dateKey}C${formatStrike(strike)}`
+}
+
 
 interface OptionEntry {
   label: string
   price: number
   strike: number
   expiry: string
+  symbol: string // 👈 questo campo serve ora
 }
 
 interface OptionData {
@@ -39,7 +54,7 @@ function getThirdFriday(year: number, monthIndex: number): string {
   return `${year}-${String(monthIndex + 1).padStart(2, '0')}-15` // fallback
 }
 
-export default function Page() {
+export default function Page(): JSX.Element {
   const [data, setData] = useState<OptionData[]>([])
   const [chain, setChain] = useState<Record<string, Record<string, number[]>>>({})
   const [prices, setPrices] = useState<Record<string, Record<string, {
@@ -75,16 +90,50 @@ export default function Page() {
     }
   }
 
-const fetchPrices = async () => {
-  try {
-    const res = await fetch('/api/full-prices')
-    const json = await res.json()
-    console.log('📦 FULL PRICES ricevuti:', json)  // 👈 LOG fondamentale
-    setPrices(json)
-  } catch (err) {
-    console.error('Errore fetch /api/full-prices', err)
+  const fetchPrices = async () => {
+    try {
+      const symbols: string[] = []
+
+      data.forEach(item => {
+        // Current call (costruiamo simbolo OPRA)
+        const expiryCode = item.expiry.replaceAll('-', '').slice(2) // es: 250920
+        const strikeCode = item.strike.toFixed(3).replace('.', '').padStart(8, '0')
+        const currentSymbol = `O:${item.ticker}${expiryCode}C${strikeCode}`
+        symbols.push(currentSymbol)
+
+        // Earlier
+        item.earlier.forEach(opt => symbols.push(opt.label))
+
+        // Future
+        item.future.forEach(opt => symbols.push(opt.label))
+      })
+
+      if (!symbols.length) return
+
+      const url = `/api/full-prices?symbols=${encodeURIComponent(symbols.join(','))}`
+      const res = await fetch(url)
+      const json = await res.json()
+
+      // Costruisci oggetto annidato per accesso: prices[ticker][symbol]
+      const grouped: Record<string, Record<string, { bid: number; ask: number; symbol: string }>> = {}
+
+      for (const [symbol, val] of Object.entries(json)) {
+        const match = /^O:([A-Z]+)\d+C\d+$/.exec(symbol)
+        if (!match) continue
+        const ticker = match[1]
+        if (!grouped[ticker]) grouped[ticker] = {}
+        grouped[ticker][symbol] = {
+          bid: (val as any)?.bid ?? 0,
+          ask: (val as any)?.ask ?? 0,
+          symbol
+        }
+      }
+
+      setPrices(grouped)
+    } catch (err) {
+      console.error('Errore fetch /api/full-prices', err)
+    }
   }
-}
 
   function shiftExpiryByMonth(
     opt: OptionEntry,
@@ -99,7 +148,7 @@ const fetchPrices = async () => {
     const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
 
     let attempts = 0
-    const maxAttempts = 60 // massimo 60 mesi avanti/indietro
+    const maxAttempts = 60
 
     while (attempts < maxAttempts) {
       attempts++
@@ -109,6 +158,7 @@ const fetchPrices = async () => {
         if (monthIndex > 11) {
           monthIndex = 0
           year++
+          return null
         }
       } else {
         monthIndex--
@@ -136,15 +186,21 @@ const fetchPrices = async () => {
       const label = `${monthName} ${String(year).slice(2)} C${targetStrike}`
       const price = prices[expiry]?.[targetStrike.toFixed(2)]?.bid ?? 0
 
+      const expiryCode = expiry.replaceAll('-', '').slice(2)
+      const strikeCode = targetStrike.toFixed(3).replace('.', '').padStart(8, '0')
+      const symbol = `O:${opt.symbol.slice(2, 6)}${expiryCode}C${strikeCode}`
+
       return {
         label,
+        symbol,
         expiry,
         strike: targetStrike,
-        price
+        price,
       }
     }
 
-    return null // nessuna opzione valida trovata entro i tentativi massimi
+    // ✅ Se dopo tutti i tentativi non trovi nulla, ritorni null qui
+    return null
   }
 
 
@@ -189,11 +245,17 @@ const fetchPrices = async () => {
         const fStrikeList = chain[year]?.[futureMonth] || []
         const fStrike = fStrikeList.find(s => s > selectedStrike!)
         if (fStrike) {
+          const expiry = `${year}-${(monthIndex + 1).toString().padStart(2, '0')}-20`
+          const expiryCode = expiry.replaceAll('-', '').slice(2)
+          const strikeCode = fStrike.toFixed(3).replace('.', '').padStart(8, '0')
+          const symbol = `O:${item.ticker}${expiryCode}C${strikeCode}`
+
           future.push({
             label: `${futureMonth} ${String(year).slice(2)} C${fStrike}`,
+            symbol,
             strike: fStrike,
-            price: prices[`${year}-${(monthIndex + 1).toString().padStart(2, '0')}-20`]?.[fStrike.toFixed(2)]?.bid ?? 0,
-            expiry: `${year}-${(monthIndex + 1).toString().padStart(2, '0')}-20`
+            price: prices[expiry]?.[fStrike.toFixed(2)]?.bid ?? 0,
+            expiry
           })
           futureCount++
         }
@@ -214,11 +276,17 @@ const fetchPrices = async () => {
         const eStrikeList = chain[year]?.[earlierMonth] || []
         const eStrike = [...eStrikeList].reverse().find(s => s < selectedStrike!)
         if (eStrike) {
+          const expiry = `${year}-${(monthIndex + 1).toString().padStart(2, '0')}-20`
+          const expiryCode = expiry.replaceAll('-', '').slice(2)
+          const strikeCode = eStrike.toFixed(3).replace('.', '').padStart(8, '0')
+          const symbol = `O:${item.ticker}${expiryCode}C${strikeCode}`
+
           earlier.push({
             label: `${earlierMonth} ${String(year).slice(2)} C${eStrike}`,
+            symbol,
             strike: eStrike,
-            price: prices[`${year}-${(monthIndex + 1).toString().padStart(2, '0')}-20`]?.[eStrike.toFixed(2)]?.bid ?? 0,
-            expiry: `${year}-${(monthIndex + 1).toString().padStart(2, '0')}-20`
+            price: prices[expiry]?.[eStrike.toFixed(2)]?.bid ?? 0,
+            expiry
           })
           earlierCount++
         }
@@ -289,11 +357,17 @@ const fetchPrices = async () => {
         const fStrikeList = chain[year]?.[futureMonth] || []
         const fStrike = fStrikeList.find(s => s > selectedStrike)
         if (fStrike) {
+          const expiry = `${year}-${(monthIndex + 1).toString().padStart(2, '0')}-20`
+          const expiryCode = expiry.replaceAll('-', '').slice(2)
+          const strikeCode = fStrike.toFixed(3).replace('.', '').padStart(8, '0')
+          const symbol = `O:${item.ticker}${expiryCode}C${strikeCode}`
+
           future.push({
             label: `${futureMonth} ${String(year).slice(2)} C${fStrike}`,
+            symbol,
             strike: fStrike,
-            price: prices[`${year}-${(monthIndex + 1).toString().padStart(2, '0')}-20`]?.[fStrike.toFixed(2)]?.bid ?? 0,
-            expiry: `${year}-${(monthIndex + 1).toString().padStart(2, '0')}-20`
+            price: prices[expiry]?.[fStrike.toFixed(2)]?.bid ?? 0,
+            expiry
           })
           futureCount++
         }
@@ -314,11 +388,17 @@ const fetchPrices = async () => {
         const eStrikeList = chain[year]?.[earlierMonth] || []
         const eStrike = [...eStrikeList].reverse().find(s => s < selectedStrike)
         if (eStrike) {
+          const expiry = `${year}-${(monthIndex + 1).toString().padStart(2, '0')}-20`
+          const expiryCode = expiry.replaceAll('-', '').slice(2)
+          const strikeCode = eStrike.toFixed(3).replace('.', '').padStart(8, '0')
+          const symbol = `O:${item.ticker}${expiryCode}C${strikeCode}`
+
           earlier.push({
             label: `${earlierMonth} ${String(year).slice(2)} C${eStrike}`,
+            symbol,
             strike: eStrike,
-            price: prices[`${year}-${(monthIndex + 1).toString().padStart(2, '0')}-20`]?.[eStrike.toFixed(2)]?.bid ?? 0,
-            expiry: `${year}-${(monthIndex + 1).toString().padStart(2, '0')}-20`
+            price: prices[expiry]?.[eStrike.toFixed(2)]?.bid ?? 0,
+            expiry
           })
           earlierCount++
         }
@@ -386,12 +466,31 @@ const fetchPrices = async () => {
 
 
   useEffect(() => {
-    setData(prevData =>
-      prevData.map(item => {
-        const newAsk = prices[item.expiry]?.[item.strike.toFixed(2)]?.ask
-        return newAsk
-          ? { ...item, currentCallPrice: newAsk }
-          : item
+    setData(prev =>
+      prev.map(item => {
+        const expiryCode = item.expiry.replaceAll('-', '').slice(2)
+        const strikeCode = item.strike.toFixed(3).replace('.', '').padStart(8, '0')
+        const currentSymbol = `O:${item.ticker}${expiryCode}C${strikeCode}`
+        const tickerPrices = prices[item.ticker] || {}
+
+        const currentCallPrice = tickerPrices[currentSymbol]?.bid ?? item.currentCallPrice
+
+        const updatedEarlier = item.earlier.map(opt => ({
+          ...opt,
+          price: tickerPrices[opt.symbol]?.bid ?? opt.price
+        }))
+
+        const updatedFuture = item.future.map(opt => ({
+          ...opt,
+          price: tickerPrices[opt.symbol]?.bid ?? opt.price
+        }))
+
+        return {
+          ...item,
+          currentCallPrice,
+          earlier: updatedEarlier,
+          future: updatedFuture
+        }
       })
     )
   }, [prices])
@@ -417,7 +516,7 @@ const fetchPrices = async () => {
               </button>
               <button
                 onClick={async () => {
-                  await handleRollaClick(pendingRoll)
+                  await handleRollaClick(pendingRoll as OptionEntry)
                   setPendingRoll(null)
                 }}
                 className="flex-1 bg-green-700 hover:bg-green-800 text-white py-1 rounded"
@@ -431,7 +530,7 @@ const fetchPrices = async () => {
 
       <div className="min-h-screen bg-black text-white p-2 flex flex-col gap-4 text-sm leading-tight">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-          {data.map((item, index) => {
+          {data.map((item: OptionData, index: number) => {
             const deltaPct = ((item.strike - item.spot) / item.spot) * 100
             const deltaColor = deltaPct < 4 ? 'text-red-500' : 'text-green-500'
 
@@ -929,3 +1028,4 @@ const fetchPrices = async () => {
     </>
   )
 }
+
