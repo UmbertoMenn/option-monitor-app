@@ -92,6 +92,7 @@ export default function Page(): JSX.Element {
 
   const fetchPrices = async () => {
     try {
+      console.log('📦 Dati ricevuti da fetchPrices:', data)
       const symbols: string[] = []
 
       data.forEach(item => {
@@ -124,6 +125,10 @@ export default function Page(): JSX.Element {
 
       for (const [symbol, val] of Object.entries(json)) {
         const match = /^O:([A-Z]+)\d+C\d+$/.exec(symbol)
+        if (!match) {
+          console.warn('❌ Symbol non valido:', symbol)
+          continue
+        }
         if (!match) continue
         const ticker = match[1]
         if (!grouped[ticker]) grouped[ticker] = {}
@@ -441,14 +446,15 @@ export default function Page(): JSX.Element {
   }
 
   useEffect(() => {
-    const inizializza = async () => {
-      await fetchData()     // carica i dati
-      await fetchChain()    // carica la chain
-      setTimeout(fetchPrices, 300) // attende che data venga aggiornata
-    }
-
-    inizializza()
+    fetchData()
+    fetchChain()
   }, [])
+
+  useEffect(() => {
+    if (data.length > 0) {
+      fetchPrices()
+    }
+  }, [data])
 
   useEffect(() => {
     const interval = setInterval(() => {
