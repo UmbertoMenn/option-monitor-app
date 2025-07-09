@@ -108,7 +108,12 @@ export default function Page(): JSX.Element {
         item.future.forEach(opt => symbols.push(opt.label))
       })
 
-      if (!symbols.length) return
+      if (!symbols.length) {
+        console.warn('⚠️ Nessun simbolo trovato!')
+        return
+      }
+
+      console.log('🎯 Symbol richiesti:', symbols)
 
       const url = `/api/full-prices?symbols=${encodeURIComponent(symbols.join(','))}`
       const res = await fetch(url)
@@ -130,12 +135,14 @@ export default function Page(): JSX.Element {
       }
 
       setPrices(grouped)
+      console.log('✅ Prezzi aggiornati:', grouped)
     } catch (err) {
       console.error('Errore fetch /api/full-prices', err)
     }
   }
 
   function shiftExpiryByMonth(
+    ticker: string,
     opt: OptionEntry,
     direction: 'next' | 'prev',
     chain: Record<string, Record<string, number[]>>,
@@ -183,12 +190,11 @@ export default function Page(): JSX.Element {
       if (!targetStrike) continue
 
       const expiry = getThirdFriday(year, monthIndex)
-      const label = `${monthName} ${String(year).slice(2)} C${targetStrike}`
-      const price = prices[expiry]?.[targetStrike.toFixed(2)]?.bid ?? 0
-
       const expiryCode = expiry.replaceAll('-', '').slice(2)
       const strikeCode = targetStrike.toFixed(3).replace('.', '').padStart(8, '0')
+      const label = `${monthName} ${String(year).slice(2)} C${targetStrike}`
       const symbol = `O:${opt.symbol.slice(2, 6)}${expiryCode}C${strikeCode}`
+      const price = prices[ticker]?.[symbol]?.bid ?? 0
 
       return {
         label,
@@ -795,7 +801,7 @@ export default function Page(): JSX.Element {
                           title="Month Back"
                           className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded"
                           onClick={() => {
-                            const shift = shiftExpiryByMonth(opt, 'prev', chain, 'earlier') // per earlier
+                            const shift = shiftExpiryByMonth(item.ticker, opt, 'next', chain, 'earlier') // per earlier
                             if (!shift) return
 
                             const { expiry, strike, price, label } = shift
@@ -828,7 +834,7 @@ export default function Page(): JSX.Element {
                           title="Month Forward"
                           className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded"
                           onClick={() => {
-                            const shift = shiftExpiryByMonth(opt, 'next', chain, 'future') // per future
+                            const shift = shiftExpiryByMonth(item.ticker, opt, 'next', chain, 'future') // per future
                             if (!shift) return
 
                             const { expiry, strike, price, label } = shift
@@ -955,7 +961,7 @@ export default function Page(): JSX.Element {
                           title="Month Back"
                           className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded"
                           onClick={() => {
-                            const shift = shiftExpiryByMonth(opt, 'prev', chain, 'earlier') // per earlier
+                            const shift = shiftExpiryByMonth(item.ticker, opt, 'next', chain, 'earlier') // per earlier
                             if (!shift) return
 
                             const { expiry, strike, price, label } = shift
@@ -988,7 +994,7 @@ export default function Page(): JSX.Element {
                           title="Month Forward"
                           className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded"
                           onClick={() => {
-                            const shift = shiftExpiryByMonth(opt, 'next', chain, 'future') // per future
+                            const shift = shiftExpiryByMonth(item.ticker, opt, 'next', chain, 'future') // per future
                             if (!shift) return
                             const { expiry, strike, price, label } = shift
                             const date = new Date(expiry)
