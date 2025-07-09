@@ -440,14 +440,15 @@ export default function Page(): JSX.Element {
     }
   }
 
-useEffect(() => {
-  const inizializza = async () => {
-    await fetchData()
-    await fetchChain()
-    await fetchPrices()
-  }
-  inizializza()
-}, [])
+  useEffect(() => {
+    const inizializza = async () => {
+      await fetchData()     // carica i dati
+      await fetchChain()    // carica la chain
+      setTimeout(fetchPrices, 300) // attende che data venga aggiornata
+    }
+
+    inizializza()
+  }, [])
 
   useEffect(() => {
     const interval = setInterval(() => {
