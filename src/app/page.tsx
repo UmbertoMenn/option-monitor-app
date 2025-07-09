@@ -457,12 +457,12 @@ export default function Page(): JSX.Element {
   }, [data])
 
   useEffect(() => {
+    if (data.length === 0) return
     const interval = setInterval(() => {
       fetchPrices()
-    }, 1000) // aggiorna ogni secondo
-
+    }, 1000)
     return () => clearInterval(interval)
-  }, [])
+  }, [data])
 
   useEffect(() => {
     if (!alertsEnabled || !data.length) return
