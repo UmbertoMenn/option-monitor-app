@@ -511,10 +511,17 @@ export default function Page(): JSX.Element {
     )
   }, [prices])
 
-  const isFattibile = (opt: OptionEntry, item: OptionData) =>
-    item.spot < opt.strike &&
-    opt.strike >= item.spot * 1.04 &&
-    opt.price >= item.currentCallPrice * 0.9
+  const isFattibile = (opt: OptionEntry, item: OptionData) => {
+    const optKey = `${opt.expiry} C${opt.strike}`
+    const fetched = prices[optKey]
+    const optPrice = typeof fetched?.bid === 'number' ? fetched.bid : opt.price
+
+    return (
+      item.spot < opt.strike &&
+      opt.strike >= item.spot * 1.04 &&
+      optPrice >= item.currentCallPrice * 0.9
+    )
+  }
 
   return (
     <>
@@ -717,14 +724,22 @@ export default function Page(): JSX.Element {
                   <div className="p-1 bg-blue-700 font-bold">Δ% Strike/Spot</div>
                   <div className={`p-1 ${deltaColor}`}>{deltaPct.toFixed(2)}%</div>
                   <div className="p-1 bg-blue-700 font-bold">Prezzo Call attuale</div>
-                  <div className="p-1 bg-blue-700">{item.currentCallPrice.toFixed(2)}</div>
+                  {(() => {
+                    const label = `${item.expiry} C${item.strike}`
+                    const ask = prices[label]?.ask
+                    const priceToShow = typeof ask === 'number' ? ask : item.currentCallPrice
+                    return <div className="p-1 bg-blue-700">{priceToShow.toFixed(2)}</div>
+                  })()}
                 </div>
 
                 <div className="mb-1 font-semibold bg-orange-500 text-white text-center rounded py-0.5">Future</div>
                 {item.future.map((opt, i) => {
-                  const delta = ((opt.price - item.currentCallPrice) / item.spot) * 100
+                  const tickerPrices = prices[item.ticker] || {}
+                  const optPrice = typeof tickerPrices[opt.symbol]?.bid === 'number' ? tickerPrices[opt.symbol].bid : opt.price
+                  const delta = ((optPrice - item.currentCallPrice) / item.spot) * 100
                   const deltaColor = delta >= 0 ? 'text-green-400' : 'text-red-400'
                   const deltaSign = delta >= 0 ? '+' : ''
+
                   return (
                     <div key={i} className="flex items-center justify-between mb-1">
                       <span className="flex items-center gap-1">
@@ -737,12 +752,15 @@ export default function Page(): JSX.Element {
                           </span>
                         )}
                         <span title={opt.expiry}>
-                          {opt.label} - {opt.price === 0 ? 'NO DATA' : opt.price.toFixed(2)} /
+                          <>
+                            {opt.label} - {optPrice === 0 ? 'NO DATA' : optPrice.toFixed(2)} /
+                          </>
                           <span title="Premio aggiuntivo/riduttivo rispetto alla call attuale, diviso il prezzo spot" className={`ml-1 ${deltaColor}`}>
                             {deltaSign}{delta.toFixed(2)}%
                           </span>
                         </span>
                       </span>
+
                       <div className="flex gap-1 items-center">
                         <button
                           onClick={() => setPendingRoll(opt)}
@@ -756,8 +774,8 @@ export default function Page(): JSX.Element {
                           className="bg-green-700 hover:bg-green-800 text-white text-xs px-1 rounded"
                           onClick={() => {
                             const [year, month] = opt.expiry.split('-')
-                            const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
                             const monthIndex = Number(month) - 1
+                            const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
                             const chainStrikes = chain[Number(year)]?.[monthNames[monthIndex]] || []
                             const nextStrike = chainStrikes.find(s => s > opt.strike)
                             if (!nextStrike) return
@@ -784,8 +802,8 @@ export default function Page(): JSX.Element {
                           className="bg-red-700 hover:bg-red-800 text-white text-xs px-1 rounded"
                           onClick={() => {
                             const [year, month] = opt.expiry.split('-')
-                            const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
                             const monthIndex = Number(month) - 1
+                            const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
                             const chainStrikes = chain[Number(year)]?.[monthNames[monthIndex]] || []
                             const prevStrike = [...chainStrikes].reverse().find(s => s < opt.strike)
                             if (!prevStrike) return
@@ -811,10 +829,10 @@ export default function Page(): JSX.Element {
                           title="Month Back"
                           className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded"
                           onClick={() => {
-                            const shift = shiftExpiryByMonth(item.ticker, opt, 'next', chain, 'earlier') // per earlier
+                            const shift = shiftExpiryByMonth(item.ticker, opt, 'next', chain, 'earlier')
                             if (!shift) return
 
-                            const { expiry, strike, price, label } = shift
+                            const { expiry, strike, label } = shift
                             const date = new Date(expiry)
                             const year = date.getFullYear().toString()
                             const monthIndex = date.getMonth()
@@ -826,7 +844,7 @@ export default function Page(): JSX.Element {
                               ...opt,
                               expiry,
                               label: `${monthName} ${String(year).slice(2)} C${opt.strike}`,
-                              price: prices[expiry]?.[opt.strike.toFixed(2)]?.bid ?? 0
+                              price: prices[item.ticker]?.[opt.symbol]?.bid ?? 0
                             }
 
                             const updatedData = [...data]
@@ -844,10 +862,10 @@ export default function Page(): JSX.Element {
                           title="Month Forward"
                           className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded"
                           onClick={() => {
-                            const shift = shiftExpiryByMonth(item.ticker, opt, 'next', chain, 'future') // per future
+                            const shift = shiftExpiryByMonth(item.ticker, opt, 'next', chain, 'future')
                             if (!shift) return
 
-                            const { expiry, strike, price, label } = shift
+                            const { expiry, strike, label } = shift
                             const date = new Date(expiry)
                             const year = date.getFullYear().toString()
                             const monthIndex = date.getMonth()
@@ -859,7 +877,7 @@ export default function Page(): JSX.Element {
                               ...opt,
                               expiry,
                               label: `${monthName} ${String(year).slice(2)} C${opt.strike}`,
-                              price: prices[expiry]?.[opt.strike.toFixed(2)]?.bid ?? 0
+                              price: prices[item.ticker]?.[opt.symbol]?.bid ?? 0
                             }
 
                             const updatedData = [...data]
@@ -873,18 +891,17 @@ export default function Page(): JSX.Element {
                         >
                           ▶️
                         </button>
-
                       </div>
                     </div>
                   )
                 })}
-
-
-                <div className="mt-2 mb-1 font-semibold bg-orange-500 text-white text-center rounded py-0.5">Earlier</div>
                 {item.earlier.map((opt, i) => {
-                  const delta = ((opt.price - item.currentCallPrice) / item.spot) * 100
+                  const tickerPrices = prices[item.ticker] || {}
+                  const optPrice = typeof tickerPrices[opt.symbol]?.bid === 'number' ? tickerPrices[opt.symbol].bid : opt.price
+                  const delta = ((optPrice - item.currentCallPrice) / item.spot) * 100
                   const deltaColor = delta >= 0 ? 'text-green-400' : 'text-red-400'
                   const deltaSign = delta >= 0 ? '+' : ''
+
                   return (
                     <div key={i} className="flex items-center justify-between mb-1">
                       <span className="flex items-center gap-1">
@@ -897,8 +914,11 @@ export default function Page(): JSX.Element {
                           </span>
                         )}
                         <span title={opt.expiry}>
-                          {opt.label} - {opt.price === 0 ? 'NO DATA' : opt.price.toFixed(2)} /
-                          <span title="Premio aggiuntivo/riduttivo rispetto alla call attuale, diviso il prezzo spot" className={`ml-1 ${deltaColor}`}>
+                          {opt.label} - {optPrice === 0 ? 'NO DATA' : optPrice.toFixed(2)} /
+                          <span
+                            title="Premio aggiuntivo/riduttivo rispetto alla call attuale, diviso il prezzo spot"
+                            className={`ml-1 ${deltaColor}`}
+                          >
                             {deltaSign}{delta.toFixed(2)}%
                           </span>
                         </span>
@@ -971,10 +991,10 @@ export default function Page(): JSX.Element {
                           title="Month Back"
                           className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded"
                           onClick={() => {
-                            const shift = shiftExpiryByMonth(item.ticker, opt, 'next', chain, 'earlier') // per earlier
+                            const shift = shiftExpiryByMonth(item.ticker, opt, 'next', chain, 'earlier')
                             if (!shift) return
 
-                            const { expiry, strike, price, label } = shift
+                            const { expiry } = shift
                             const date = new Date(expiry)
                             const year = date.getFullYear().toString()
                             const monthIndex = date.getMonth()
@@ -986,7 +1006,7 @@ export default function Page(): JSX.Element {
                               ...opt,
                               expiry,
                               label: `${monthName} ${String(year).slice(2)} C${opt.strike}`,
-                              price: prices[expiry]?.[opt.strike.toFixed(2)]?.bid ?? 0
+                              price: prices[item.ticker]?.[opt.symbol]?.bid ?? 0
                             }
 
                             const updatedData = [...data]
@@ -1004,9 +1024,10 @@ export default function Page(): JSX.Element {
                           title="Month Forward"
                           className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded"
                           onClick={() => {
-                            const shift = shiftExpiryByMonth(item.ticker, opt, 'next', chain, 'future') // per future
+                            const shift = shiftExpiryByMonth(item.ticker, opt, 'next', chain, 'future')
                             if (!shift) return
-                            const { expiry, strike, price, label } = shift
+
+                            const { expiry } = shift
                             const date = new Date(expiry)
                             const year = date.getFullYear().toString()
                             const monthIndex = date.getMonth()
@@ -1018,7 +1039,7 @@ export default function Page(): JSX.Element {
                               ...opt,
                               expiry,
                               label: `${monthName} ${String(year).slice(2)} C${opt.strike}`,
-                              price: prices[expiry]?.[opt.strike.toFixed(2)]?.bid ?? 0
+                              price: prices[item.ticker]?.[opt.symbol]?.bid ?? 0
                             }
 
                             const updatedData = [...data]
@@ -1036,12 +1057,12 @@ export default function Page(): JSX.Element {
                     </div>
                   )
                 })}
-              </div>
+              </div>        // chiude il card ticker
             )
-          })}
-        </div>
-      </div>
-    </>
-  )
+          })}         // chiude il map(data)
+        </div>       // griglia principale
+      </div>       // container generale
+    </>          // fragment React
+  )            // fine funzione Page()
 }
 
