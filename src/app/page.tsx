@@ -54,7 +54,7 @@ function getThirdFriday(year: number, monthIndex: number): string {
 export default function Page(): JSX.Element {
   const [data, setData] = useState<OptionData[]>([])
   const [chain, setChain] = useState<Record<string, Record<string, number[]>>>({})
-  const [prices, setPrices] = useState<Record<string, Record<string, { bid: number; ask: number; symbol: string }>>>({})
+  const [prices, setPrices] = useState<Record<string, Record<string, { bid: number; ask: number; last_trade_price: number; symbol: string }>>>({})
   const [selectedYear, setSelectedYear] = useState('')
   const [selectedMonth, setSelectedMonth] = useState('')
   const [selectedStrike, setSelectedStrike] = useState<number | null>(null)
@@ -104,7 +104,7 @@ export default function Page(): JSX.Element {
       const json = await res.json()
       console.log('📥 Risposta /api/full-prices:', json)
 
-      const grouped: Record<string, Record<string, { bid: number; ask: number; symbol: string }>> = {}
+      const grouped: Record<string, Record<string, { bid: number; ask: number; last_trade_price: number; symbol: string }>> = {}
       for (const [symbol, val] of Object.entries(json)) {
         const match = /^O:([A-Z]+)\d+C\d+$/.exec(symbol)
         if (!match) {
@@ -116,6 +116,7 @@ export default function Page(): JSX.Element {
         grouped[ticker][symbol] = {
           bid: (val as any)?.bid ?? 0,
           ask: (val as any)?.ask ?? 0,
+          last_trade_price: (val as any)?.last_trade_price ?? 0,
           symbol
         }
       }
@@ -657,8 +658,10 @@ export default function Page(): JSX.Element {
                   <div className="p-1 bg-blue-700 font-bold">Prezzo Call attuale</div>
                   {(() => {
                     const currentSymbol = getSymbolFromExpiryStrike(item.ticker, item.expiry, item.strike)
-                    const ask = prices[item.ticker]?.[currentSymbol]?.ask
-                    const priceToShow = ask ?? item.currentCallPrice
+                    const ask = prices[item.ticker]?.[currentSymbol]?.ask ?? 0
+                    const last_trade_price = prices[item.ticker]?.[currentSymbol]?.last_trade_price ?? 0
+                    const priceToShow = ask > 0 ? ask : (last_trade_price > 0 ? last_trade_price : item.currentCallPrice)
+                    // Poi usa priceToShow.toFixed(2)
                     return <div className="p-1 bg-blue-700">{priceToShow.toFixed(2)}</div>
                   })()}
                 </div>
@@ -666,7 +669,10 @@ export default function Page(): JSX.Element {
                 {item.future.map((opt, i) => {
                   const tickerPrices = prices[item.ticker] || {}
                   const optPriceData = tickerPrices[opt.symbol]
-                  const optPrice = optPriceData?.bid ?? opt.price
+                  const bid = tickerPrices[opt.symbol]?.bid ?? 0
+                  const last_trade_price = tickerPrices[opt.symbol]?.last_trade_price ?? 0
+                  const optPrice = bid > 0 ? bid : last_trade_price
+                  // Poi nel JSX: {optPrice > 0 ? optPrice.toFixed(2) : 'NO DATA'}
                   const delta = optPriceData ? ((optPrice - item.currentCallPrice) / item.spot) * 100 : 0
                   const deltaColor = delta >= 0 ? 'text-green-400' : 'text-red-400'
                   const deltaSign = delta >= 0 ? '+' : ''
@@ -792,7 +798,10 @@ export default function Page(): JSX.Element {
                 {item.earlier.map((opt, i) => {
                   const tickerPrices = prices[item.ticker] || {}
                   const optPriceData = tickerPrices[opt.symbol]
-                  const optPrice = optPriceData?.bid ?? opt.price
+                  const bid = tickerPrices[opt.symbol]?.bid ?? 0
+                  const last_trade_price = tickerPrices[opt.symbol]?.last_trade_price ?? 0
+                  const optPrice = bid > 0 ? bid : last_trade_price
+                  // Poi nel JSX: {optPrice > 0 ? optPrice.toFixed(2) : 'NO DATA'}
                   const delta = optPriceData ? ((optPrice - item.currentCallPrice) / item.spot) * 100 : 0
                   const deltaColor = delta >= 0 ? 'text-green-400' : 'text-red-400'
                   const deltaSign = delta >= 0 ? '+' : ''
