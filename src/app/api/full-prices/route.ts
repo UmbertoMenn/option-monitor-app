@@ -12,8 +12,8 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Missing symbols' }, { status: 400 })
     }
 
-    // Endpoint corretto per snapshot multipli: usa ?tickers= per OPRA symbols separati da virgola
-    const url = `https://api.polygon.io/v3/snapshot?tickers=${symbols}&apiKey=${POLYGON_API_KEY}`
+    // Endpoint corretto per multiple options snapshot: specifica underlying e ticker.any_of
+    const url = `https://api.polygon.io/v3/snapshot/options/NVDA?ticker.any_of=${symbols}&apiKey=${POLYGON_API_KEY}`
     const res = await fetch(url)
     const json = await res.json()
     console.log('Risposta Polygon:', json)
