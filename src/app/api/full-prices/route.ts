@@ -1,4 +1,3 @@
-// /src/app/api/full-prices/route.ts
 import { NextResponse } from 'next/server'
 
 const POLYGON_API_KEY = process.env.POLYGON_API_KEY!
@@ -6,7 +5,8 @@ const POLYGON_API_KEY = process.env.POLYGON_API_KEY!
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url)
-    const symbols = searchParams.get('symbols') // es: "O:NVDA250920C00175000,O:NVDA251018C00180000,..."
+    const symbols = searchParams.get('symbols')
+    console.log('Simboli richiesti:', symbols)
 
     if (!symbols) {
       return NextResponse.json({ error: 'Missing symbols' }, { status: 400 })
@@ -14,16 +14,15 @@ export async function GET(req: Request) {
 
     const url = `https://api.polygon.io/v3/snapshot?tickers=${symbols}&apiKey=${POLYGON_API_KEY}`
     const res = await fetch(url)
+    const json = await res.json()
+    console.log('Risposta Polygon:', json)
 
-    if (!res.ok) {
-      throw new Error(`Errore fetch snapshot: ${res.status}`)
+    const results = json?.results ?? []
+    if (!results.length) {
+      return NextResponse.json({ error: 'Nessun dato per i simboli forniti' }, { status: 404 })
     }
 
-    const json = await res.json()
-    const results = json?.results ?? []
-
     const output: Record<string, { bid: number, ask: number }> = {}
-
     for (const opt of results) {
       const symbol = opt.ticker
       const bid = opt.last_quote?.bid ?? 0

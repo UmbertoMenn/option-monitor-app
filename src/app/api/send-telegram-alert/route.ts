@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN!
-const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID! // lo mettiamo anche questo in .env
+const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID!
 const TELEGRAM_API_URL = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`
 
 export async function POST(req: NextRequest) {

@@ -6,7 +6,6 @@ const supabase = createClient(
   process.env.SUPABASE_ANON_KEY!
 )
 
-// Calcola il terzo venerdì del mese
 function getThirdFriday(year: number, month: number): string {
   let count = 0
   for (let day = 1; day <= 31; day++) {
@@ -17,18 +16,16 @@ function getThirdFriday(year: number, month: number): string {
       if (count === 3) return date.toISOString().split('T')[0]
     }
   }
-  return `${year}-${String(month).padStart(2, '0')}-15` // fallback
+  return `${year}-${String(month).padStart(2, '0')}-15`
 }
 
-// Normalizza la data se in formato YYYY-MM
 function normalizeExpiry(expiry: string): string {
   if (/^\d{4}-\d{2}$/.test(expiry)) {
     const [year, month] = expiry.split('-').map(Number)
     return getThirdFriday(year, month)
   }
   if (/^\d{4}-\d{2}-\d{2}$/.test(expiry)) {
-    const [year, month] = expiry.split('-').map(Number)
-    return getThirdFriday(year, month)
+    return expiry
   }
   return expiry
 }
@@ -40,7 +37,6 @@ export async function POST(req: Request) {
 
     const normalizedExpiry = normalizeExpiry(expiry)
 
-    // ❌ Validazione data: se ancora errata, blocca
     if (!/^\d{4}-\d{2}-\d{2}$/.test(normalizedExpiry)) {
       return NextResponse.json(
         { success: false, error: 'Formato data non valido' },
