@@ -160,7 +160,7 @@ export async function GET() {
         strike: selectedStrike,
         price: bid ?? 0,
         expiry,
-        ticker: match.ticker
+        symbol: match.ticker
       }
     }
 
@@ -169,7 +169,7 @@ export async function GET() {
       strike: number
       price: number
       expiry: string
-      ticker: string
+      symbol: string
     }
 
     let future1: OptionEntry | null = null
@@ -222,12 +222,12 @@ export async function GET() {
       expiry: CURRENT_EXPIRY,
       currentCallPrice,
       future: [
-        future1 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '', ticker: '' },
-        future2 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '', ticker: '' }
+        future1 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '', symbol: '' },
+        future2 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '', symbol: '' }
       ],
       earlier: [
-        earlier1 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '', ticker: '' },
-        earlier2 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '', ticker: '' }
+        earlier1 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '', symbol: '' },
+        earlier2 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '', symbol: '' }
       ]
     }]
 
