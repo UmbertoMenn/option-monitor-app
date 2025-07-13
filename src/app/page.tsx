@@ -8,7 +8,7 @@ function formatStrike(strike: number): string {
   return String(Math.round(strike * 1000)).padStart(8, '0')
 }
 
-/** Genera il ticker OPRA da expiry "YYYY-MM-DD" + strike */
+/** Genera il ticker OPRA da ticker, expiry "YYYY-MM-DD" e strike */
 function getSymbolFromExpiryStrike(ticker: string, expiry: string, strike: number): string {
   const dateKey = expiry.replace(/-/g, '').slice(2)
   return `O:${ticker}${dateKey}C${formatStrike(strike)}`
@@ -19,7 +19,7 @@ interface OptionEntry {
   price: number
   strike: number
   expiry: string
-  symbol: string // 👈 questo campo serve ora
+  symbol: string
 }
 
 interface OptionData {
@@ -54,17 +54,14 @@ function getThirdFriday(year: number, monthIndex: number): string {
 export default function Page(): JSX.Element {
   const [data, setData] = useState<OptionData[]>([])
   const [chain, setChain] = useState<Record<string, Record<string, number[]>>>({})
-  const [prices, setPrices] = useState<Record<string, Record<string, {
-    bid: number
-    ask: number
-    symbol: string
-  }>>>({})
+  const [prices, setPrices] = useState<Record<string, Record<string, { bid: number; ask: number; symbol: string }>>>({})
   const [selectedYear, setSelectedYear] = useState('')
   const [selectedMonth, setSelectedMonth] = useState('')
   const [selectedStrike, setSelectedStrike] = useState<number | null>(null)
   const [showDropdown, setShowDropdown] = useState(false)
   const sentAlerts = useRef<{ [level: number]: boolean }>({})
   const [alertsEnabled, setAlertsEnabled] = useState(false)
+  const [pendingRoll, setPendingRoll] = useState<OptionEntry | null>(null)
 
   const fetchData = async () => {
     try {
@@ -72,7 +69,7 @@ export default function Page(): JSX.Element {
       const json = await res.json()
       if (Array.isArray(json)) setData(json)
     } catch (err) {
-      console.error('Errore fetch /api/options')
+      console.error('Errore fetch /api/options', err)
     }
   }
 
@@ -82,23 +79,17 @@ export default function Page(): JSX.Element {
       const json = await res.json()
       setChain(json)
     } catch (err) {
-      console.error('Errore fetch /api/chain')
+      console.error('Errore fetch /api/chain', err)
     }
   }
 
   const fetchPrices = async () => {
     try {
       const symbols: string[] = []
-
       data.forEach(item => {
-        // Current call
         const currentSymbol = getSymbolFromExpiryStrike(item.ticker, item.expiry, item.strike)
         symbols.push(currentSymbol)
-
-        // Earlier
         item.earlier.forEach(opt => symbols.push(opt.symbol))
-
-        // Future
         item.future.forEach(opt => symbols.push(opt.symbol))
       })
 
@@ -107,19 +98,17 @@ export default function Page(): JSX.Element {
         return
       }
 
-      console.log('🎯 Symbol richiesti:', symbols)
-
+      console.log('🎯 Simboli richiesti:', symbols)
       const url = `/api/full-prices?symbols=${encodeURIComponent(symbols.join(','))}`
       const res = await fetch(url)
       const json = await res.json()
+      console.log('📥 Risposta /api/full-prices:', json)
 
-      // Costruisci oggetto annidato per accesso: prices[ticker][symbol]
       const grouped: Record<string, Record<string, { bid: number; ask: number; symbol: string }>> = {}
-
       for (const [symbol, val] of Object.entries(json)) {
         const match = /^O:([A-Z]+)\d+C\d+$/.exec(symbol)
         if (!match) {
-          console.warn('❌ Symbol non valido:', symbol)
+          console.warn('❌ Simbolo non valido:', symbol)
           continue
         }
         const ticker = match[1]
@@ -132,7 +121,7 @@ export default function Page(): JSX.Element {
       }
 
       setPrices(grouped)
-      console.log('✅ Prezzi aggiornati:', grouped)
+      console.log('✅ンク Prezzi aggiornati:', grouped)
     } catch (err) {
       console.error('Errore fetch /api/full-prices', err)
     }
@@ -147,47 +136,42 @@ export default function Page(): JSX.Element {
   ): OptionEntry | null {
     const [yearStr, monthStr] = opt.expiry.split('-')
     let year = Number(yearStr)
-    let monthIndex = Number(monthStr) - 1
-
+    let monthIdx = Number(monthStr) - 1
     const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
-
     let attempts = 0
     const maxAttempts = 60
 
     while (attempts < maxAttempts) {
       attempts++
-
       if (direction === 'next') {
-        monthIndex++
-        if (monthIndex > 11) {
-          monthIndex = 0
+        monthIdx++
+        if (monthIdx > 11) {
+          monthIdx = 0
           year++
           if (!chain[year.toString()]) break
         }
       } else {
-        monthIndex--
-        if (monthIndex < 0) {
-          monthIndex = 11
+        monthIdx--
+        if (monthIdx < 0) {
+          monthIdx = 11
           year--
           if (!chain[year.toString()]) break
         }
       }
 
-      const monthName = monthNames[monthIndex]
+      const monthName = monthNames[monthIdx]
       const yearKey = year.toString()
-
       if (!chain[yearKey] || !chain[yearKey][monthName]) continue
 
       const strikes = chain[yearKey][monthName]
       const strike = opt.strike
-
       const targetStrike = type === 'future'
         ? strikes.find(s => s > strike)
         : [...strikes].reverse().find(s => s < strike)
 
       if (!targetStrike) continue
 
-      const expiry = getThirdFriday(year, monthIndex)
+      const expiry = getThirdFriday(year, monthIdx)
       const symbol = getSymbolFromExpiryStrike(ticker, expiry, targetStrike)
       const price = prices[ticker]?.[symbol]?.bid ?? 0
 
@@ -199,7 +183,6 @@ export default function Page(): JSX.Element {
         price,
       }
     }
-
     return null
   }
 
@@ -211,9 +194,9 @@ export default function Page(): JSX.Element {
     if (monthIndex === -1) return
 
     const expiryDate = getThirdFriday(Number(selectedYear), monthIndex)
-    const currentSymbol = getSymbolFromExpiryStrike(data[0].ticker, expiryDate, selectedStrike)
-
     const updatedData = data.map(item => {
+      const currentSymbol = getSymbolFromExpiryStrike(item.ticker, expiryDate, selectedStrike)
+      const currentCallPrice = prices[item.ticker]?.[currentSymbol]?.ask ?? 0
       const future: OptionEntry[] = []
       const earlier: OptionEntry[] = []
 
@@ -234,11 +217,12 @@ export default function Page(): JSX.Element {
         if (fStrike) {
           const expiry = getThirdFriday(year, monthIdx)
           const symbol = getSymbolFromExpiryStrike(item.ticker, expiry, fStrike)
+          const price = prices[item.ticker]?.[symbol]?.bid ?? 0
           future.push({
             label: `${futureMonth} ${String(year).slice(2)} C${fStrike}`,
             symbol,
             strike: fStrike,
-            price: prices[item.ticker]?.[symbol]?.bid ?? 0,
+            price,
             expiry
           })
           futureCount++
@@ -262,11 +246,12 @@ export default function Page(): JSX.Element {
         if (eStrike) {
           const expiry = getThirdFriday(year, monthIdx)
           const symbol = getSymbolFromExpiryStrike(item.ticker, expiry, eStrike)
+          const price = prices[item.ticker]?.[symbol]?.bid ?? 0
           earlier.push({
             label: `${earlierMonth} ${String(year).slice(2)} C${eStrike}`,
             symbol,
             strike: eStrike,
-            price: prices[item.ticker]?.[symbol]?.bid ?? 0,
+            price,
             expiry
           })
           earlierCount++
@@ -277,7 +262,7 @@ export default function Page(): JSX.Element {
         ...item,
         strike: selectedStrike,
         expiry: expiryDate,
-        currentCallPrice: prices[item.ticker]?.[currentSymbol]?.ask ?? 0,
+        currentCallPrice,
         future,
         earlier,
         invalid: false
@@ -290,14 +275,18 @@ export default function Page(): JSX.Element {
     setSelectedStrike(null)
     setShowDropdown(false)
 
+    const mainTicker = data[0].ticker
+    const currentSymbol = getSymbolFromExpiryStrike(mainTicker, expiryDate, selectedStrike)
+    const currentCallPrice = prices[mainTicker]?.[currentSymbol]?.ask ?? 0
+
     const confirmRes = await fetch('/api/update-call', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        ticker: data[0].ticker,
+        ticker: mainTicker,
         strike: selectedStrike,
         expiry: expiryDate,
-        currentCallPrice: prices[data[0].ticker]?.[currentSymbol]?.ask ?? 0,
+        currentCallPrice,
       })
     })
     const confirmJson = await confirmRes.json()
@@ -306,8 +295,6 @@ export default function Page(): JSX.Element {
     }
   }
 
-  const [pendingRoll, setPendingRoll] = useState<OptionEntry | null>(null)
-
   const handleRollaClick = async (opt: OptionEntry) => {
     const [yearStr, monthStr] = opt.expiry.split('-')
     const selectedYear = yearStr
@@ -315,35 +302,37 @@ export default function Page(): JSX.Element {
     const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
     const selectedMonth = monthNames[selectedMonthIndex]
     const selectedStrike = opt.strike
-
     const expiryDate = getThirdFriday(Number(selectedYear), selectedMonthIndex)
 
     const updatedData = data.map(item => {
+      const currentSymbol = getSymbolFromExpiryStrike(item.ticker, expiryDate, selectedStrike)
+      const currentCallPrice = prices[item.ticker]?.[currentSymbol]?.ask ?? 0
       const future: OptionEntry[] = []
       const earlier: OptionEntry[] = []
 
       let futureCount = 0
-      let monthIndex = selectedMonthIndex
+      let monthIdx = selectedMonthIndex
       let year = Number(selectedYear)
 
       while (futureCount < 2) {
-        monthIndex++
-        if (monthIndex >= 12) {
+        monthIdx++
+        if (monthIdx >= 12) {
           year++
           if (!chain[year.toString()]) break
-          monthIndex = 0
+          monthIdx = 0
         }
-        const futureMonth = monthNames[monthIndex]
+        const futureMonth = monthNames[monthIdx]
         const fStrikeList = chain[year.toString()]?.[futureMonth] || []
         const fStrike = fStrikeList.find(s => s > selectedStrike)
         if (fStrike) {
-          const expiry = getThirdFriday(year, monthIndex)
+          const expiry = getThirdFriday(year, monthIdx)
           const symbol = getSymbolFromExpiryStrike(item.ticker, expiry, fStrike)
+          const price = prices[item.ticker]?.[symbol]?.bid ?? 0
           future.push({
             label: `${futureMonth} ${String(year).slice(2)} C${fStrike}`,
             symbol,
             strike: fStrike,
-            price: prices[item.ticker]?.[symbol]?.bid ?? 0,
+            price,
             expiry
           })
           futureCount++
@@ -351,27 +340,28 @@ export default function Page(): JSX.Element {
       }
 
       let earlierCount = 0
-      monthIndex = selectedMonthIndex
+      monthIdx = selectedMonthIndex
       year = Number(selectedYear)
 
       while (earlierCount < 2) {
-        monthIndex--
-        if (monthIndex < 0) {
+        monthIdx--
+        if (monthIdx < 0) {
           year--
           if (!chain[year.toString()]) break
-          monthIndex = 11
+          monthIdx = 11
         }
-        const earlierMonth = monthNames[monthIndex]
+        const earlierMonth = monthNames[monthIdx]
         const eStrikeList = chain[year.toString()]?.[earlierMonth] || []
         const eStrike = [...eStrikeList].reverse().find(s => s < selectedStrike)
         if (eStrike) {
-          const expiry = getThirdFriday(year, monthIndex)
+          const expiry = getThirdFriday(year, monthIdx)
           const symbol = getSymbolFromExpiryStrike(item.ticker, expiry, eStrike)
+          const price = prices[item.ticker]?.[symbol]?.bid ?? 0
           earlier.push({
             label: `${earlierMonth} ${String(year).slice(2)} C${eStrike}`,
             symbol,
             strike: eStrike,
-            price: prices[item.ticker]?.[symbol]?.bid ?? 0,
+            price,
             expiry
           })
           earlierCount++
@@ -382,7 +372,7 @@ export default function Page(): JSX.Element {
         ...item,
         strike: selectedStrike,
         expiry: expiryDate,
-        currentCallPrice: prices[item.ticker]?.[getSymbolFromExpiryStrike(item.ticker, expiryDate, selectedStrike)]?.ask ?? 0,
+        currentCallPrice,
         future,
         earlier,
         invalid: false
@@ -390,18 +380,20 @@ export default function Page(): JSX.Element {
     })
 
     setData(updatedData)
+    const mainTicker = data[0].ticker
+    const currentSymbol = getSymbolFromExpiryStrike(mainTicker, expiryDate, selectedStrike)
+    const currentCallPrice = prices[mainTicker]?.[currentSymbol]?.ask ?? 0
 
     const confirmRes = await fetch('/api/update-call', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        ticker: data[0].ticker,
+        ticker: mainTicker,
         strike: selectedStrike,
         expiry: expiryDate,
-        currentCallPrice: prices[data[0].ticker]?.[getSymbolFromExpiryStrike(data[0].ticker, expiryDate, selectedStrike)]?.ask ?? 0,
+        currentCallPrice,
       })
     })
-
     const confirmJson = await confirmRes.json()
     if (!confirmJson.success) {
       console.error('Errore salvataggio su Supabase')
@@ -429,12 +421,9 @@ export default function Page(): JSX.Element {
 
   useEffect(() => {
     if (!alertsEnabled || !data.length) return
-
     const item = data[0]
     const delta = Math.abs((item.strike - item.spot) / item.spot) * 100
-
     const levels = [4, 3, 2, 1]
-
     for (const level of levels) {
       if (delta < level && !sentAlerts.current[level]) {
         sentAlerts.current[level] = true
@@ -448,19 +437,15 @@ export default function Page(): JSX.Element {
       prev.map(item => {
         const currentSymbol = getSymbolFromExpiryStrike(item.ticker, item.expiry, item.strike)
         const tickerPrices = prices[item.ticker] || {}
-
         const currentCallPrice = tickerPrices[currentSymbol]?.bid ?? item.currentCallPrice
-
         const updatedEarlier = item.earlier.map(opt => ({
           ...opt,
           price: tickerPrices[opt.symbol]?.bid ?? opt.price
         }))
-
         const updatedFuture = item.future.map(opt => ({
           ...opt,
           price: tickerPrices[opt.symbol]?.bid ?? opt.price
         }))
-
         return {
           ...item,
           currentCallPrice,
@@ -473,8 +458,9 @@ export default function Page(): JSX.Element {
 
   const isFattibile = (opt: OptionEntry, item: OptionData) => {
     const tickerPrices = prices[item.ticker] || {}
-    const optPrice = tickerPrices[opt.symbol]?.bid ?? opt.price
-
+    const optPriceData = tickerPrices[opt.symbol]
+    if (!optPriceData) return false
+    const optPrice = optPriceData.bid
     return (
       item.spot < opt.strike &&
       opt.strike >= item.spot * 1.04 &&
@@ -498,7 +484,7 @@ export default function Page(): JSX.Element {
               </button>
               <button
                 onClick={async () => {
-                  await handleRollaClick(pendingRoll as OptionEntry)
+                  await handleRollaClick(pendingRoll)
                   setPendingRoll(null)
                 }}
                 className="flex-1 bg-green-700 hover:bg-green-800 text-white py-1 rounded"
@@ -527,7 +513,6 @@ export default function Page(): JSX.Element {
                   >
                     📂 Seleziona nuova call
                   </button>
-
                   {showDropdown && (
                     <div className="grid grid-cols-3 gap-2">
                       <select
@@ -542,7 +527,6 @@ export default function Page(): JSX.Element {
                         <option value="">Anno</option>
                         {Object.keys(chain).map(y => <option key={y} value={y}>{y}</option>)}
                       </select>
-
                       <select
                         value={selectedMonth}
                         onChange={e => {
@@ -555,7 +539,6 @@ export default function Page(): JSX.Element {
                         <option value="">Mese</option>
                         {selectedYear && Object.keys(chain[selectedYear] || {}).map(m => <option key={m} value={m}>{m}</option>)}
                       </select>
-
                       <select
                         value={selectedStrike ?? ''}
                         onChange={e => setSelectedStrike(Number(e.target.value))}
@@ -567,7 +550,6 @@ export default function Page(): JSX.Element {
                           <option key={s} value={s}>{s}</option>
                         ))}
                       </select>
-
                       <button
                         onClick={updateCurrentCall}
                         className="col-span-3 mt-1 bg-green-700 hover:bg-green-800 text-white text-xs font-medium px-2 py-1 rounded"
@@ -584,13 +566,11 @@ export default function Page(): JSX.Element {
               <div key={index} className="bg-zinc-900 border border-zinc-800 shadow-md rounded-lg p-3">
                 <div className="flex justify-between items-center mb-1">
                   <h2 className="text-base font-bold text-red-500">{item.ticker}</h2>
-
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => {
                         setAlertsEnabled(prev => {
                           const next = !prev
-
                           if (next) {
                             const delta = Math.abs((item.strike - item.spot) / item.spot) * 100
                             const newSent: { [level: number]: boolean } = {}
@@ -604,17 +584,14 @@ export default function Page(): JSX.Element {
                             sentAlerts.current = {}
                             sendTelegramMessage(`🔕 ALERT DISATTIVATI`)
                           }
-
                           return next
                         })
                       }}
                       title={alertsEnabled ? 'Disattiva alert' : 'Attiva alert'}
-                      className={`px-1 py-0.5 rounded text-sm ${alertsEnabled ? 'bg-green-600 hover:bg-green-700' : 'bg-zinc-700 hover:bg-zinc-600'
-                        } text-white`}
+                      className={`px-1 py-0.5 rounded text-sm ${alertsEnabled ? 'bg-green-600 hover:bg-green-700' : 'bg-zinc-700 hover:bg-zinc-600'} text-white`}
                     >
                       {alertsEnabled ? '🔔' : '🔕'}
                     </button>
-
                     <button
                       onClick={() => setShowDropdown(!showDropdown)}
                       className="bg-white/10 hover:bg-white/20 text-white text-xs font-medium px-2 py-1 rounded"
@@ -623,7 +600,6 @@ export default function Page(): JSX.Element {
                     </button>
                   </div>
                 </div>
-
                 {showDropdown && (
                   <div className="grid grid-cols-3 gap-2 mb-2">
                     <select
@@ -638,7 +614,6 @@ export default function Page(): JSX.Element {
                       <option value="">Anno</option>
                       {Object.keys(chain).map(y => <option key={y} value={y}>{y}</option>)}
                     </select>
-
                     <select
                       value={selectedMonth}
                       onChange={e => {
@@ -651,7 +626,6 @@ export default function Page(): JSX.Element {
                       <option value="">Mese</option>
                       {selectedYear && Object.keys(chain[selectedYear] || {}).map(m => <option key={m} value={m}>{m}</option>)}
                     </select>
-
                     <select
                       value={selectedStrike ?? ''}
                       onChange={e => setSelectedStrike(Number(e.target.value))}
@@ -663,7 +637,6 @@ export default function Page(): JSX.Element {
                         <option key={s} value={s}>{s}</option>
                       ))}
                     </select>
-
                     <button
                       onClick={updateCurrentCall}
                       className="col-span-3 mt-1 bg-green-700 hover:bg-green-800 text-white text-xs font-medium px-2 py-1 rounded"
@@ -672,7 +645,6 @@ export default function Page(): JSX.Element {
                     </button>
                   </div>
                 )}
-
                 <div className="grid grid-cols-2 gap-1 mb-2">
                   <div className="p-1 bg-blue-700 font-bold">Spot</div>
                   <div className="p-1 bg-blue-700">{item.spot.toFixed(2)}</div>
@@ -690,12 +662,12 @@ export default function Page(): JSX.Element {
                     return <div className="p-1 bg-blue-700">{priceToShow.toFixed(2)}</div>
                   })()}
                 </div>
-
                 <div className="mb-1 font-semibold bg-orange-500 text-white text-center rounded py-0.5">Future</div>
                 {item.future.map((opt, i) => {
                   const tickerPrices = prices[item.ticker] || {}
-                  const optPrice = tickerPrices[opt.symbol]?.bid ?? opt.price
-                  const delta = ((optPrice - item.currentCallPrice) / item.spot) * 100
+                  const optPriceData = tickerPrices[opt.symbol]
+                  const optPrice = optPriceData?.bid ?? opt.price
+                  const delta = optPriceData ? ((optPrice - item.currentCallPrice) / item.spot) * 100 : 0
                   const deltaColor = delta >= 0 ? 'text-green-400' : 'text-red-400'
                   const deltaSign = delta >= 0 ? '+' : ''
 
@@ -703,21 +675,17 @@ export default function Page(): JSX.Element {
                     <div key={i} className="flex items-center justify-between mb-1">
                       <span className="flex items-center gap-1">
                         {isFattibile(opt, item) && (
-                          <span
-                            className="text-green-400"
-                            title="Fattibile: strike ≥ spot + 4%, prezzo ≥ 90% del prezzo call attuale"
-                          >
-                            🟢
-                          </span>
+                          <span className="text-green-400" title="Fattibile: strike ≥ spot + 4%, prezzo ≥ 90% del prezzo call attuale">🟢</span>
                         )}
                         <span title={opt.expiry}>
-                          {opt.label} - {optPrice === 0 ? 'NO DATA' : optPrice.toFixed(2)} /
-                          <span title="Premio aggiuntivo/riduttivo rispetto alla call attuale, diviso il prezzo spot" className={`ml-1 ${deltaColor}`}>
-                            {deltaSign}{delta.toFixed(2)}%
-                          </span>
+                          {opt.label} - {optPriceData ? optPrice.toFixed(2) : 'NO DATA'} /
+                          {optPriceData && (
+                            <span title="Premio aggiuntivo/riduttivo rispetto alla call attuale, diviso il prezzo spot" className={`ml-1 ${deltaColor}`}>
+                              {deltaSign}{delta.toFixed(2)}%
+                            </span>
+                          )}
                         </span>
                       </span>
-
                       <div className="flex gap-1 items-center">
                         <button
                           onClick={() => setPendingRoll(opt)}
@@ -726,17 +694,106 @@ export default function Page(): JSX.Element {
                         >
                           ROLLA
                         </button>
-                        {/* Altri bottoni... */}
+                        <button
+                          title="Strike Up"
+                          className="bg-green-700 hover:bg-green-800 text-white text-xs px-1 rounded"
+                          onClick={() => {
+                            const [year, month] = opt.expiry.split('-')
+                            const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
+                            const monthIndex = Number(month) - 1
+                            const chainStrikes = chain[year]?.[monthNames[monthIndex]] || []
+                            const nextStrike = chainStrikes.find(s => s > opt.strike)
+                            if (!nextStrike) return
+
+                            const updatedOpt = {
+                              ...opt,
+                              strike: nextStrike,
+                              label: `${monthNames[monthIndex]} ${year.slice(2)} C${nextStrike}`,
+                              symbol: getSymbolFromExpiryStrike(item.ticker, opt.expiry, nextStrike)
+                            }
+
+                            const updatedData = [...data]
+                            updatedData[index].future[i] = updatedOpt
+                            setData(updatedData)
+                          }}
+                        >
+                          🔼
+                        </button>
+                        <button
+                          title="Strike Down"
+                          className="bg-red-700 hover:bg-red-800 text-white text-xs px-1 rounded"
+                          onClick={() => {
+                            const [year, month] = opt.expiry.split('-')
+                            const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
+                            const monthIndex = Number(month) - 1
+                            const chainStrikes = chain[year]?.[monthNames[monthIndex]] || []
+                            const prevStrike = [...chainStrikes].reverse().find(s => s < opt.strike)
+                            if (!prevStrike) return
+
+                            const updatedOpt = {
+                              ...opt,
+                              strike: prevStrike,
+                              label: `${monthNames[monthIndex]} ${year.slice(2)} C${prevStrike}`,
+                              symbol: getSymbolFromExpiryStrike(item.ticker, opt.expiry, prevStrike)
+                            }
+
+                            const updatedData = [...data]
+                            updatedData[index].future[i] = updatedOpt
+                            setData(updatedData)
+                          }}
+                        >
+                          🔽
+                        </button>
+                        <button
+                          title="Month Back"
+                          className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded"
+                          onClick={() => {
+                            const shift = shiftExpiryByMonth(item.ticker, opt, 'prev', chain, 'earlier')
+                            if (!shift) return
+
+                            const updatedOpt = {
+                              ...opt,
+                              ...shift,
+                              symbol: getSymbolFromExpiryStrike(item.ticker, shift.expiry, shift.strike)
+                            }
+
+                            const updatedData = [...data]
+                            updatedData[index].future[i] = updatedOpt
+                            setData(updatedData)
+                          }}
+                        >
+                          ◀️
+                        </button>
+                        <button
+                          title="Month Forward"
+                          className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded"
+                          onClick={() => {
+                            const shift = shiftExpiryByMonth(item.ticker, opt, 'next', chain, 'future')
+                            if (!shift) return
+
+                            const updatedOpt = {
+                              ...opt,
+                              ...shift,
+                              symbol: getSymbolFromExpiryStrike(item.ticker, shift.expiry, shift.strike)
+                            }
+
+                            const updatedData = [...data]
+                            updatedData[index].future[i] = updatedOpt
+                            setData(updatedData)
+                          }}
+                        >
+                          ▶️
+                        </button>
                       </div>
                     </div>
                   )
                 })}
-
                 <div className="mb-1 font-semibold bg-orange-500 text-white text-center rounded py-0.5">Earlier</div>
                 {item.earlier.map((opt, i) => {
                   const tickerPrices = prices[item.ticker] || {}
-                  const optPrice = tickerPrices[opt.symbol]?.bid ?? opt.price
-                  const delta = ((optPrice - item.currentCallPrice) / item.spot) * 100
+                  const optPriceData = tickerPrices[opt.symbol]
+                  const optPrice = optPriceData?.bid ?? opt.price
+                  const delta = optPriceData ? ((optPrice - item.currentCallPrice) / item.spot) * 100 : 0
                   const deltaColor = delta >= 0 ? 'text-green-400' : 'text-red-400'
                   const deltaSign = delta >= 0 ? '+' : ''
 
@@ -744,21 +801,17 @@ export default function Page(): JSX.Element {
                     <div key={i} className="flex items-center justify-between mb-1">
                       <span className="flex items-center gap-1">
                         {isFattibile(opt, item) && (
-                          <span
-                            className="text-green-400"
-                            title="Fattibile: strike ≥ spot + 4%, prezzo ≥ 90% del prezzo call attuale"
-                          >
-                            🟢
-                          </span>
+                          <span className="text-green-400" title="Fattibile: strike ≥ spot + 4%, prezzo ≥ 90% del prezzo call attuale">🟢</span>
                         )}
                         <span title={opt.expiry}>
-                          {opt.label} - {optPrice === 0 ? 'NO DATA' : optPrice.toFixed(2)} /
-                          <span title="Premio aggiuntivo/riduttivo rispetto alla call attuale, diviso il prezzo spot" className={`ml-1 ${deltaColor}`}>
-                            {deltaSign}{delta.toFixed(2)}%
-                          </span>
+                          {opt.label} - {optPriceData ? optPrice.toFixed(2) : 'NO DATA'} /
+                          {optPriceData && (
+                            <span title="Premio aggiuntivo/riduttivo rispetto alla call attuale, diviso il prezzo spot" className={`ml-1 ${deltaColor}`}>
+                              {deltaSign}{delta.toFixed(2)}%
+                            </span>
+                          )}
                         </span>
                       </span>
-
                       <div className="flex gap-1 items-center">
                         <button
                           onClick={() => setPendingRoll(opt)}
@@ -767,7 +820,96 @@ export default function Page(): JSX.Element {
                         >
                           ROLLA
                         </button>
-                        {/* Altri bottoni... */}
+                        <button
+                          title="Strike Up"
+                          className="bg-green-700 hover:bg-green-800 text-white text-xs px-1 rounded"
+                          onClick={() => {
+                            const [year, month] = opt.expiry.split('-')
+                            const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
+                            const monthIndex = Number(month) - 1
+                            const chainStrikes = chain[year]?.[monthNames[monthIndex]] || []
+                            const nextStrike = chainStrikes.find(s => s > opt.strike)
+                            if (!nextStrike) return
+
+                            const updatedOpt = {
+                              ...opt,
+                              strike: nextStrike,
+                              label: `${monthNames[monthIndex]} ${year.slice(2)} C${nextStrike}`,
+                              symbol: getSymbolFromExpiryStrike(item.ticker, opt.expiry, nextStrike)
+                            }
+
+                            const updatedData = [...data]
+                            updatedData[index].earlier[i] = updatedOpt
+                            setData(updatedData)
+                          }}
+                        >
+                          🔼
+                        </button>
+                        <button
+                          title="Strike Down"
+                          className="bg-red-700 hover:bg-red-800 text-white text-xs px-1 rounded"
+                          onClick={() => {
+                            const [year, month] = opt.expiry.split('-')
+                            const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
+                            const monthIndex = Number(month) - 1
+                            const chainStrikes = chain[year]?.[monthNames[monthIndex]] || []
+                            const prevStrike = [...chainStrikes].reverse().find(s => s < opt.strike)
+                            if (!prevStrike) return
+
+                            const updatedOpt = {
+                              ...opt,
+                              strike: prevStrike,
+                              label: `${monthNames[monthIndex]} ${year.slice(2)} C${prevStrike}`,
+                              symbol: getSymbolFromExpiryStrike(item.ticker, opt.expiry, prevStrike)
+                            }
+
+                            const updatedData = [...data]
+                            updatedData[index].earlier[i] = updatedOpt
+                            setData(updatedData)
+                          }}
+                        >
+                          🔽
+                        </button>
+                        <button
+                          title="Month Back"
+                          className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded"
+                          onClick={() => {
+                            const shift = shiftExpiryByMonth(item.ticker, opt, 'prev', chain, 'earlier')
+                            if (!shift) return
+
+                            const updatedOpt = {
+                              ...opt,
+                              ...shift,
+                              symbol: getSymbolFromExpiryStrike(item.ticker, shift.expiry, shift.strike)
+                            }
+
+                            const updatedData = [...data]
+                            updatedData[index].earlier[i] = updatedOpt
+                            setData(updatedData)
+                          }}
+                        >
+                          ◀️
+                        </button>
+                        <button
+                          title="Month Forward"
+                          className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded"
+                          onClick={() => {
+                            const shift = shiftExpiryByMonth(item.ticker, opt, 'next', chain, 'future')
+                            if (!shift) return
+
+                            const updatedOpt = {
+                              ...opt,
+                              ...shift,
+                              symbol: getSymbolFromExpiryStrike(item.ticker, shift.expiry, shift.strike)
+                            }
+
+                            const updatedData = [...data]
+                            updatedData[index].earlier[i] = updatedOpt
+                            setData(updatedData)
+                          }}
+                        >
+                          ▶️
+                        </button>
                       </div>
                     </div>
                   )
