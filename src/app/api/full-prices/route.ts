@@ -19,16 +19,15 @@ export async function GET(req: Request) {
       const res = await fetch(url);
       if (!res.ok) {
         console.error(`Errore fetch per ${symbol}: ${res.status}`);
-        return { symbol, error: true };
+        return null;  // Skip su errore
       }
       const json = await res.json();
       console.log(`Risposta per ${symbol}:`, json);
       if (json.status !== "OK" || !json.results) {
         console.error(`Risposta non valida per ${symbol}:`, json);
-        return { symbol, error: true };
+        return null;  // Skip su response non OK
       }
       return {
-        symbol: json.results.ticker || symbol,  // Fallback su input symbol se mancante
         bid: json.results.last_quote?.bid ?? 0,
         ask: json.results.last_quote?.ask ?? 0,
         last_trade_price: json.results.last_trade?.price ?? 0
@@ -38,15 +37,14 @@ export async function GET(req: Request) {
     const results = await Promise.all(fetches);
 
     const output: Record<string, { bid: number, ask: number, last_trade_price: number }> = {};
-    for (const result of results) {
-      if (!result.error && result.symbol) {
-        output[result.symbol] = {
-          bid: result.bid,
-          ask: result.ask,
-          last_trade_price: result.last_trade_price
-        };
+    symbolList.forEach((symbol, index) => {
+      const data = results[index];
+      if (data) {
+        output[symbol] = data;  // Usa symbol input come chiave sempre
+      } else {
+        output[symbol] = { bid: 0, ask: 0, last_trade_price: 0 };  // Fallback zero su skip
       }
-    }
+    });
 
     console.log('Risposta elaborata:', output);
     return NextResponse.json(output);
