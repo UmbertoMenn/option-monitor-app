@@ -12,10 +12,8 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Missing symbols' }, { status: 400 })
     }
 
-    // Hardcode underlying per NVDA (single-ticker per ora; estenderemo per multipli)
-    const underlying = 'NVDA'
-    // Endpoint corretto per snapshot opzioni: usa ticker.any_of per i simboli OPRA
-    const url = `https://api.polygon.io/v3/snapshot/options/${underlying}?ticker.any_of=${symbols}&apiKey=${POLYGON_API_KEY}`
+    // Endpoint corretto per snapshot multipli: usa ?tickers= per OPRA symbols separati da virgola
+    const url = `https://api.polygon.io/v3/snapshot?tickers=${symbols}&apiKey=${POLYGON_API_KEY}`
     const res = await fetch(url)
     const json = await res.json()
     console.log('Risposta Polygon:', json)
