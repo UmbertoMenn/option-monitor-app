@@ -12,7 +12,10 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Missing symbols' }, { status: 400 })
     }
 
-    const url = `https://api.polygon.io/v3/snapshot?tickers=${symbols}&apiKey=${POLYGON_API_KEY}`
+    // Hardcode underlying per NVDA (single-ticker per ora; estenderemo per multipli)
+    const underlying = 'NVDA'
+    // Endpoint corretto per snapshot opzioni: usa ticker.any_of per i simboli OPRA
+    const url = `https://api.polygon.io/v3/snapshot/options/${underlying}?ticker.any_of=${symbols}&apiKey=${POLYGON_API_KEY}`
     const res = await fetch(url)
     const json = await res.json()
     console.log('Risposta Polygon:', json)
@@ -22,14 +25,15 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Nessun dato per i simboli forniti' }, { status: 404 })
     }
 
-const output: Record<string, { bid: number, ask: number, last_trade_price: number }> = {}
-for (const opt of results) {
-  const symbol = opt.ticker
-  const bid = opt.last_quote?.bid ?? 0
-  const ask = opt.last_quote?.ask ?? 0
-  const last_trade_price = opt.last_trade?.price ?? 0
-  output[symbol] = { bid, ask, last_trade_price }
-}
+    const output: Record<string, { bid: number, ask: number, last_trade_price: number }> = {}
+    for (const opt of results) {
+      const symbol = opt.ticker
+      const bid = opt.last_quote?.bid ?? 0
+      const ask = opt.last_quote?.ask ?? 0
+      const last_trade_price = opt.last_trade?.price ?? 0
+      output[symbol] = { bid, ask, last_trade_price }
+    }
+
     return NextResponse.json(output)
   } catch (err: any) {
     console.error('❌ Errore /api/full-prices:', err.message)
