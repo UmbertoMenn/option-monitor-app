@@ -22,11 +22,16 @@ export async function GET(req: Request) {
         return { symbol, error: true };
       }
       const json = await res.json();
+      console.log(`Risposta per ${symbol}:`, json);
+      if (json.status !== "OK" || !json.results) {
+        console.error(`Risposta non valida per ${symbol}:`, json);
+        return { symbol, error: true };
+      }
       return {
-        symbol: json.ticker,
-        bid: json.last_quote?.bid ?? 0,
-        ask: json.last_quote?.ask ?? 0,
-        last_trade_price: json.last_trade?.price ?? 0
+        symbol: json.results.ticker || symbol,  // Fallback su input symbol se mancante
+        bid: json.results.last_quote?.bid ?? 0,
+        ask: json.results.last_quote?.ask ?? 0,
+        last_trade_price: json.results.last_trade?.price ?? 0
       };
     });
 
@@ -34,7 +39,7 @@ export async function GET(req: Request) {
 
     const output: Record<string, { bid: number, ask: number, last_trade_price: number }> = {};
     for (const result of results) {
-      if (!result.error) {
+      if (!result.error && result.symbol) {
         output[result.symbol] = {
           bid: result.bid,
           ask: result.ask,
