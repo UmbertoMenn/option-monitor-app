@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'  // Aggiungi questo per fixare NextRequest
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN!
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID!
@@ -10,6 +10,8 @@ export async function POST(req: NextRequest) {
 
     const message = `⚠️ ALERT\n\n📈 ${ticker}\nStrike: ${strike}\nSpot: ${spot}\nDelta < ${level * 100}%`
 
+    console.log('Tentativo invio Telegram:', { message });  // Log server-side per Vercel
+
     const res = await fetch(TELEGRAM_API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -20,9 +22,10 @@ export async function POST(req: NextRequest) {
     })
 
     const result = await res.json()
+    console.log('Risposta Telegram:', result);  // Log response
 
     if (!result.ok) {
-      console.error('❌ Telegram API error:', result)
+      console.error('❌ Telegram API error:', result);
       return NextResponse.json({ success: false }, { status: 500 })
     }
 
