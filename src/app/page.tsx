@@ -432,7 +432,7 @@ export default function Page(): JSX.Element {
       }
     }
   }, [data, alertsEnabled])
-  
+
   useEffect(() => {
     setData(prev =>
       prev.map(item => {
@@ -570,6 +570,7 @@ export default function Page(): JSX.Element {
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => {
+                        console.log('Campanella cliccata - Stato attuale:', alertsEnabled ? 'Disattivando' : 'Attivando');
                         setAlertsEnabled(prev => {
                           const next = !prev
                           if (next) {
