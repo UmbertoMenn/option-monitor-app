@@ -29,7 +29,7 @@ export async function POST(req: Request) {
       p_ticker: ticker,
       p_strike: 100,
       p_expiry: nextExpiry,
-      p_current_call_price: 0,
+      p_currentCallPrice: 0,
     });
 
     if (error) {
