@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useState, useRef } from 'react'
-import { sendTelegramMessage } from './telegram'
+import { sendTelegramMessage } from './telegram';  // Se telegram.ts in stessa folder; adatta path se altrove
 
 /** Converte uno strike (es. 170) in "00170000" per OPRA */
 function formatStrike(strike: number): string {
@@ -428,7 +428,8 @@ export default function Page(): JSX.Element {
     for (const level of levels) {
       if (delta < level && !sentAlerts.current[level]) {
         sentAlerts.current[level] = true
-        sendTelegramMessage(`⚠️ ALERT ${level}% – ${item.ticker}\nStrike: ${item.strike}\nSpot: ${item.spot}\nDelta: ${delta.toFixed(2)}%`)
+        const alertMessage = `⚠️ ALERT ${level}% – ${item.ticker}\nStrike: ${item.strike}\nSpot: ${item.spot}\nDelta: ${delta.toFixed(2)}%`
+        sendTelegramMessage(alertMessage);  // Chiama la nuova funzione
       }
     }
   }, [data, alertsEnabled])
