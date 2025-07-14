@@ -171,6 +171,7 @@ export default function Page(): JSX.Element {
       console.error('Errore fetch /api/full-prices:', err);
     }
   };
+
   function shiftExpiryByMonth(
     ticker: string,
     opt: OptionEntry,
@@ -243,8 +244,8 @@ export default function Page(): JSX.Element {
 
       const currentSymbol = getSymbolFromExpiryStrike(item.ticker, expiryDate, sel.strike!)
       const currentCallPrice = prices[item.ticker]?.[currentSymbol]?.ask ?? 0
-      const future: OptionEntry[] = []
-      const earlier: OptionEntry[] = []
+      let future: OptionEntry[] = []
+      let earlier: OptionEntry[] = []
 
       const tickerChain = chain[item.ticker] || {}
 
@@ -252,7 +253,7 @@ export default function Page(): JSX.Element {
       let monthIdx = monthIndex
       let year = Number(sel.year)
 
-      while (futureCount < 2) {
+      while (futureCount < 2 && monthIdx < 60) { // Limite loop per evitare infiniti
         monthIdx++
         if (monthIdx >= 12) {
           year++
@@ -264,15 +265,19 @@ export default function Page(): JSX.Element {
         if (fStrike) {
           const expiry = getThirdFriday(year, monthIdx)
           const symbol = getSymbolFromExpiryStrike(item.ticker, expiry, fStrike)
-          const price = prices[item.ticker]?.[symbol]?.bid ?? 0
-          future.push({
-            label: `${futureMonth} ${String(year).slice(2)} C${fStrike}`,
-            symbol,
-            strike: fStrike,
-            price,
-            expiry
-          })
-          futureCount++
+          if (symbol && symbol.trim() !== '') { // Filtra symbol invalidi
+            const price = prices[item.ticker]?.[symbol]?.bid ?? 0
+            future.push({
+              label: `${futureMonth} ${String(year).slice(2)} C${fStrike}`,
+              symbol,
+              strike: fStrike,
+              price,
+              expiry
+            })
+            futureCount++
+          } else {
+            console.warn(`Invalid symbol generated for future of ${ticker}: ${symbol}`);
+          }
         }
       }
 
@@ -280,7 +285,7 @@ export default function Page(): JSX.Element {
       monthIdx = monthIndex
       year = Number(sel.year)
 
-      while (earlierCount < 2) {
+      while (earlierCount < 2 && monthIdx > -60) {
         monthIdx--
         if (monthIdx < 0) {
           year--
@@ -292,16 +297,29 @@ export default function Page(): JSX.Element {
         if (eStrike) {
           const expiry = getThirdFriday(year, monthIdx)
           const symbol = getSymbolFromExpiryStrike(item.ticker, expiry, eStrike)
-          const price = prices[item.ticker]?.[symbol]?.bid ?? 0
-          earlier.push({
-            label: `${earlierMonth} ${String(year).slice(2)} C${eStrike}`,
-            symbol,
-            strike: eStrike,
-            price,
-            expiry
-          })
-          earlierCount++
+          if (symbol && symbol.trim() !== '') {
+            const price = prices[item.ticker]?.[symbol]?.bid ?? 0
+            earlier.push({
+              label: `${earlierMonth} ${String(year).slice(2)} C${eStrike}`,
+              symbol,
+              strike: eStrike,
+              price,
+              expiry
+            })
+            earlierCount++
+          } else {
+            console.warn(`Invalid symbol generated for earlier of ${ticker}: ${symbol}`);
+          }
         }
+      }
+
+      // Fallback if incomplete (per CEG chain limitata)
+      if (future.length < 2 || earlier.length < 2) {
+        console.warn(`Incomplete future/earlier for ${ticker} after update - added ${future.length} future, ${earlier.length} earlier`);
+        alert(`Update parziale per ${ticker}: Chain limitata su Polygon (solo ${future.length} future e ${earlier.length} earlier trovate). Prova altro expiry/strike.`);
+        // Aggiungi placeholders if needed
+        while (future.length < 2) future.push({ label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '', symbol: '' });
+        while (earlier.length < 2) earlier.push({ label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '', symbol: '' });
       }
 
       return {
