@@ -1,14 +1,13 @@
 'use client'
 
 import React, { useEffect, useState, useRef } from 'react'
-import { sendTelegramMessage } from './telegram';  // Se telegram.ts in stessa folder; adatta path se altrove
+import { sendTelegramMessage } from './telegram';
 
-/** Converte uno strike (es. 170) in "00170000" per OPRA */
+// Funzioni di utilità (rimangono fuori dal componente)
 function formatStrike(strike: number): string {
   return String(Math.round(strike * 1000)).padStart(8, '0')
 }
 
-/** Genera il ticker OPRA da ticker, expiry "YYYY-MM-DD" e strike */
 function getSymbolFromExpiryStrike(ticker: string, expiry: string, strike: number): string {
   const dateKey = expiry.replace(/-/g, '').slice(2)
   return `O:${ticker}${dateKey}C${formatStrike(strike)}`
@@ -51,20 +50,10 @@ function getThirdFriday(year: number, monthIndex: number): string {
   return `${year}-${String(monthIndex + 1).padStart(2, '0')}-15` // fallback
 }
 
-const [tickers, setTickers] = useState<string[]>([]);
-const [newTicker, setNewTicker] = useState('');
-
-const fetchTickers = async () => {
-  try {
-    const res = await fetch('/api/tickers')
-    const json = await res.json()
-    setTickers(json)
-  } catch (err) {
-    console.error('Errore fetch tickers', err)
-  }
-};
-
 export default function Page(): JSX.Element {
+  // Hook di stato spostati all'interno del componente
+  const [tickers, setTickers] = useState<string[]>([]);
+  const [newTicker, setNewTicker] = useState('');
   const [data, setData] = useState<OptionData[]>([])
   const [chain, setChain] = useState<Record<string, Record<string, number[]>>>({})
   const [prices, setPrices] = useState<Record<string, Record<string, { bid: number; ask: number; last_trade_price: number; symbol: string }>>>({})
@@ -75,6 +64,17 @@ export default function Page(): JSX.Element {
   const sentAlerts = useRef<{ [level: number]: boolean }>({})
   const [alertsEnabled, setAlertsEnabled] = useState(false)
   const [pendingRoll, setPendingRoll] = useState<OptionEntry | null>(null)
+
+  // Funzione fetchTickers spostata all'interno del componente
+  const fetchTickers = async () => {
+    try {
+      const res = await fetch('/api/tickers')
+      const json = await res.json()
+      setTickers(json)
+    } catch (err) {
+      console.error('Errore fetch tickers', err)
+    }
+  };
 
   const fetchData = async () => {
     try {
@@ -135,7 +135,7 @@ export default function Page(): JSX.Element {
       }
 
       setPrices(grouped)
-      console.log('✅ンク Prezzi aggiornati:', grouped)
+      console.log('✅ Prezzi aggiornati:', grouped)
     } catch (err) {
       console.error('Errore fetch /api/full-prices', err)
     }
@@ -416,7 +416,7 @@ export default function Page(): JSX.Element {
 
   useEffect(() => {
     fetchTickers()
-    fetchData()  // Tuo fetch multi
+    fetchData()
     fetchChain()
   }, []);
 
@@ -469,7 +469,7 @@ export default function Page(): JSX.Element {
       if (delta < level && !sentAlerts.current[level]) {
         sentAlerts.current[level] = true
         const alertMessage = `⚠️ ALERT ${level}% – ${item.ticker}\nStrike: ${item.strike}\nSpot: ${item.spot}\nDelta: ${delta.toFixed(2)}%`
-        sendTelegramMessage(alertMessage);  // Chiama la nuova funzione
+        sendTelegramMessage(alertMessage);
       }
     }
   }, [data, alertsEnabled])
@@ -540,14 +540,13 @@ export default function Page(): JSX.Element {
 
       <div className="min-h-screen bg-black text-white p-2 flex flex-col gap-4 text-sm leading-tight">
         <div className="p-2 bg-zinc-900 rounded mb-2">
-          
           <input value={newTicker} onChange={e => setNewTicker(e.target.value.toUpperCase())} placeholder="Aggiungi ticker (es. AAPL)" className="bg-zinc-800 text-white p-1" />
           <button onClick={addTicker} className="bg-green-700 text-white px-2 py-1 rounded ml-2">Aggiungi</button>
           <div className="mt-2">
             Tickers attuali: {tickers.map(t => <span key={t} className="mr-2">{t} <button onClick={() => removeTicker(t)} className="text-red-500">X</button></span>)}
           </div>
         </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
           {data.map((item: OptionData, index: number) => {
             const deltaPct = ((item.strike - item.spot) / item.spot) * 100
             const deltaColor = deltaPct < 4 ? 'text-red-500' : 'text-green-500'
@@ -632,7 +631,7 @@ export default function Page(): JSX.Element {
                             sentAlerts.current = newSent
                             sendTelegramMessage(`🔔 ALERT ATTIVATI – Ticker: ${item.ticker}`)
                           } else {
-                            sentAlerts.current = {}  // Reset immediato
+                            sentAlerts.current = {}
                             sendTelegramMessage(`🔕 ALERT DISATTIVATI – Ticker: ${item.ticker}`)
                           }
                           return next
@@ -642,7 +641,8 @@ export default function Page(): JSX.Element {
                       className={`px-1 py-0.5 rounded text-sm ${alertsEnabled ? 'bg-green-600 hover:bg-green-700' : 'bg-zinc-700 hover:bg-zinc-600'} text-white`}
                     >
                       {alertsEnabled ? '🔔' : '🔕'}
-                    </button>                    <button
+                    </button>
+                    <button
                       onClick={() => setShowDropdown(!showDropdown)}
                       className="bg-white/10 hover:bg-white/20 text-white text-xs font-medium px-2 py-1 rounded"
                     >
@@ -710,7 +710,6 @@ export default function Page(): JSX.Element {
                     const ask = prices[item.ticker]?.[currentSymbol]?.ask ?? 0
                     const last_trade_price = prices[item.ticker]?.[currentSymbol]?.last_trade_price ?? 0
                     const priceToShow = ask > 0 ? ask : (last_trade_price > 0 ? last_trade_price : item.currentCallPrice)
-                    // Poi usa priceToShow.toFixed(2)
                     return <div className="p-1 bg-blue-700">{priceToShow.toFixed(2)}</div>
                   })()}
                 </div>
@@ -721,7 +720,6 @@ export default function Page(): JSX.Element {
                   const bid = tickerPrices[opt.symbol]?.bid ?? 0
                   const last_trade_price = tickerPrices[opt.symbol]?.last_trade_price ?? 0
                   const optPrice = bid > 0 ? bid : last_trade_price
-                  // Poi nel JSX: {optPrice > 0 ? optPrice.toFixed(2) : 'NO DATA'}
                   const delta = optPriceData ? ((optPrice - item.currentCallPrice) / item.spot) * 100 : 0
                   const deltaColor = delta >= 0 ? 'text-green-400' : 'text-red-400'
                   const deltaSign = delta >= 0 ? '+' : ''
@@ -850,7 +848,6 @@ export default function Page(): JSX.Element {
                   const bid = tickerPrices[opt.symbol]?.bid ?? 0
                   const last_trade_price = tickerPrices[opt.symbol]?.last_trade_price ?? 0
                   const optPrice = bid > 0 ? bid : last_trade_price
-                  // Poi nel JSX: {optPrice > 0 ? optPrice.toFixed(2) : 'NO DATA'}
                   const delta = optPriceData ? ((optPrice - item.currentCallPrice) / item.spot) * 100 : 0
                   const deltaColor = delta >= 0 ? 'text-green-400' : 'text-red-400'
                   const deltaSign = delta >= 0 ? '+' : ''
