@@ -2,8 +2,6 @@
 
 import React, { useEffect, useState, useRef } from 'react'
 import { sendTelegramMessage } from './telegram';  // Se telegram.ts in stessa folder; adatta path se altrove
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;  // Disabilita revalidation/static cache
 
 /** Converte uno strike (es. 170) in "00170000" per OPRA */
 function formatStrike(strike: number): string {
@@ -542,7 +540,7 @@ export default function Page(): JSX.Element {
 
       <div className="min-h-screen bg-black text-white p-2 flex flex-col gap-4 text-sm leading-tight">
         <div className="p-2 bg-zinc-900 rounded mb-2">
-
+          
           <input value={newTicker} onChange={e => setNewTicker(e.target.value.toUpperCase())} placeholder="Aggiungi ticker (es. AAPL)" className="bg-zinc-800 text-white p-1" />
           <button onClick={addTicker} className="bg-green-700 text-white px-2 py-1 rounded ml-2">Aggiungi</button>
           <div className="mt-2">
