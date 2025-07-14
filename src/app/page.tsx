@@ -582,7 +582,7 @@ export default function Page(): JSX.Element {
                             sentAlerts.current = newSent
                             sendTelegramMessage(`🔔 ALERT ATTIVATI – Spot: ${item.spot}, Strike: ${item.strike}`)
                           } else {
-                            sentAlerts.current = {}
+                            sentAlerts.current = {}  // Reset immediato
                             sendTelegramMessage(`🔕 ALERT DISATTIVATI`)
                           }
                           return next
@@ -592,8 +592,7 @@ export default function Page(): JSX.Element {
                       className={`px-1 py-0.5 rounded text-sm ${alertsEnabled ? 'bg-green-600 hover:bg-green-700' : 'bg-zinc-700 hover:bg-zinc-600'} text-white`}
                     >
                       {alertsEnabled ? '🔔' : '🔕'}
-                    </button>
-                    <button
+                    </button>                    <button
                       onClick={() => setShowDropdown(!showDropdown)}
                       className="bg-white/10 hover:bg-white/20 text-white text-xs font-medium px-2 py-1 rounded"
                     >
