@@ -226,7 +226,9 @@ export default function Page(): JSX.Element {
         price,
       }
     }
-    return null
+    console.warn(`No shift found for ${ticker} - direction ${direction}, type ${type}`);
+    alert(`Nessuna opzione alternativa trovata per ${ticker} in ${direction}. Chain limitata su Polygon per questo ticker.`);
+    return null; return null
   }
 
   const updateCurrentCall = async (ticker: string) => {
