@@ -120,40 +120,57 @@ export default function Page(): JSX.Element {
 
   const fetchPrices = async () => {
     try {
-      const symbols: string[] = []
+      let symbols: string[] = [];
       data.forEach(item => {
-        const currentSymbol = getSymbolFromExpiryStrike(item.ticker, item.expiry, item.strike)
-        symbols.push(currentSymbol)
-        item.earlier.forEach(opt => symbols.push(opt.symbol))
-        item.future.forEach(opt => symbols.push(opt.symbol))
-      })
+        const currentSymbol = getSymbolFromExpiryStrike(item.ticker, item.expiry, item.strike);
+        if (currentSymbol) symbols.push(currentSymbol); // Skip if empty
+        item.earlier.forEach(opt => {
+          if (opt.symbol) symbols.push(opt.symbol);
+        });
+        item.future.forEach(opt => {
+          if (opt.symbol) symbols.push(opt.symbol);
+        });
+      });
 
-      if (!symbols.length) return
+      // Filter unique and non-empty
+      symbols = [...new Set(symbols.filter(s => s && typeof s === 'string' && s.trim() !== ''))];
 
-      const url = `/api/full-prices?symbols=${encodeURIComponent(symbols.join(','))}`
-      const res = await fetch(url)
-      const json = await res.json()
+      if (!symbols.length) {
+        console.warn('⚠️ No valid symbols found for prices fetch!');
+        return;
+      }
 
-      const grouped: Record<string, Record<string, { bid: number; ask: number; last_trade_price: number; symbol: string }>> = {}
+      console.log('🎯 Valid symbols requested:', symbols); // Debug for Vercel/console
+
+      const url = `/api/full-prices?symbols=${encodeURIComponent(symbols.join(','))}`;
+      const res = await fetch(url);
+      if (!res.ok) {
+        console.error(`Error fetching prices: ${res.status} - ${await res.text()}`);
+        return;
+      }
+      const json = await res.json();
+      console.log('📥 Prices response:', json);
+
+      const grouped: Record<string, Record<string, { bid: number; ask: number; last_trade_price: number; symbol: string }>> = {};
       for (const [symbol, val] of Object.entries(json)) {
-        const match = /^O:([A-Z]+)\d+C\d+$/.exec(symbol)
-        if (!match) continue
-        const ticker = match[1]
-        if (!grouped[ticker]) grouped[ticker] = {}
+        const match = /^O:([A-Z]+)\d+C\d+$/.exec(symbol);
+        if (!match) continue;
+        const ticker = match[1];
+        if (!grouped[ticker]) grouped[ticker] = {};
         grouped[ticker][symbol] = {
           bid: (val as any)?.bid ?? 0,
           ask: (val as any)?.ask ?? 0,
           last_trade_price: (val as any)?.last_trade_price ?? 0,
           symbol
-        }
+        };
       }
 
-      setPrices(grouped)
+      setPrices(grouped);
+      console.log('✅ Prices updated:', grouped);
     } catch (err) {
-      console.error('Errore fetch /api/full-prices', err)
+      console.error('Errore fetch /api/full-prices:', err);
     }
-  }
-
+  };
   function shiftExpiryByMonth(
     ticker: string,
     opt: OptionEntry,
