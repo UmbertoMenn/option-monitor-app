@@ -1,17 +1,18 @@
-import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-import { normalizeExpiry } from '../../../utils/functions'; // Verifica che il percorso sia corretto
+import { NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
+import { normalizeExpiry } from '../../../utils/functions' // Assicurati che il percorso sia corretto e che normalizeExpiry includa getThirdFriday se necessario
 
-const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!);
+const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!)
 
 export async function POST(req: Request) {
+  let ticker: string | undefined; // Dichiarato fuori per accessibilità nel catch se necessario
   try {
     const body = await req.json();
-    const ticker = body?.ticker?.toUpperCase();
+    ticker = body?.ticker?.toUpperCase();
 
     // Verifica che il ticker sia presente
     if (!ticker) {
-      return NextResponse.json({ success: false, error: 'Ticker è obbligatorio' }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'Ticker è obbligatorio' }, { status: 400 })
     }
 
     // Calcolo della data di scadenza
@@ -43,6 +44,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true });
   } catch (err: any) {
     console.error('Errore in add-ticker:', {
+      ticker, // Ora accessibile
       message: err.message,
       stack: err.stack,
     });
