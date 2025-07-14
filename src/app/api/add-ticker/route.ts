@@ -31,7 +31,6 @@ export async function POST(req: Request) {
             p_strike: 100,
             p_ticker: ticker
         });
-
         if (error) {
             throw new Error(`Errore nel database: ${error.message}`);
         }
