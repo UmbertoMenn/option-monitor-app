@@ -103,7 +103,6 @@ interface OptionData {
 
 export async function GET() {
   try {
-    // Fetch tutti i tickers attivi
     const { data: tickersData, error: tickersError } = await supabase.from('tickers').select('ticker')
     if (tickersError || !tickersData) throw new Error('Errore fetch tickers')
     const tickers = tickersData.map(row => row.ticker)
@@ -111,7 +110,6 @@ export async function GET() {
     const output: OptionData[] = []
 
     for (const ticker of tickers) {
-      // Fetch ultima position per questo ticker
       const { data: rows, error } = await supabase
         .from('positions')
         .select('*')
@@ -173,10 +171,13 @@ export async function GET() {
           price: bid ?? 0,
           expiry,
           symbol: match.ticker
-        }
+        } as OptionEntry
       }
 
-      let future1 = null, future2 = null, earlier1 = null, earlier2 = null
+      let future1: OptionEntry | null = null
+      let future2: OptionEntry | null = null
+      let earlier1: OptionEntry | null = null
+      let earlier2: OptionEntry | null = null
 
       for (let i = curIdx + 1; i < monthlyExpiries.length; i++) {
         const f1 = await findOption(monthlyExpiries[i], CURRENT_STRIKE, true)
