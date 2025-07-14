@@ -84,25 +84,39 @@ export default function Page(): JSX.Element {
   const fetchChain = async () => {
     try {
       const chains: Record<string, Record<string, Record<string, number[]>>> = {}
+      console.log('Starting fetchChain - current tickers:', tickers); // Debug iniziale
       for (const t of tickers) {
-        console.log(`Fetching chain for ${t}`)
-        const res = await fetch(`/api/chain?ticker=${t}`)
-        if (!res.ok) {
-          console.error(`Error fetching chain for ${t}: ${res.status}`)
-          continue
-        }
-        const json = await res.json()
-        chains[t] = json
-        console.log(`Chain for ${t}: years available - ${Object.keys(json).join(', ')}`)
-        if (Object.keys(json).length === 0) {
-          console.warn(`No years in chain for ${t}`)
+        console.log(`Fetching chain for ${t}`);
+        try {
+          const res = await fetch(`/api/chain?ticker=${t}`);
+          if (!res.ok) {
+            console.error(`Error fetching chain for ${t}: status ${res.status} - ${await res.text()}`);
+            chains[t] = {}; // Fallback empty to show UI message
+            continue;
+          }
+          const json = await res.json();
+          chains[t] = json;
+          console.log(`Chain loaded for ${t}: years available - ${Object.keys(json).join(', ') || 'NONE'}`);
+          if (Object.keys(json).length === 0) {
+            console.warn(`No chain data for ${t} - verify ticker has OPRA options on Polygon`);
+          }
+        } catch (err) {
+          console.error(`Exception during chain fetch for ${t}:`, err);
+          chains[t] = {};
         }
       }
-      setChain(chains)
+      setChain(chains);
+      console.log('fetchChain completed - full chain state:', chains); // Debug finale
     } catch (err) {
-      console.error('Errore fetch chains', err)
+      console.error('Global error in fetchChain:', err);
     }
-  }
+  };
+
+  useEffect(() => {
+    if (tickers.length > 0) {
+      fetchChain();
+    }
+  }, [tickers]); // Ri-chiama fetchChain ogni volta che tickers cambia (load/add/remove)
 
   const fetchPrices = async () => {
     try {
@@ -417,38 +431,34 @@ export default function Page(): JSX.Element {
   useEffect(() => {
     fetchTickers()
     fetchData()
-    fetchChain()
   }, []);
 
   const addTicker = async () => {
-    if (!newTicker) return
+    if (!newTicker) return;
     try {
-      const res = await fetch('/api/add-ticker', { method: 'POST', body: JSON.stringify({ ticker: newTicker }) })
+      const res = await fetch('/api/add-ticker', { method: 'POST', body: JSON.stringify({ ticker: newTicker }) });
       if (res.ok) {
-        fetchTickers()
-        fetchData()
-        fetchChain()
-        setNewTicker('')
+        console.log(`Added ${newTicker} - refreshing tickers/data`);
+        await fetchTickers(); // Aggiorna tickers → triggera useEffect per chain
+        await fetchData(); // Data dopo chain
+        setNewTicker('');
       }
     } catch (err) {
-      console.error('Errore add ticker', err)
+      console.error('Errore add ticker', err);
     }
   };
 
   const removeTicker = async (ticker: string) => {
     try {
-      const res = await fetch('/api/remove-ticker', { method: 'POST', body: JSON.stringify({ ticker }) })
+      const res = await fetch('/api/remove-ticker', { method: 'POST', body: JSON.stringify({ ticker }) });
       if (res.ok) {
-        fetchTickers()
-        fetchData()
-        fetchChain()
-        setShowDropdowns(prev => { delete prev[ticker]; return { ...prev } })
-        setSelected(prev => { delete prev[ticker]; return { ...prev } })
-        setAlertsEnabled(prev => { delete prev[ticker]; return prev })
-        delete sentAlerts.current[ticker]
+        console.log(`Removed ${ticker} - refreshing tickers/data`);
+        await fetchTickers(); // Triggera useEffect per chain
+        await fetchData();
+        // Pulizia stati...
       }
     } catch (err) {
-      console.error('Errore remove ticker', err)
+      console.error('Errore remove ticker', err);
     }
   };
 
@@ -655,6 +665,27 @@ export default function Page(): JSX.Element {
                       className="bg-white/10 hover:bg-white/20 text-white text-xs font-medium px-2 py-1 rounded"
                     >
                       🔄 UPDATE CURRENT CALL
+                    </button>
+
+                    <button
+                      onClick={async () => {
+                        console.log(`Manual reload chain for ${ticker}`);
+                        try {
+                          const res = await fetch(`/api/chain?ticker=${ticker}`);
+                          if (res.ok) {
+                            const json = await res.json();
+                            setChain(prev => ({ ...prev, [ticker]: json }));
+                            console.log(`Reloaded for ${ticker}: years - ${Object.keys(json).join(', ')}`);
+                          } else {
+                            console.error(`Reload error for ${ticker}: ${res.status}`);
+                          }
+                        } catch (err) {
+                          console.error(`Reload exception for ${ticker}:`, err);
+                        }
+                      }}
+                      className="bg-yellow-700 hover:bg-yellow-800 text-white text-xs font-medium px-2 py-1 rounded"
+                    >
+                      Ricarica Chain
                     </button>
                   </div>
                 </div>
