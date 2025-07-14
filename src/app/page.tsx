@@ -85,8 +85,18 @@ export default function Page(): JSX.Element {
     try {
       const chains: Record<string, Record<string, Record<string, number[]>>> = {}
       for (const t of tickers) {
+        console.log(`Fetching chain for ${t}`)
         const res = await fetch(`/api/chain?ticker=${t}`)
-        chains[t] = await res.json()
+        if (!res.ok) {
+          console.error(`Error fetching chain for ${t}: ${res.status}`)
+          continue
+        }
+        const json = await res.json()
+        chains[t] = json
+        console.log(`Chain for ${t}: years available - ${Object.keys(json).join(', ')}`)
+        if (Object.keys(json).length === 0) {
+          console.warn(`No years in chain for ${t}`)
+        }
       }
       setChain(chains)
     } catch (err) {
@@ -574,7 +584,11 @@ export default function Page(): JSX.Element {
                         <option value="">Anno</option>
                         {Object.keys(tickerChain).map(y => <option key={y} value={y}>{y}</option>)}
                       </select>
-                      <select
+                      {Object.keys(tickerChain).length === 0 && (
+                        <div className="col-span-3 text-red-500 text-xs mt-1">
+                          Nessuna scadenza disponibile. Verifica console per errori o se il ticker ha opzioni (es. usa 'AMZN' per Amazon). Prova a rimuovere e riaggiungere il ticker.
+                        </div>
+                      )}                      <select
                         value={sel.month}
                         onChange={e => setSelected(prev => ({ ...prev, [ticker]: { ...sel, month: e.target.value, strike: null } }))}
                         className="bg-zinc-800 text-white p-1"
@@ -654,6 +668,11 @@ export default function Page(): JSX.Element {
                       <option value="">Anno</option>
                       {Object.keys(tickerChain).map(y => <option key={y} value={y}>{y}</option>)}
                     </select>
+                    {Object.keys(tickerChain).length === 0 && (
+                      <div className="col-span-3 text-red-500 text-xs mt-1">
+                        Nessuna scadenza disponibile. Verifica console per errori o se il ticker ha opzioni (es. usa 'AMZN' per Amazon). Prova a rimuovere e riaggiungere il ticker.
+                      </div>
+                    )}
                     <select
                       value={sel.month}
                       onChange={e => setSelected(prev => ({ ...prev, [ticker]: { ...sel, month: e.target.value, strike: null } }))}

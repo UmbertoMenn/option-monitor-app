@@ -23,13 +23,18 @@ async function fetchFullChain(ticker: string): Promise<any[]> {
     if (json.results) contracts.push(...json.results)
     url = json.next_url ? `${json.next_url}&apiKey=${POLYGON_API_KEY}` : null
   }
+
+  if (contracts.length === 0) {
+    console.warn(`No contracts found for ticker ${ticker}`)
+  }
+
   return contracts
 }
 
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url)
-    const ticker = searchParams.get('ticker')?.toUpperCase() || 'NVDA'  // Default NVDA per retrocompatibilità
+    const ticker = searchParams.get('ticker')?.toUpperCase() || 'NVDA'
 
     const contracts = await fetchFullChain(ticker)
 
@@ -58,6 +63,10 @@ export async function GET(req: Request) {
       for (const month of Object.keys(result[year])) {
         result[year][month].sort((a, b) => a - b)
       }
+    }
+
+    if (Object.keys(result).length === 0) {
+      console.error(`No chain data generated for ticker ${ticker}`)
     }
 
     return NextResponse.json(result)
