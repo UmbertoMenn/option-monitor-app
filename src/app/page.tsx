@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useRef } from 'react'
 import { sendTelegramMessage } from './telegram';  // Se telegram.ts in stessa folder; adatta path se altrove
 export const dynamic = 'force-dynamic';
+export const revalidate = 0;  // Disabilita revalidation/static cache
 
 /** Converte uno strike (es. 170) in "00170000" per OPRA */
 function formatStrike(strike: number): string {
