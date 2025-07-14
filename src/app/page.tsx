@@ -51,6 +51,19 @@ function getThirdFriday(year: number, monthIndex: number): string {
   return `${year}-${String(monthIndex + 1).padStart(2, '0')}-15` // fallback
 }
 
+const [tickers, setTickers] = useState<string[]>([]);
+const [newTicker, setNewTicker] = useState('');
+
+const fetchTickers = async () => {
+  try {
+    const res = await fetch('/api/tickers')
+    const json = await res.json()
+    setTickers(json)
+  } catch (err) {
+    console.error('Errore fetch tickers', err)
+  }
+};
+
 export default function Page(): JSX.Element {
   const [data, setData] = useState<OptionData[]>([])
   const [chain, setChain] = useState<Record<string, Record<string, number[]>>>({})
@@ -402,9 +415,36 @@ export default function Page(): JSX.Element {
   }
 
   useEffect(() => {
-    fetchData()
+    fetchTickers()
+    fetchData()  // Tuo fetch multi
     fetchChain()
-  }, [])
+  }, []);
+
+  const addTicker = async () => {
+    if (!newTicker) return
+    try {
+      const res = await fetch('/api/add-ticker', { method: 'POST', body: JSON.stringify({ ticker: newTicker }) })
+      if (res.ok) {
+        fetchTickers()
+        fetchData()
+        setNewTicker('')
+      }
+    } catch (err) {
+      console.error('Errore add ticker', err)
+    }
+  };
+
+  const removeTicker = async (ticker: string) => {
+    try {
+      const res = await fetch('/api/remove-ticker', { method: 'POST', body: JSON.stringify({ ticker }) })
+      if (res.ok) {
+        fetchTickers()
+        fetchData()
+      }
+    } catch (err) {
+      console.error('Errore remove ticker', err)
+    }
+  };
 
   useEffect(() => {
     if (data.length > 0) {
@@ -499,7 +539,15 @@ export default function Page(): JSX.Element {
       )}
 
       <div className="min-h-screen bg-black text-white p-2 flex flex-col gap-4 text-sm leading-tight">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+        <div className="p-2 bg-zinc-900 rounded mb-2">
+          
+          <input value={newTicker} onChange={e => setNewTicker(e.target.value.toUpperCase())} placeholder="Aggiungi ticker (es. AAPL)" className="bg-zinc-800 text-white p-1" />
+          <button onClick={addTicker} className="bg-green-700 text-white px-2 py-1 rounded ml-2">Aggiungi</button>
+          <div className="mt-2">
+            Tickers attuali: {tickers.map(t => <span key={t} className="mr-2">{t} <button onClick={() => removeTicker(t)} className="text-red-500">X</button></span>)}
+          </div>
+        </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
           {data.map((item: OptionData, index: number) => {
             const deltaPct = ((item.strike - item.spot) / item.spot) * 100
             const deltaColor = deltaPct < 4 ? 'text-red-500' : 'text-green-500'
@@ -582,10 +630,10 @@ export default function Page(): JSX.Element {
                               if (delta >= level) newSent[level] = true
                             }
                             sentAlerts.current = newSent
-                            sendTelegramMessage(`🔔 ALERT ATTIVATI – Spot: ${item.spot}, Strike: ${item.strike}`)
+                            sendTelegramMessage(`🔔 ALERT ATTIVATI – Ticker: ${item.ticker}`)
                           } else {
                             sentAlerts.current = {}  // Reset immediato
-                            sendTelegramMessage(`🔕 ALERT DISATTIVATI`)
+                            sendTelegramMessage(`🔕 ALERT DISATTIVATI – Ticker: ${item.ticker}`)
                           }
                           return next
                         })
