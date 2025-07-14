@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { normalizeExpiry } from '../../../utils/functions'
+import { normalizeExpiry } from '../../../utils/functions'  // Assumi esista, dal tuo codice
 
 const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!)
 
@@ -17,37 +17,25 @@ export async function POST(req: Request) {
     const now = new Date();
     let year = now.getFullYear();
     let month = now.getMonth() + 2;
-
     if (month > 11) {
       month -= 12;
       year += 1;
     }
-
     const nextExpiry = normalizeExpiry(`${year}-${String(month + 1).padStart(2, '0')}`);
 
-    const { error } = await supabase
-      .from('positions')
-      .insert([
-        {
-          ticker: ticker,
-          strike: 100,
-          expiry: nextExpiry,
-          currentCallPrice: 0
-        }
-      ]);
+    // Insert position
+    const { error: posError } = await supabase.from('positions').insert([
+      { ticker, strike: 100, expiry: nextExpiry, currentCallPrice: 0 }
+    ]);
+    if (posError) throw posError;
 
-    if (error) {
-      throw new Error(`Errore nel database: ${error.message}`);
-    }
+    // Insert/Upsert in tickers (evita duplicati)
+    const { error: tickError } = await supabase.from('tickers').upsert([{ ticker }], { onConflict: 'ticker' });
+    if (tickError) throw tickError;
 
     return NextResponse.json({ success: true });
-
   } catch (err: any) {
-    console.error('Errore in add-ticker:', {
-      ticker,
-      message: err.message,
-      stack: err.stack,
-    });
-    return NextResponse.json({ success: false, error: 'Errore interno del server' }, { status: 500 });
+    console.error('Errore in add-ticker:', { ticker, message: err.message });
+    return NextResponse.json({ success: false, error: 'Errore interno' }, { status: 500 });
   }
 }

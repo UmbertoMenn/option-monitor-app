@@ -15,19 +15,25 @@ export async function GET(req: Request) {
     const symbolList = symbols.split(',');
 
     const fetches = symbolList.map(async (symbol) => {
-      const url = `https://api.polygon.io/v3/snapshot/options/NVDA/${symbol}?apiKey=${POLYGON_API_KEY}`;
+      const match = /^O:([A-Z]+)\d+C\d+$/.exec(symbol)
+      if (!match) {
+        console.warn('❌ Simbolo non valido:', symbol)
+        return null;
+      }
+      const ticker = match[1]
+      const url = `https://api.polygon.io/v3/snapshot/options/${ticker}/${symbol}?apiKey=${POLYGON_API_KEY}`;
       const res = await fetch(url);
       if (!res.ok) {
         console.error(`Errore fetch per ${symbol}: ${res.status}`);
-        return null;  // Skip su errore
+        return null;
       }
       const json = await res.json();
-      console.log(`Risposta per ${symbol}:`, json);
       if (json.status !== "OK" || !json.results) {
         console.error(`Risposta non valida per ${symbol}:`, json);
-        return null;  // Skip su response non OK
+        return null;
       }
       return {
+        symbol,
         bid: json.results.last_quote?.bid ?? 0,
         ask: json.results.last_quote?.ask ?? 0,
         last_trade_price: json.results.last_trade?.price ?? 0
@@ -40,9 +46,9 @@ export async function GET(req: Request) {
     symbolList.forEach((symbol, index) => {
       const data = results[index];
       if (data) {
-        output[symbol] = data;  // Usa symbol input come chiave sempre
+        output[symbol] = { bid: data.bid, ask: data.ask, last_trade_price: data.last_trade_price };
       } else {
-        output[symbol] = { bid: 0, ask: 0, last_trade_price: 0 };  // Fallback zero su skip
+        output[symbol] = { bid: 0, ask: 0, last_trade_price: 0 };
       }
     });
 

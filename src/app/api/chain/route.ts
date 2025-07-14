@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server'
 
 const POLYGON_API_KEY = process.env.POLYGON_API_KEY!
 const CONTRACTS_URL = 'https://api.polygon.io/v3/reference/options/contracts'
-const UNDERLYING = 'NVDA'
 
 function isThirdFriday(dateStr: string): boolean {
   const date = new Date(dateStr)
@@ -14,28 +13,25 @@ function formatMonthName(month: number): string {
   return mesi[month]
 }
 
-async function fetchFullChain(): Promise<any[]> {
+async function fetchFullChain(ticker: string): Promise<any[]> {
   let contracts: any[] = []
-  let url: string | null = `${CONTRACTS_URL}?underlying_ticker=${UNDERLYING}&contract_type=call&limit=1000&apiKey=${POLYGON_API_KEY}`
+  let url: string | null = `${CONTRACTS_URL}?underlying_ticker=${ticker}&contract_type=call&limit=1000&apiKey=${POLYGON_API_KEY}`
 
   while (url) {
     const res: Response = await fetch(url)
     const json: { results?: any[]; next_url?: string } = await res.json()
     if (json.results) contracts.push(...json.results)
-    if (json.next_url) {
-      const nextCursor = new URL(json.next_url).searchParams.get('cursor')
-      url = `${CONTRACTS_URL}?underlying_ticker=${UNDERLYING}&contract_type=call&limit=1000&cursor=${nextCursor}&apiKey=${POLYGON_API_KEY}`
-    } else {
-      url = null
-    }
+    url = json.next_url ? `${json.next_url}&apiKey=${POLYGON_API_KEY}` : null
   }
-
   return contracts
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
-    const contracts = await fetchFullChain()
+    const { searchParams } = new URL(req.url)
+    const ticker = searchParams.get('ticker')?.toUpperCase() || 'NVDA'  // Default NVDA per retrocompatibilità
+
+    const contracts = await fetchFullChain(ticker)
 
     const result: Record<string, Record<string, number[]>> = {}
 
@@ -66,7 +62,7 @@ export async function GET() {
 
     return NextResponse.json(result)
   } catch (err: any) {
-    console.error('❌ Errore route /api/chain:', err.message)
+    console.error('❌ Errore /api/chain:', err.message)
     return NextResponse.json({}, { status: 500 })
   }
 }

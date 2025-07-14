@@ -3,7 +3,6 @@
 import React, { useEffect, useState, useRef } from 'react'
 import { sendTelegramMessage } from './telegram';
 
-// Funzioni di utilità (rimangono fuori dal componente)
 function formatStrike(strike: number): string {
   return String(Math.round(strike * 1000)).padStart(8, '0')
 }
@@ -47,25 +46,21 @@ function getThirdFriday(year: number, monthIndex: number): string {
       }
     }
   }
-  return `${year}-${String(monthIndex + 1).padStart(2, '0')}-15` // fallback
+  return `${year}-${String(monthIndex + 1).padStart(2, '0')}-15`
 }
 
 export default function Page(): JSX.Element {
-  // Hook di stato spostati all'interno del componente
   const [tickers, setTickers] = useState<string[]>([]);
   const [newTicker, setNewTicker] = useState('');
   const [data, setData] = useState<OptionData[]>([])
-  const [chain, setChain] = useState<Record<string, Record<string, number[]>>>({})
+  const [chain, setChain] = useState<Record<string, Record<string, Record<string, number[]>>>>({})
   const [prices, setPrices] = useState<Record<string, Record<string, { bid: number; ask: number; last_trade_price: number; symbol: string }>>>({})
-  const [selectedYear, setSelectedYear] = useState('')
-  const [selectedMonth, setSelectedMonth] = useState('')
-  const [selectedStrike, setSelectedStrike] = useState<number | null>(null)
-  const [showDropdown, setShowDropdown] = useState(false)
-  const sentAlerts = useRef<{ [level: number]: boolean }>({})
-  const [alertsEnabled, setAlertsEnabled] = useState(false)
-  const [pendingRoll, setPendingRoll] = useState<OptionEntry | null>(null)
+  const [selected, setSelected] = useState<{ [ticker: string]: { year: string, month: string, strike: number | null } }>({})
+  const [showDropdowns, setShowDropdowns] = useState<{ [ticker: string]: boolean }>({})
+  const sentAlerts = useRef<{ [ticker: string]: { [level: number]: boolean } }>({})
+  const [alertsEnabled, setAlertsEnabled] = useState<{ [ticker: string]: boolean }>({})
+  const [pendingRoll, setPendingRoll] = useState<{ ticker: string, opt: OptionEntry } | null>(null)
 
-  // Funzione fetchTickers spostata all'interno del componente
   const fetchTickers = async () => {
     try {
       const res = await fetch('/api/tickers')
@@ -88,11 +83,14 @@ export default function Page(): JSX.Element {
 
   const fetchChain = async () => {
     try {
-      const res = await fetch('/api/chain')
-      const json = await res.json()
-      setChain(json)
+      const chains: Record<string, Record<string, Record<string, number[]>>> = {}
+      for (const t of tickers) {
+        const res = await fetch(`/api/chain?ticker=${t}`)
+        chains[t] = await res.json()
+      }
+      setChain(chains)
     } catch (err) {
-      console.error('Errore fetch /api/chain', err)
+      console.error('Errore fetch chains', err)
     }
   }
 
@@ -106,24 +104,16 @@ export default function Page(): JSX.Element {
         item.future.forEach(opt => symbols.push(opt.symbol))
       })
 
-      if (!symbols.length) {
-        console.warn('⚠️ Nessun simbolo trovato!')
-        return
-      }
+      if (!symbols.length) return
 
-      console.log('🎯 Simboli richiesti:', symbols)
       const url = `/api/full-prices?symbols=${encodeURIComponent(symbols.join(','))}`
       const res = await fetch(url)
       const json = await res.json()
-      console.log('📥 Risposta /api/full-prices:', json)
 
       const grouped: Record<string, Record<string, { bid: number; ask: number; last_trade_price: number; symbol: string }>> = {}
       for (const [symbol, val] of Object.entries(json)) {
         const match = /^O:([A-Z]+)\d+C\d+$/.exec(symbol)
-        if (!match) {
-          console.warn('❌ Simbolo non valido:', symbol)
-          continue
-        }
+        if (!match) continue
         const ticker = match[1]
         if (!grouped[ticker]) grouped[ticker] = {}
         grouped[ticker][symbol] = {
@@ -135,7 +125,6 @@ export default function Page(): JSX.Element {
       }
 
       setPrices(grouped)
-      console.log('✅ Prezzi aggiornati:', grouped)
     } catch (err) {
       console.error('Errore fetch /api/full-prices', err)
     }
@@ -145,9 +134,9 @@ export default function Page(): JSX.Element {
     ticker: string,
     opt: OptionEntry,
     direction: 'next' | 'prev',
-    chain: Record<string, Record<string, number[]>>,
     type: 'future' | 'earlier'
   ): OptionEntry | null {
+    const tickerChain = chain[ticker] || {}
     const [yearStr, monthStr] = opt.expiry.split('-')
     let year = Number(yearStr)
     let monthIdx = Number(monthStr) - 1
@@ -162,26 +151,24 @@ export default function Page(): JSX.Element {
         if (monthIdx > 11) {
           monthIdx = 0
           year++
-          if (!chain[year.toString()]) break
         }
       } else {
         monthIdx--
         if (monthIdx < 0) {
           monthIdx = 11
           year--
-          if (!chain[year.toString()]) break
         }
       }
 
       const monthName = monthNames[monthIdx]
       const yearKey = year.toString()
-      if (!chain[yearKey] || !chain[yearKey][monthName]) continue
+      if (!tickerChain[yearKey] || !tickerChain[yearKey][monthName]) continue
 
-      const strikes = chain[yearKey][monthName]
+      const strikes = tickerChain[yearKey][monthName]
       const strike = opt.strike
       const targetStrike = type === 'future'
-        ? strikes.find(s => s > strike)
-        : [...strikes].reverse().find(s => s < strike)
+        ? strikes.find((s: number) => s > strike)
+        : [...strikes].reverse().find((s: number) => s < strike)
 
       if (!targetStrike) continue
 
@@ -200,34 +187,39 @@ export default function Page(): JSX.Element {
     return null
   }
 
-  const updateCurrentCall = async () => {
-    if (!selectedYear || !selectedMonth || !selectedStrike) return
+  const updateCurrentCall = async (ticker: string) => {
+    const sel = selected[ticker] || { year: '', month: '', strike: null }
+    if (!sel.year || !sel.month || !sel.strike) return
 
     const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
-    const monthIndex = monthNames.indexOf(selectedMonth)
+    const monthIndex = monthNames.indexOf(sel.month)
     if (monthIndex === -1) return
 
-    const expiryDate = getThirdFriday(Number(selectedYear), monthIndex)
+    const expiryDate = getThirdFriday(Number(sel.year), monthIndex)
+
     const updatedData = data.map(item => {
-      const currentSymbol = getSymbolFromExpiryStrike(item.ticker, expiryDate, selectedStrike)
+      if (item.ticker !== ticker) return item
+
+      const currentSymbol = getSymbolFromExpiryStrike(item.ticker, expiryDate, sel.strike!)
       const currentCallPrice = prices[item.ticker]?.[currentSymbol]?.ask ?? 0
       const future: OptionEntry[] = []
       const earlier: OptionEntry[] = []
 
+      const tickerChain = chain[item.ticker] || {}
+
       let futureCount = 0
       let monthIdx = monthIndex
-      let year = Number(selectedYear)
+      let year = Number(sel.year)
 
       while (futureCount < 2) {
         monthIdx++
         if (monthIdx >= 12) {
           year++
-          if (!chain[year.toString()]) break
           monthIdx = 0
         }
         const futureMonth = monthNames[monthIdx]
-        const fStrikeList = chain[year.toString()]?.[futureMonth] || []
-        const fStrike = fStrikeList.find(s => s > selectedStrike)
+        const fStrikeList = tickerChain[year.toString()]?.[futureMonth] || []
+        const fStrike = fStrikeList.find((s: number) => s > sel.strike!)
         if (fStrike) {
           const expiry = getThirdFriday(year, monthIdx)
           const symbol = getSymbolFromExpiryStrike(item.ticker, expiry, fStrike)
@@ -245,18 +237,17 @@ export default function Page(): JSX.Element {
 
       let earlierCount = 0
       monthIdx = monthIndex
-      year = Number(selectedYear)
+      year = Number(sel.year)
 
       while (earlierCount < 2) {
         monthIdx--
         if (monthIdx < 0) {
           year--
-          if (!chain[year.toString()]) break
           monthIdx = 11
         }
         const earlierMonth = monthNames[monthIdx]
-        const eStrikeList = chain[year.toString()]?.[earlierMonth] || []
-        const eStrike = [...eStrikeList].reverse().find(s => s < selectedStrike)
+        const eStrikeList = tickerChain[year.toString()]?.[earlierMonth] || []
+        const eStrike = [...eStrikeList].reverse().find((s: number) => s < sel.strike!)
         if (eStrike) {
           const expiry = getThirdFriday(year, monthIdx)
           const symbol = getSymbolFromExpiryStrike(item.ticker, expiry, eStrike)
@@ -274,7 +265,7 @@ export default function Page(): JSX.Element {
 
       return {
         ...item,
-        strike: selectedStrike,
+        strike: sel.strike!,
         expiry: expiryDate,
         currentCallPrice,
         future,
@@ -284,32 +275,29 @@ export default function Page(): JSX.Element {
     })
 
     setData(updatedData)
-    setSelectedYear('')
-    setSelectedMonth('')
-    setSelectedStrike(null)
-    setShowDropdown(false)
+    setSelected(prev => ({ ...prev, [ticker]: { year: '', month: '', strike: null } }))
+    setShowDropdowns(prev => ({ ...prev, [ticker]: false }))
 
-    const mainTicker = data[0].ticker
-    const currentSymbol = getSymbolFromExpiryStrike(mainTicker, expiryDate, selectedStrike)
-    const currentCallPrice = prices[mainTicker]?.[currentSymbol]?.ask ?? 0
+    const currentSymbol = getSymbolFromExpiryStrike(ticker, expiryDate, sel.strike!)
+    const currentCallPrice = prices[ticker]?.[currentSymbol]?.ask ?? 0
 
     const confirmRes = await fetch('/api/update-call', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        ticker: mainTicker,
-        strike: selectedStrike,
+        ticker,
+        strike: sel.strike,
         expiry: expiryDate,
         currentCallPrice,
       })
     })
     const confirmJson = await confirmRes.json()
     if (!confirmJson.success) {
-      console.error('Errore salvataggio su Supabase')
+      console.error('Errore salvataggio su Supabase per', ticker)
     }
   }
 
-  const handleRollaClick = async (opt: OptionEntry) => {
+  const handleRollaClick = async (ticker: string, opt: OptionEntry) => {
     const [yearStr, monthStr] = opt.expiry.split('-')
     const selectedYear = yearStr
     const selectedMonthIndex = Number(monthStr) - 1
@@ -319,10 +307,14 @@ export default function Page(): JSX.Element {
     const expiryDate = getThirdFriday(Number(selectedYear), selectedMonthIndex)
 
     const updatedData = data.map(item => {
+      if (item.ticker !== ticker) return item
+
       const currentSymbol = getSymbolFromExpiryStrike(item.ticker, expiryDate, selectedStrike)
       const currentCallPrice = prices[item.ticker]?.[currentSymbol]?.ask ?? 0
       const future: OptionEntry[] = []
       const earlier: OptionEntry[] = []
+
+      const tickerChain = chain[item.ticker] || {}
 
       let futureCount = 0
       let monthIdx = selectedMonthIndex
@@ -332,12 +324,11 @@ export default function Page(): JSX.Element {
         monthIdx++
         if (monthIdx >= 12) {
           year++
-          if (!chain[year.toString()]) break
           monthIdx = 0
         }
         const futureMonth = monthNames[monthIdx]
-        const fStrikeList = chain[year.toString()]?.[futureMonth] || []
-        const fStrike = fStrikeList.find(s => s > selectedStrike)
+        const fStrikeList = tickerChain[year.toString()]?.[futureMonth] || []
+        const fStrike = fStrikeList.find((s: number) => s > selectedStrike)
         if (fStrike) {
           const expiry = getThirdFriday(year, monthIdx)
           const symbol = getSymbolFromExpiryStrike(item.ticker, expiry, fStrike)
@@ -361,12 +352,11 @@ export default function Page(): JSX.Element {
         monthIdx--
         if (monthIdx < 0) {
           year--
-          if (!chain[year.toString()]) break
           monthIdx = 11
         }
         const earlierMonth = monthNames[monthIdx]
-        const eStrikeList = chain[year.toString()]?.[earlierMonth] || []
-        const eStrike = [...eStrikeList].reverse().find(s => s < selectedStrike)
+        const eStrikeList = tickerChain[year.toString()]?.[earlierMonth] || []
+        const eStrike = [...eStrikeList].reverse().find((s: number) => s < selectedStrike)
         if (eStrike) {
           const expiry = getThirdFriday(year, monthIdx)
           const symbol = getSymbolFromExpiryStrike(item.ticker, expiry, eStrike)
@@ -394,15 +384,15 @@ export default function Page(): JSX.Element {
     })
 
     setData(updatedData)
-    const mainTicker = data[0].ticker
-    const currentSymbol = getSymbolFromExpiryStrike(mainTicker, expiryDate, selectedStrike)
-    const currentCallPrice = prices[mainTicker]?.[currentSymbol]?.ask ?? 0
+
+    const currentSymbol = getSymbolFromExpiryStrike(ticker, expiryDate, selectedStrike)
+    const currentCallPrice = prices[ticker]?.[currentSymbol]?.ask ?? 0
 
     const confirmRes = await fetch('/api/update-call', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        ticker: mainTicker,
+        ticker,
         strike: selectedStrike,
         expiry: expiryDate,
         currentCallPrice,
@@ -410,7 +400,7 @@ export default function Page(): JSX.Element {
     })
     const confirmJson = await confirmRes.json()
     if (!confirmJson.success) {
-      console.error('Errore salvataggio su Supabase')
+      console.error('Errore salvataggio su Supabase per', ticker)
     }
   }
 
@@ -427,6 +417,7 @@ export default function Page(): JSX.Element {
       if (res.ok) {
         fetchTickers()
         fetchData()
+        fetchChain()
         setNewTicker('')
       }
     } catch (err) {
@@ -440,6 +431,11 @@ export default function Page(): JSX.Element {
       if (res.ok) {
         fetchTickers()
         fetchData()
+        fetchChain()
+        setShowDropdowns(prev => { delete prev[ticker]; return { ...prev } })
+        setSelected(prev => { delete prev[ticker]; return { ...prev } })
+        setAlertsEnabled(prev => { delete prev[ticker]; return prev })
+        delete sentAlerts.current[ticker]
       }
     } catch (err) {
       console.error('Errore remove ticker', err)
@@ -450,7 +446,7 @@ export default function Page(): JSX.Element {
     if (data.length > 0) {
       fetchPrices()
     }
-  }, [data])
+  }, [data]);
 
   useEffect(() => {
     if (data.length === 0) return
@@ -458,20 +454,22 @@ export default function Page(): JSX.Element {
       fetchPrices()
     }, 1000)
     return () => clearInterval(interval)
-  }, [data])
+  }, [data]);
 
   useEffect(() => {
-    if (!alertsEnabled || !data.length) return
-    const item = data[0]
-    const delta = Math.abs((item.strike - item.spot) / item.spot) * 100
-    const levels = [4, 3, 2, 1]
-    for (const level of levels) {
-      if (delta < level && !sentAlerts.current[level]) {
-        sentAlerts.current[level] = true
-        const alertMessage = `⚠️ ALERT ${level}% – ${item.ticker}\nStrike: ${item.strike}\nSpot: ${item.spot}\nDelta: ${delta.toFixed(2)}%`
-        sendTelegramMessage(alertMessage);
+    data.forEach(item => {
+      if (!alertsEnabled[item.ticker]) return
+      const delta = Math.abs((item.strike - item.spot) / item.spot) * 100
+      const levels = [4, 3, 2, 1]
+      if (!sentAlerts.current[item.ticker]) sentAlerts.current[item.ticker] = {}
+      for (const level of levels) {
+        if (delta < level && !sentAlerts.current[item.ticker][level]) {
+          sentAlerts.current[item.ticker][level] = true
+          const alertMessage = `⚠️ ALERT ${level}% – ${item.ticker}\nStrike: ${item.strike}\nSpot: ${item.spot}\nDelta: ${delta.toFixed(2)}%`
+          sendTelegramMessage(alertMessage);
+        }
       }
-    }
+    })
   }, [data, alertsEnabled])
 
   useEffect(() => {
@@ -516,7 +514,7 @@ export default function Page(): JSX.Element {
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
           <div className="bg-zinc-900 border border-zinc-700 text-white rounded-lg p-4 shadow-xl w-full max-w-xs">
             <div className="text-lg font-semibold mb-3 text-center">⚠️ Sei sicuro di voler rollare?</div>
-            <div className="text-sm text-center mb-4 text-zinc-400">{pendingRoll.label} - {pendingRoll.expiry}</div>
+            <div className="text-sm text-center mb-4 text-zinc-400">{pendingRoll.opt.label} - {pendingRoll.opt.expiry}</div>
             <div className="flex justify-between gap-3">
               <button
                 onClick={() => setPendingRoll(null)}
@@ -526,7 +524,7 @@ export default function Page(): JSX.Element {
               </button>
               <button
                 onClick={async () => {
-                  await handleRollaClick(pendingRoll)
+                  await handleRollaClick(pendingRoll.ticker, pendingRoll.opt)
                   setPendingRoll(null)
                 }}
                 className="flex-1 bg-green-700 hover:bg-green-800 text-white py-1 rounded"
@@ -550,14 +548,18 @@ export default function Page(): JSX.Element {
           {data.map((item: OptionData, index: number) => {
             const deltaPct = ((item.strike - item.spot) / item.spot) * 100
             const deltaColor = deltaPct < 4 ? 'text-red-500' : 'text-green-500'
+            const ticker = item.ticker
+            const sel = selected[ticker] || { year: '', month: '', strike: null }
+            const showDropdown = showDropdowns[ticker] || false
+            const tickerChain = chain[ticker] || {}
 
             if (item.invalid) {
               return (
                 <div key={index} className="bg-red-800 text-white rounded-lg p-4 shadow-md flex flex-col gap-2">
-                  <div className="font-bold text-lg">⚠️ Errore caricamento CALL</div>
+                  <div className="font-bold text-lg">⚠️ Errore caricamento CALL per {ticker}</div>
                   <div>La call corrente salvata su Supabase non è più disponibile o ha dati errati.</div>
                   <button
-                    onClick={() => setShowDropdown(true)}
+                    onClick={() => setShowDropdowns(prev => ({ ...prev, [ticker]: true }))}
                     className="bg-yellow-500 hover:bg-yellow-600 text-black font-bold py-1 px-2 rounded w-fit"
                   >
                     📂 Seleziona nuova call
@@ -565,42 +567,35 @@ export default function Page(): JSX.Element {
                   {showDropdown && (
                     <div className="grid grid-cols-3 gap-2">
                       <select
-                        value={selectedYear}
-                        onChange={e => {
-                          setSelectedYear(e.target.value)
-                          setSelectedMonth('')
-                          setSelectedStrike(null)
-                        }}
+                        value={sel.year}
+                        onChange={e => setSelected(prev => ({ ...prev, [ticker]: { ...sel, year: e.target.value, month: '', strike: null } }))}
                         className="bg-zinc-800 text-white p-1"
                       >
                         <option value="">Anno</option>
-                        {Object.keys(chain).map(y => <option key={y} value={y}>{y}</option>)}
+                        {Object.keys(tickerChain).map(y => <option key={y} value={y}>{y}</option>)}
                       </select>
                       <select
-                        value={selectedMonth}
-                        onChange={e => {
-                          setSelectedMonth(e.target.value)
-                          setSelectedStrike(null)
-                        }}
+                        value={sel.month}
+                        onChange={e => setSelected(prev => ({ ...prev, [ticker]: { ...sel, month: e.target.value, strike: null } }))}
                         className="bg-zinc-800 text-white p-1"
-                        disabled={!selectedYear}
+                        disabled={!sel.year}
                       >
                         <option value="">Mese</option>
-                        {selectedYear && Object.keys(chain[selectedYear] || {}).map(m => <option key={m} value={m}>{m}</option>)}
+                        {sel.year && Object.keys(tickerChain[sel.year] || {}).map(m => <option key={m} value={m}>{m}</option>)}
                       </select>
                       <select
-                        value={selectedStrike ?? ''}
-                        onChange={e => setSelectedStrike(Number(e.target.value))}
+                        value={sel.strike ?? ''}
+                        onChange={e => setSelected(prev => ({ ...prev, [ticker]: { ...sel, strike: Number(e.target.value) } }))}
                         className="bg-zinc-800 text-white p-1"
-                        disabled={!selectedMonth}
+                        disabled={!sel.month}
                       >
                         <option value="">Strike</option>
-                        {selectedYear && selectedMonth && (chain[selectedYear]?.[selectedMonth] || []).map(s => (
+                        {sel.year && sel.month && (tickerChain[sel.year]?.[sel.month] || []).map(s => (
                           <option key={s} value={s}>{s}</option>
                         ))}
                       </select>
                       <button
-                        onClick={updateCurrentCall}
+                        onClick={() => updateCurrentCall(ticker)}
                         className="col-span-3 mt-1 bg-green-700 hover:bg-green-800 text-white text-xs font-medium px-2 py-1 rounded"
                       >
                         ✔️ Conferma nuova CALL
@@ -618,32 +613,31 @@ export default function Page(): JSX.Element {
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => {
-                        console.log('Campanella cliccata - Stato attuale:', alertsEnabled ? 'Disattivando' : 'Attivando');
                         setAlertsEnabled(prev => {
-                          const next = !prev
-                          if (next) {
+                          const next = { ...prev, [ticker]: !prev[ticker] }
+                          if (next[ticker]) {
                             const delta = Math.abs((item.strike - item.spot) / item.spot) * 100
                             const newSent: { [level: number]: boolean } = {}
                             const levels = [4, 3, 2, 1]
                             for (const level of levels) {
                               if (delta >= level) newSent[level] = true
                             }
-                            sentAlerts.current = newSent
+                            sentAlerts.current[ticker] = newSent
                             sendTelegramMessage(`🔔 ALERT ATTIVATI – Ticker: ${item.ticker}`)
                           } else {
-                            sentAlerts.current = {}
+                            sentAlerts.current[ticker] = {}
                             sendTelegramMessage(`🔕 ALERT DISATTIVATI – Ticker: ${item.ticker}`)
                           }
                           return next
                         })
                       }}
-                      title={alertsEnabled ? 'Disattiva alert' : 'Attiva alert'}
-                      className={`px-1 py-0.5 rounded text-sm ${alertsEnabled ? 'bg-green-600 hover:bg-green-700' : 'bg-zinc-700 hover:bg-zinc-600'} text-white`}
+                      title={alertsEnabled[ticker] ? 'Disattiva alert' : 'Attiva alert'}
+                      className={`px-1 py-0.5 rounded text-sm ${alertsEnabled[ticker] ? 'bg-green-600 hover:bg-green-700' : 'bg-zinc-700 hover:bg-zinc-600'} text-white`}
                     >
-                      {alertsEnabled ? '🔔' : '🔕'}
+                      {alertsEnabled[ticker] ? '🔔' : '🔕'}
                     </button>
                     <button
-                      onClick={() => setShowDropdown(!showDropdown)}
+                      onClick={() => setShowDropdowns(prev => ({ ...prev, [ticker]: !showDropdown }))}
                       className="bg-white/10 hover:bg-white/20 text-white text-xs font-medium px-2 py-1 rounded"
                     >
                       🔄 UPDATE CURRENT CALL
@@ -653,42 +647,35 @@ export default function Page(): JSX.Element {
                 {showDropdown && (
                   <div className="grid grid-cols-3 gap-2 mb-2">
                     <select
-                      value={selectedYear}
-                      onChange={e => {
-                        setSelectedYear(e.target.value)
-                        setSelectedMonth('')
-                        setSelectedStrike(null)
-                      }}
+                      value={sel.year}
+                      onChange={e => setSelected(prev => ({ ...prev, [ticker]: { ...sel, year: e.target.value, month: '', strike: null } }))}
                       className="bg-zinc-800 text-white p-1"
                     >
                       <option value="">Anno</option>
-                      {Object.keys(chain).map(y => <option key={y} value={y}>{y}</option>)}
+                      {Object.keys(tickerChain).map(y => <option key={y} value={y}>{y}</option>)}
                     </select>
                     <select
-                      value={selectedMonth}
-                      onChange={e => {
-                        setSelectedMonth(e.target.value)
-                        setSelectedStrike(null)
-                      }}
+                      value={sel.month}
+                      onChange={e => setSelected(prev => ({ ...prev, [ticker]: { ...sel, month: e.target.value, strike: null } }))}
                       className="bg-zinc-800 text-white p-1"
-                      disabled={!selectedYear}
+                      disabled={!sel.year}
                     >
                       <option value="">Mese</option>
-                      {selectedYear && Object.keys(chain[selectedYear] || {}).map(m => <option key={m} value={m}>{m}</option>)}
+                      {sel.year && Object.keys(tickerChain[sel.year] || {}).map(m => <option key={m} value={m}>{m}</option>)}
                     </select>
                     <select
-                      value={selectedStrike ?? ''}
-                      onChange={e => setSelectedStrike(Number(e.target.value))}
+                      value={sel.strike ?? ''}
+                      onChange={e => setSelected(prev => ({ ...prev, [ticker]: { ...sel, strike: Number(e.target.value) } }))}
                       className="bg-zinc-800 text-white p-1"
-                      disabled={!selectedMonth}
+                      disabled={!sel.month}
                     >
                       <option value="">Strike</option>
-                      {selectedYear && selectedMonth && (chain[selectedYear]?.[selectedMonth] || []).map(s => (
+                      {sel.year && sel.month && (tickerChain[sel.year]?.[sel.month] || []).map(s => (
                         <option key={s} value={s}>{s}</option>
                       ))}
                     </select>
                     <button
-                      onClick={updateCurrentCall}
+                      onClick={() => updateCurrentCall(ticker)}
                       className="col-span-3 mt-1 bg-green-700 hover:bg-green-800 text-white text-xs font-medium px-2 py-1 rounded"
                     >
                       ✔️ Conferma nuova CALL
@@ -741,7 +728,7 @@ export default function Page(): JSX.Element {
                       </span>
                       <div className="flex gap-1 items-center">
                         <button
-                          onClick={() => setPendingRoll(opt)}
+                          onClick={() => setPendingRoll({ ticker: item.ticker, opt })}
                           className="bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold px-2 py-0.5 rounded"
                           title="Aggiorna la call attuale con questa opzione"
                         >
@@ -754,8 +741,8 @@ export default function Page(): JSX.Element {
                             const [year, month] = opt.expiry.split('-')
                             const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
                             const monthIndex = Number(month) - 1
-                            const chainStrikes = chain[year]?.[monthNames[monthIndex]] || []
-                            const nextStrike = chainStrikes.find(s => s > opt.strike)
+                            const chainStrikes = chain[item.ticker]?.[year]?.[monthNames[monthIndex]] || []
+                            const nextStrike = chainStrikes.find((s: number) => s > opt.strike)
                             if (!nextStrike) return
 
                             const updatedOpt = {
@@ -766,7 +753,8 @@ export default function Page(): JSX.Element {
                             }
 
                             const updatedData = [...data]
-                            updatedData[index].future[i] = updatedOpt
+                            const itemIdx = updatedData.findIndex(d => d.ticker === item.ticker)
+                            updatedData[itemIdx].future[i] = updatedOpt
                             setData(updatedData)
                           }}
                         >
@@ -779,8 +767,8 @@ export default function Page(): JSX.Element {
                             const [year, month] = opt.expiry.split('-')
                             const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
                             const monthIndex = Number(month) - 1
-                            const chainStrikes = chain[year]?.[monthNames[monthIndex]] || []
-                            const prevStrike = [...chainStrikes].reverse().find(s => s < opt.strike)
+                            const chainStrikes = chain[item.ticker]?.[year]?.[monthNames[monthIndex]] || []
+                            const prevStrike = [...chainStrikes].reverse().find((s: number) => s < opt.strike)
                             if (!prevStrike) return
 
                             const updatedOpt = {
@@ -791,7 +779,8 @@ export default function Page(): JSX.Element {
                             }
 
                             const updatedData = [...data]
-                            updatedData[index].future[i] = updatedOpt
+                            const itemIdx = updatedData.findIndex(d => d.ticker === item.ticker)
+                            updatedData[itemIdx].future[i] = updatedOpt
                             setData(updatedData)
                           }}
                         >
@@ -801,7 +790,7 @@ export default function Page(): JSX.Element {
                           title="Month Back"
                           className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded"
                           onClick={() => {
-                            const shift = shiftExpiryByMonth(item.ticker, opt, 'prev', chain, 'earlier')
+                            const shift = shiftExpiryByMonth(item.ticker, opt, 'prev', 'earlier')
                             if (!shift) return
 
                             const updatedOpt = {
@@ -811,7 +800,8 @@ export default function Page(): JSX.Element {
                             }
 
                             const updatedData = [...data]
-                            updatedData[index].future[i] = updatedOpt
+                            const itemIdx = updatedData.findIndex(d => d.ticker === item.ticker)
+                            updatedData[itemIdx].future[i] = updatedOpt
                             setData(updatedData)
                           }}
                         >
@@ -821,7 +811,7 @@ export default function Page(): JSX.Element {
                           title="Month Forward"
                           className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded"
                           onClick={() => {
-                            const shift = shiftExpiryByMonth(item.ticker, opt, 'next', chain, 'future')
+                            const shift = shiftExpiryByMonth(item.ticker, opt, 'next', 'future')
                             if (!shift) return
 
                             const updatedOpt = {
@@ -831,7 +821,8 @@ export default function Page(): JSX.Element {
                             }
 
                             const updatedData = [...data]
-                            updatedData[index].future[i] = updatedOpt
+                            const itemIdx = updatedData.findIndex(d => d.ticker === item.ticker)
+                            updatedData[itemIdx].future[i] = updatedOpt
                             setData(updatedData)
                           }}
                         >
@@ -869,7 +860,7 @@ export default function Page(): JSX.Element {
                       </span>
                       <div className="flex gap-1 items-center">
                         <button
-                          onClick={() => setPendingRoll(opt)}
+                          onClick={() => setPendingRoll({ ticker: item.ticker, opt })}
                           className="bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold px-2 py-0.5 rounded"
                           title="Aggiorna la call attuale con questa opzione"
                         >
@@ -882,8 +873,8 @@ export default function Page(): JSX.Element {
                             const [year, month] = opt.expiry.split('-')
                             const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
                             const monthIndex = Number(month) - 1
-                            const chainStrikes = chain[year]?.[monthNames[monthIndex]] || []
-                            const nextStrike = chainStrikes.find(s => s > opt.strike)
+                            const chainStrikes = chain[item.ticker]?.[year]?.[monthNames[monthIndex]] || []
+                            const nextStrike = chainStrikes.find((s: number) => s > opt.strike)
                             if (!nextStrike) return
 
                             const updatedOpt = {
@@ -894,7 +885,8 @@ export default function Page(): JSX.Element {
                             }
 
                             const updatedData = [...data]
-                            updatedData[index].earlier[i] = updatedOpt
+                            const itemIdx = updatedData.findIndex(d => d.ticker === item.ticker)
+                            updatedData[itemIdx].earlier[i] = updatedOpt
                             setData(updatedData)
                           }}
                         >
@@ -907,8 +899,8 @@ export default function Page(): JSX.Element {
                             const [year, month] = opt.expiry.split('-')
                             const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
                             const monthIndex = Number(month) - 1
-                            const chainStrikes = chain[year]?.[monthNames[monthIndex]] || []
-                            const prevStrike = [...chainStrikes].reverse().find(s => s < opt.strike)
+                            const chainStrikes = chain[item.ticker]?.[year]?.[monthNames[monthIndex]] || []
+                            const prevStrike = [...chainStrikes].reverse().find((s: number) => s < opt.strike)
                             if (!prevStrike) return
 
                             const updatedOpt = {
@@ -919,7 +911,8 @@ export default function Page(): JSX.Element {
                             }
 
                             const updatedData = [...data]
-                            updatedData[index].earlier[i] = updatedOpt
+                            const itemIdx = updatedData.findIndex(d => d.ticker === item.ticker)
+                            updatedData[itemIdx].earlier[i] = updatedOpt
                             setData(updatedData)
                           }}
                         >
@@ -929,7 +922,7 @@ export default function Page(): JSX.Element {
                           title="Month Back"
                           className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded"
                           onClick={() => {
-                            const shift = shiftExpiryByMonth(item.ticker, opt, 'prev', chain, 'earlier')
+                            const shift = shiftExpiryByMonth(item.ticker, opt, 'prev', 'earlier')
                             if (!shift) return
 
                             const updatedOpt = {
@@ -939,7 +932,8 @@ export default function Page(): JSX.Element {
                             }
 
                             const updatedData = [...data]
-                            updatedData[index].earlier[i] = updatedOpt
+                            const itemIdx = updatedData.findIndex(d => d.ticker === item.ticker)
+                            updatedData[itemIdx].earlier[i] = updatedOpt
                             setData(updatedData)
                           }}
                         >
@@ -949,7 +943,7 @@ export default function Page(): JSX.Element {
                           title="Month Forward"
                           className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded"
                           onClick={() => {
-                            const shift = shiftExpiryByMonth(item.ticker, opt, 'next', chain, 'future')
+                            const shift = shiftExpiryByMonth(item.ticker, opt, 'next', 'future')
                             if (!shift) return
 
                             const updatedOpt = {
@@ -959,7 +953,8 @@ export default function Page(): JSX.Element {
                             }
 
                             const updatedData = [...data]
-                            updatedData[index].earlier[i] = updatedOpt
+                            const itemIdx = updatedData.findIndex(d => d.ticker === item.ticker)
+                            updatedData[itemIdx].earlier[i] = updatedOpt
                             setData(updatedData)
                           }}
                         >
