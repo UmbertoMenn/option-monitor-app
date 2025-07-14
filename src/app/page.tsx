@@ -172,65 +172,78 @@ export default function Page(): JSX.Element {
     }
   };
 
-  function shiftExpiryByMonth(
-    ticker: string,
-    opt: OptionEntry,
-    direction: 'next' | 'prev',
-    type: 'future' | 'earlier'
-  ): OptionEntry | null {
-    const tickerChain = chain[ticker] || {}
-    const [yearStr, monthStr] = opt.expiry.split('-')
-    let year = Number(yearStr)
-    let monthIdx = Number(monthStr) - 1
-    const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
-    let attempts = 0
-    const maxAttempts = 60
+function shiftExpiryByMonth(
+  ticker: string,
+  opt: OptionEntry,
+  direction: 'next' | 'prev',
+  type: 'future' | 'earlier'
+): OptionEntry | null {
+  const tickerChain = chain[ticker] || {}
+  const [yearStr, monthStr] = opt.expiry.split('-')
+  let year = Number(yearStr)
+  let monthIdx = Number(monthStr) - 1
+  const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
+  let attempts = 0
+  const maxAttempts = 60
 
-    while (attempts < maxAttempts) {
-      attempts++
-      if (direction === 'next') {
-        monthIdx++
-        if (monthIdx > 11) {
-          monthIdx = 0
-          year++
-        }
-      } else {
-        monthIdx--
-        if (monthIdx < 0) {
-          monthIdx = 11
-          year--
-        }
+  while (attempts < maxAttempts) {
+    attempts++
+    if (direction === 'next') {
+      monthIdx++
+      if (monthIdx > 11) {
+        monthIdx = 0
+        year++
       }
-
-      const monthName = monthNames[monthIdx]
-      const yearKey = year.toString()
-      if (!tickerChain[yearKey] || !tickerChain[yearKey][monthName]) continue
-
-      const strikes = tickerChain[yearKey][monthName]
-      const strike = opt.strike
-      const targetStrike = type === 'future'
-        ? strikes.find((s: number) => s > strike)
-        : [...strikes].reverse().find((s: number) => s < strike)
-
-      if (!targetStrike) continue
-
-      const expiry = getThirdFriday(year, monthIdx)
-      const symbol = getSymbolFromExpiryStrike(ticker, expiry, targetStrike)
-      const price = prices[ticker]?.[symbol]?.bid ?? 0
-
-      return {
-        label: `${monthName} ${String(year).slice(2)} C${targetStrike}`,
-        symbol,
-        expiry,
-        strike: targetStrike,
-        price,
+    } else {
+      monthIdx--
+      if (monthIdx < 0) {
+        monthIdx = 11
+        year--
       }
     }
 
-    // Fix: Alert se no scadenza disponibile
-    alert(`Nessuna scadenza ${direction === 'next' ? 'successiva' : 'precedente'} disponibile per ${ticker}.`);
-    return null
+    const monthName = monthNames[monthIdx]
+    const yearKey = year.toString()
+    if (!tickerChain[yearKey] || !tickerChain[yearKey][monthName]) continue
+
+    const strikes = tickerChain[yearKey][monthName]
+    if (strikes.length === 0) continue
+
+    const strike = opt.strike
+    let targetStrike: number | undefined
+
+    if (type === 'future') {
+      // Preferisci > strike, poi esatto, poi max disponibile
+      targetStrike = strikes.find((s: number) => s > strike) ||
+                     strikes.find((s: number) => s === strike) ||
+                     strikes[strikes.length - 1]
+    } else {
+      // Preferisci < strike (dal max descending), poi esatto, poi min disponibile
+      targetStrike = [...strikes].reverse().find((s: number) => s < strike) ||
+                     strikes.find((s: number) => s === strike) ||
+                     strikes[0]
+    }
+
+    // Se dopo fallback non c'è (impossibile se strikes>0), continua
+    if (!targetStrike) continue
+
+    const expiry = getThirdFriday(year, monthIdx)
+    const symbol = getSymbolFromExpiryStrike(ticker, expiry, targetStrike)
+    const price = prices[ticker]?.[symbol]?.bid ?? 0
+
+    return {
+      label: `${monthName} ${String(year).slice(2)} C${targetStrike}`,
+      symbol,
+      expiry,
+      strike: targetStrike,
+      price,
+    }
   }
+
+  // Alert solo se davvero nessuna scadenza con strikes trovata
+  alert(`Nessuna scadenza ${direction === 'next' ? 'successiva' : 'precedente'} disponibile per ${ticker}.`);
+  return null
+}
 
 const updateCurrentCall = async (ticker: string) => {
   const sel = selected[ticker] || { year: '', month: '', strike: null }
