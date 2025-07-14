@@ -432,7 +432,7 @@ export default function Page(): JSX.Element {
       }
     }
   }, [data, alertsEnabled])
-
+  
   useEffect(() => {
     setData(prev =>
       prev.map(item => {
