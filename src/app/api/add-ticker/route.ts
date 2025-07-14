@@ -25,17 +25,23 @@ export async function POST(req: Request) {
 
     const nextExpiry = normalizeExpiry(`${year}-${String(month + 1).padStart(2, '0')}`);
 
-    const { error } = await supabase.rpc('add_ticker_and_position', {
-      p_currentCallPrice: 0,
-      p_expiry: nextExpiry,
-      p_strike: 100,
-      p_ticker: ticker
-    });
+    const { error } = await supabase
+      .from('positions')
+      .insert([
+        {
+          ticker: ticker,
+          strike: 100,
+          expiry: nextExpiry,
+          currentCallPrice: 0
+        }
+      ]);
+
     if (error) {
       throw new Error(`Errore nel database: ${error.message}`);
     }
 
     return NextResponse.json({ success: true });
+
   } catch (err: any) {
     console.error('Errore in add-ticker:', {
       ticker,
