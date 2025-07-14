@@ -158,10 +158,24 @@ export async function GET() {
 
       async function findOption(expiry: string, strikeRef: number, higher: boolean) {
         const strikes = expiriesMap[expiry]
-        if (!strikes) return null
-        const filtered = strikes.filter(s => higher ? s > strikeRef : s < strikeRef)
-        if (!filtered.length) return null
-        const selectedStrike = higher ? filtered[0] : filtered[filtered.length - 1]
+        if (!strikes || strikes.length === 0) return null
+        
+        let selectedStrike: number | undefined
+        
+        if (higher) {
+          // Preferisci > strikeRef, poi esatto, poi max disponibile
+          selectedStrike = strikes.find((s: number) => s > strikeRef) ||
+                           strikes.find((s: number) => s === strikeRef) ||
+                           strikes[strikes.length - 1]
+        } else {
+          // Preferisci < strikeRef (dal max descending), poi esatto, poi min disponibile
+          selectedStrike = [...strikes].reverse().find((s: number) => s < strikeRef) ||
+                           strikes.find((s: number) => s === strikeRef) ||
+                           strikes[0]
+        }
+        
+        if (!selectedStrike) return null
+        
         const match = contracts.find(c => c.expiration_date === expiry && c.strike_price === selectedStrike)
         if (!match) return null
         const bid = await fetchBid(match.ticker)
@@ -179,6 +193,7 @@ export async function GET() {
       let earlier1: OptionEntry | null = null
       let earlier2: OptionEntry | null = null
 
+      // Per future: cerca la prima scadenza successiva con fallback
       for (let i = curIdx + 1; i < monthlyExpiries.length; i++) {
         const f1 = await findOption(monthlyExpiries[i], CURRENT_STRIKE, true)
         if (f1) { future1 = f1; break }
@@ -191,6 +206,7 @@ export async function GET() {
         }
       }
 
+      // Per earlier: cerca la prima scadenza precedente con fallback
       for (let i = curIdx - 1; i >= 0; i--) {
         const e1 = await findOption(monthlyExpiries[i], CURRENT_STRIKE, false)
         if (e1) { earlier1 = e1; break }
