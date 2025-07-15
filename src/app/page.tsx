@@ -73,6 +73,15 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
 }) => {
   const deltaPct = ((item.strike - item.spot) / item.spot) * 100
   const deltaColor = deltaPct < 4 ? 'text-red-500' : 'text-green-500'
+  let highlightClass = ''
+  let icon = ''
+  if (deltaPct < 4) {
+    highlightClass = 'font-bold animate-pulse text-red-400'
+    icon = '⚠️ '
+  } else if (deltaPct > 7) {
+    highlightClass = 'font-bold animate-pulse text-green-400'
+    icon = '⚠️ '
+  }
   const ticker = item.ticker
   const sel = selected[ticker] || { year: '', month: '', strike: null }
   const showDropdown = showDropdowns[ticker] || false
@@ -92,13 +101,22 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
           <button
             onClick={() => {
               setAlertsEnabled(prev => {
-                const next = { ...prev, [ticker]: !prev[ticker] }
+                const next = { ...prev, [ticker]: !prev[ticker] };
+                fetch('/api/alerts', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ ticker, enabled: next[ticker] }),
+                }).catch(err => console.error('Errore update alert:', err));
                 if (next[ticker]) {
                   const delta = Math.abs((item.strike - item.spot) / item.spot) * 100
                   const newSent: { [level: number]: boolean } = {}
                   const levels = [4, 3, 2, 1]
                   for (const level of levels) {
                     if (delta >= level) newSent[level] = true
+                  }
+                  const highLevels = [7, 8, 9, 10]
+                  for (const level of highLevels) {
+                    if (delta <= level) newSent[level] = true
                   }
                   sentAlerts.current[ticker] = newSent
                   sendTelegramMessage(`🔔 ALERT ATTIVATI – Ticker: ${item.ticker}`)
@@ -486,6 +504,18 @@ export default function Page(): JSX.Element {
       setTickers(json)
     } catch (err) {
       console.error('Errore fetch tickers', err)
+    }
+  };
+
+  const fetchAlerts = async () => {
+    try {
+      const res = await fetch('/api/alerts');
+      if (res.ok) {
+        const json = await res.json();
+        setAlertsEnabled(json);
+      }
+    } catch (err) {
+      console.error('Errore fetch alerts:', err);
     }
   };
 
@@ -967,6 +997,7 @@ export default function Page(): JSX.Element {
   useEffect(() => {
     fetchTickers()
     fetchData()
+    fetchAlerts()
   }, []);
 
   const addTicker = async () => {
@@ -1012,161 +1043,192 @@ export default function Page(): JSX.Element {
     return () => clearInterval(interval)
   }, [data]);
 
-  useEffect(() => {
-    data.forEach(item => {
-      if (!alertsEnabled[item.ticker]) return
-      const delta = Math.abs((item.strike - item.spot) / item.spot) * 100
-      const levels = [4, 3, 2, 1]
-      if (!sentAlerts.current[item.ticker]) sentAlerts.current[item.ticker] = {}
-      for (const level of levels) {
-        if (delta < level && !sentAlerts.current[item.ticker][level]) {
-          sentAlerts.current[item.ticker][level] = true
-          const alertMessage = `⚠️ ALERT ${level}% – ${item.ticker}\nStrike: ${item.strike}\nSpot: ${item.spot}\nDelta: ${delta.toFixed(2)}%`
-          sendTelegramMessage(alertMessage);
-        }
-      }
-    })
-  }, [data, alertsEnabled])
-
-  const isFattibile = (opt: OptionEntry, item: OptionData) => {
+useEffect(() => {
+  data.forEach(item => {
+    if (!alertsEnabled[item.ticker]) return
+    const delta = Math.abs((item.strike - item.spot) / item.spot) * 100
     const tickerPrices = prices[item.ticker] || {}
-    const optPriceData = tickerPrices[opt.symbol]
-    if (!optPriceData) return false
-    const optPrice = optPriceData.bid
-    return (
-      item.spot < opt.strike &&
-      opt.strike >= item.spot * 1.04 &&
-      optPrice >= item.currentCallPrice * 0.9
-    )
-  }
+    const currentSymbol = getSymbolFromExpiryStrike(item.ticker, item.expiry, item.strike)
+    const currentPrice = tickerPrices[currentSymbol]?.bid ?? tickerPrices[currentSymbol]?.last_trade_price ?? item.currentCallPrice
+    const [currYear, currMonth] = item.expiry.split('-')
+    const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
+    const currMonthIndex = Number(currMonth) - 1
+    const currMonthName = monthNames[currMonthIndex]
+    const currentLabel = `${currMonthName} ${currYear.slice(2)} C${item.strike}`
+    const levels = [4, 3, 2, 1]
+    if (!sentAlerts.current[item.ticker]) sentAlerts.current[item.ticker] = {}
+    for (const level of levels) {
+      if (delta < level && !sentAlerts.current[item.ticker][level]) {
+        sentAlerts.current[item.ticker][level] = true
+        const f1 = item.future[0] || { label: 'N/A', price: 0, symbol: '' }
+        const f2 = item.future[1] || { label: 'N/A', price: 0, symbol: '' }
+        const f1Price = tickerPrices[f1.symbol]?.bid ?? tickerPrices[f1.symbol]?.last_trade_price ?? f1.price
+        const f2Price = tickerPrices[f2.symbol]?.bid ?? tickerPrices[f2.symbol]?.last_trade_price ?? f2.price
+        const f1Label = f1.label.replace(/C(\d+)/, '$1 CALL')
+        const f2Label = f2.label.replace(/C(\d+)/, '$1 CALL')
+        const currLabelFormatted = currentLabel.replace(/C(\d+)/, '$1 CALL')
+        const alertMessage = `🔴 ${item.ticker} – DELTA: ${delta.toFixed(2)}%\nStrike: ${item.strike}\nSpot: ${item.spot}\nCurrent Call: ${currLabelFormatted} - ${currentPrice.toFixed(2)}\n\n#Future 1: ${f1Label} - ${f1Price.toFixed(2)}\n#Future 2: ${f2Label} - ${f2Price.toFixed(2)}`
+        sendTelegramMessage(alertMessage);
+      }
+    }
+    const highLevels = [7, 8, 9, 10]
+    for (const level of highLevels) {
+      if (delta > level && !sentAlerts.current[item.ticker][level]) {
+        sentAlerts.current[item.ticker][level] = true
+        const e1 = item.earlier[0] || { label: 'N/A', price: 0, symbol: '' }
+        const e2 = item.earlier[1] || { label: 'N/A', price: 0, symbol: '' }
+        const e1Price = tickerPrices[e1.symbol]?.bid ?? tickerPrices[e1.symbol]?.last_trade_price ?? e1.price
+        const e2Price = tickerPrices[e2.symbol]?.bid ?? tickerPrices[e2.symbol]?.last_trade_price ?? e2.price
+        const e1Label = e1.label.replace(/C(\d+)/, '$1 CALL')
+        const e2Label = e2.label.replace(/C(\d+)/, '$1 CALL')
+        const currLabelFormatted = currentLabel.replace(/C(\d+)/, '$1 CALL')
+        const alertMessage = `🟢 ${item.ticker} – DELTA: ${delta.toFixed(2)}%\nStrike: ${item.strike}\nSpot: ${item.spot}\nCurrent Call: ${currLabelFormatted} - ${currentPrice.toFixed(2)}\n\n#Earlier 1: ${e1Label} - ${e1Price.toFixed(2)}\n#Earlier 2: ${e2Label} - ${e2Price.toFixed(2)}`
+        sendTelegramMessage(alertMessage)
+      }
+    }
+  })
+})
 
+
+const isFattibile = (opt: OptionEntry, item: OptionData) => {
+  const tickerPrices = prices[item.ticker] || {}
+  const optPriceData = tickerPrices[opt.symbol]
+  if (!optPriceData) return false
+  const optPrice = optPriceData.bid
   return (
-    <>
-      {pendingRoll && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
-          <div className="bg-zinc-900 border border-zinc-700 text-white rounded-lg p-4 shadow-xl w-full max-w-xs">
-            <div className="text-lg font-semibold mb-3 text-center">⚠️ Sei sicuro di voler rollare?</div>
-            <div className="text-sm text-center mb-4 text-zinc-400">{pendingRoll.opt.label} - {pendingRoll.opt.expiry}</div>
-            <div className="flex justify-between gap-3">
-              <button
-                onClick={() => setPendingRoll(null)}
-                className="flex-1 bg-red-700 hover:bg-red-800 text-white py-1 rounded"
-              >
-                ❌ No
-              </button>
-              <button
-                onClick={async () => {
-                  await handleRollaClick(pendingRoll.ticker, pendingRoll.opt)
-                  setPendingRoll(null)
-                }}
-                className="flex-1 bg-green-700 hover:bg-green-800 text-white py-1 rounded"
-              >
-                ✅ Sì
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="min-h-screen bg-black text-white p-2 flex flex-col gap-4 text-sm leading-tight">
-        <div className="p-2 bg-zinc-900 rounded mb-2">
-          <input value={newTicker} onChange={e => setNewTicker(e.target.value.toUpperCase())} placeholder="Aggiungi ticker (es. AAPL)" className="bg-zinc-800 text-white p-1" />
-          <button onClick={addTicker} className="bg-green-700 text-white px-2 py-1 rounded ml-2">Aggiungi</button>
-          <div className="mt-2">
-            Tickers attuali: {tickers.map(t => <span key={t} className="mr-2">{t} <button onClick={() => removeTicker(t)} className="text-red-500">X</button></span>)}
-          </div>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-          {data.map((item: OptionData, index: number) => {
-            if (item.invalid) {
-              const ticker = item.ticker
-              const sel = selected[ticker] || { year: '', month: '', strike: null }
-              const showDropdown = showDropdowns[ticker] || false
-              const tickerChain = chain[ticker] || {}
-              return (
-                <div key={index} className="bg-red-800 text-white rounded-lg p-4 shadow-md flex flex-col gap-2">
-                  <div className="font-bold text-lg">⚠️ Errore caricamento CALL per {ticker}</div>
-                  <div>La call corrente salvata su Supabase non è più disponibile o ha dati errati.</div>
-                  <button
-                    onClick={() => setShowDropdowns(prev => ({ ...prev, [ticker]: true }))}
-                    className="bg-yellow-500 hover:bg-yellow-600 text-black font-bold py-1 px-2 rounded w-fit"
-                  >
-                    📂 Seleziona nuova call
-                  </button>
-                  {showDropdown && (
-                    <div className="grid grid-cols-3 gap-2">
-                      <select
-                        value={sel.year}
-                        onChange={e => setSelected(prev => ({ ...prev, [ticker]: { ...sel, year: e.target.value, month: '', strike: null } }))}
-                        className="bg-zinc-800 text-white p-1"
-                      >
-                        <option value="">Anno</option>
-                        {Object.keys(tickerChain).map(y => <option key={y} value={y}>{y}</option>)}
-                      </select>
-                      {Object.keys(tickerChain).length === 0 && (
-                        <div className="col-span-3 text-red-500 text-xs mt-1">
-                          Nessuna scadenza disponibile. Verifica console per errori o se il ticker ha opzioni (es. usa 'AMZN' per Amazon). Prova a rimuovere e riaggiungere il ticker.
-                        </div>
-                      )}
-                      <select
-                        value={sel.month}
-                        onChange={e => setSelected(prev => ({ ...prev, [ticker]: { ...sel, month: e.target.value, strike: null } }))}
-                        className="bg-zinc-800 text-white p-1"
-                        disabled={!sel.year}
-                      >
-                        <option value="">Mese</option>
-                        {sel.year && Object.keys(tickerChain[sel.year] || {}).map(m => <option key={m} value={m}>{m}</option>)}
-                      </select>
-                      <select
-                        value={sel.strike ?? ''}
-                        onChange={e => setSelected(prev => ({ ...prev, [ticker]: { ...sel, strike: Number(e.target.value) } }))}
-                        className="bg-zinc-800 text-white p-1"
-                        disabled={!sel.month}
-                      >
-                        <option value="">Strike</option>
-                        {sel.year && sel.month && (tickerChain[sel.year]?.[sel.month] || []).map(s => (
-                          <option key={s} value={s}>{s}</option>
-                        ))}
-                      </select>
-                      <button
-                        onClick={() => updateCurrentCall(ticker)}
-                        className="col-span-3 mt-1 bg-green-700 hover:bg-green-800 text-white text-xs font-medium px-2 py-1 rounded"
-                      >
-                        ✔️ Conferma nuova CALL
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )
-            }
-
-            return (
-              <MemoizedTickerCard
-                key={index}
-                item={item}
-                prices={prices}
-                isFattibile={isFattibile}
-                setPendingRoll={setPendingRoll}
-                selected={selected}
-                setSelected={setSelected}
-                showDropdowns={showDropdowns}
-                setShowDropdowns={setShowDropdowns}
-                alertsEnabled={alertsEnabled}
-                setAlertsEnabled={setAlertsEnabled}
-                sentAlerts={sentAlerts}
-                chain={chain}
-                updateCurrentCall={updateCurrentCall}
-                handleRollaClick={handleRollaClick}
-                shiftExpiryByMonth={shiftExpiryByMonth}
-                getSymbolFromExpiryStrike={getSymbolFromExpiryStrike}
-                getThirdFriday={getThirdFriday}
-                data={data}
-                setData={setData}
-                setChain={setChain}
-              />
-            )
-          })}
-        </div>      </div>
-    </>
+    item.spot < opt.strike &&
+    opt.strike >= item.spot * 1.04 &&
+    optPrice >= item.currentCallPrice * 0.9
   )
+}
+
+return (
+  <>
+    {pendingRoll && (
+      <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+        <div className="bg-zinc-900 border border-zinc-700 text-white rounded-lg p-4 shadow-xl w-full max-w-xs">
+          <div className="text-lg font-semibold mb-3 text-center">⚠️ Sei sicuro di voler rollare?</div>
+          <div className="text-sm text-center mb-4 text-zinc-400">{pendingRoll.opt.label} - {pendingRoll.opt.expiry}</div>
+          <div className="flex justify-between gap-3">
+            <button
+              onClick={() => setPendingRoll(null)}
+              className="flex-1 bg-red-700 hover:bg-red-800 text-white py-1 rounded"
+            >
+              ❌ No
+            </button>
+            <button
+              onClick={async () => {
+                await handleRollaClick(pendingRoll.ticker, pendingRoll.opt)
+                setPendingRoll(null)
+              }}
+              className="flex-1 bg-green-700 hover:bg-green-800 text-white py-1 rounded"
+            >
+              ✅ Sì
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    <div className="min-h-screen bg-black text-white p-2 flex flex-col gap-4 text-sm leading-tight">
+      <div className="p-2 bg-zinc-900 rounded mb-2">
+        <input value={newTicker} onChange={e => setNewTicker(e.target.value.toUpperCase())} placeholder="Aggiungi ticker (es. AAPL)" className="bg-zinc-800 text-white p-1" />
+        <button onClick={addTicker} className="bg-green-700 text-white px-2 py-1 rounded ml-2">Aggiungi</button>
+        <div className="mt-2">
+          Tickers attuali: {tickers.map(t => <span key={t} className="mr-2">{t} <button onClick={() => removeTicker(t)} className="text-red-500">X</button></span>)}
+        </div>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+        {data.map((item: OptionData, index: number) => {
+          if (item.invalid) {
+            const ticker = item.ticker
+            const sel = selected[ticker] || { year: '', month: '', strike: null }
+            const showDropdown = showDropdowns[ticker] || false
+            const tickerChain = chain[ticker] || {}
+            return (
+              <div key={index} className="bg-red-800 text-white rounded-lg p-4 shadow-md flex flex-col gap-2">
+                <div className="font-bold text-lg">⚠️ Errore caricamento CALL per {ticker}</div>
+                <div>La call corrente salvata su Supabase non è più disponibile o ha dati errati.</div>
+                <button
+                  onClick={() => setShowDropdowns(prev => ({ ...prev, [ticker]: true }))}
+                  className="bg-yellow-500 hover:bg-yellow-600 text-black font-bold py-1 px-2 rounded w-fit"
+                >
+                  📂 Seleziona nuova call
+                </button>
+                {showDropdown && (
+                  <div className="grid grid-cols-3 gap-2">
+                    <select
+                      value={sel.year}
+                      onChange={e => setSelected(prev => ({ ...prev, [ticker]: { ...sel, year: e.target.value, month: '', strike: null } }))}
+                      className="bg-zinc-800 text-white p-1"
+                    >
+                      <option value="">Anno</option>
+                      {Object.keys(tickerChain).map(y => <option key={y} value={y}>{y}</option>)}
+                    </select>
+                    {Object.keys(tickerChain).length === 0 && (
+                      <div className="col-span-3 text-red-500 text-xs mt-1">
+                        Nessuna scadenza disponibile. Verifica console per errori o se il ticker ha opzioni (es. usa 'AMZN' per Amazon). Prova a rimuovere e riaggiungere il ticker.
+                      </div>
+                    )}
+                    <select
+                      value={sel.month}
+                      onChange={e => setSelected(prev => ({ ...prev, [ticker]: { ...sel, month: e.target.value, strike: null } }))}
+                      className="bg-zinc-800 text-white p-1"
+                      disabled={!sel.year}
+                    >
+                      <option value="">Mese</option>
+                      {sel.year && Object.keys(tickerChain[sel.year] || {}).map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                    <select
+                      value={sel.strike ?? ''}
+                      onChange={e => setSelected(prev => ({ ...prev, [ticker]: { ...sel, strike: Number(e.target.value) } }))}
+                      className="bg-zinc-800 text-white p-1"
+                      disabled={!sel.month}
+                    >
+                      <option value="">Strike</option>
+                      {sel.year && sel.month && (tickerChain[sel.year]?.[sel.month] || []).map(s => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={() => updateCurrentCall(ticker)}
+                      className="col-span-3 mt-1 bg-green-700 hover:bg-green-800 text-white text-xs font-medium px-2 py-1 rounded"
+                    >
+                      ✔️ Conferma nuova CALL
+                    </button>
+                  </div>
+                )}
+              </div>
+            )
+          }
+
+          return (
+            <MemoizedTickerCard
+              key={index}
+              item={item}
+              prices={prices}
+              isFattibile={isFattibile}
+              setPendingRoll={setPendingRoll}
+              selected={selected}
+              setSelected={setSelected}
+              showDropdowns={showDropdowns}
+              setShowDropdowns={setShowDropdowns}
+              alertsEnabled={alertsEnabled}
+              setAlertsEnabled={setAlertsEnabled}
+              sentAlerts={sentAlerts}
+              chain={chain}
+              updateCurrentCall={updateCurrentCall}
+              handleRollaClick={handleRollaClick}
+              shiftExpiryByMonth={shiftExpiryByMonth}
+              getSymbolFromExpiryStrike={getSymbolFromExpiryStrike}
+              getThirdFriday={getThirdFriday}
+              data={data}
+              setData={setData}
+              setChain={setChain}
+            />
+          )
+        })}
+      </div>      </div>
+  </>
+)
 }
