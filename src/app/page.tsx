@@ -187,17 +187,17 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
         </div>
       )}
       <div className="grid grid-cols-2 gap-1 mb-2">
-        <div className="p-1 bg-blue-700 font-bold">Spot</div>
-        <div className="p-1 bg-blue-700 transition-all duration-300">{item.spot.toFixed(2)}</div>
-        <div className="p-1 bg-blue-700 font-bold">Strike</div>
-        <div className="p-1 bg-blue-700 transition-all duration-300">{item.strike.toFixed(2)}</div>
-        <div className="p-1 bg-blue-700 font-bold">Scadenza</div>
-        <div className="p-1 bg-blue-700 transition-all duration-300">{item.expiry}</div>
-        <div className="p-1 bg-blue-700 font-bold">Δ% Strike/Spot</div>
+        <div className="p-1 bg-[rgba(70,120,240,0.8)] font-bold">Spot</div>
+        <div className="p-1 bg-[rgba(70,120,240,0.8)] transition-all duration-300">{item.spot.toFixed(2)}</div>
+        <div className="p-1 bg-[rgba(70,120,240,0.8)] font-bold">Strike</div>
+        <div className="p-1 bg-[rgba(70,120,240,0.8)] transition-all duration-300">{item.strike.toFixed(2)}</div>
+        <div className="p-1 bg-[rgba(70,120,240,0.8)] font-bold">Scadenza</div>
+        <div className="p-1 bg-[rgba(70,120,240,0.8)] transition-all duration-300">{item.expiry}</div>
+        <div className="p-1 bg-[rgba(70,120,240,0.8)] font-bold">Δ% Strike/Spot</div>
         <div className={`p-1 transition-all duration-300 ${deltaColor} ${deltaPct < 4 ? 'font-bold animate-pulse text-red-400' : ''}`}>
           {deltaPct < 4 ? '⚠️ ' : ''}{deltaPct.toFixed(2)}% </div>
-        <div className="p-1 bg-blue-700 font-bold">Prezzo Call attuale</div>
-        <div className="p-1 bg-blue-700 transition-all duration-300">{priceToShow.toFixed(2)}</div>
+        <div className="p-1 bg-[rgba(70,120,240,0.8)] font-bold">Prezzo Call attuale</div>
+        <div className="p-1 bg-[rgba(70,120,240,0.8)] transition-all duration-300">{priceToShow.toFixed(2)}</div>
       </div>
       <div className="mb-1 font-semibold bg-gray-800 text-orange-500 text-center rounded py-0.5">Future</div>
       {item.future.map((opt, i) => {
