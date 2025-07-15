@@ -1067,7 +1067,7 @@ useEffect(() => {
         const f1Label = f1.label.replace(/C(\d+)/, '$1 CALL')
         const f2Label = f2.label.replace(/C(\d+)/, '$1 CALL')
         const currLabelFormatted = currentLabel.replace(/C(\d+)/, '$1 CALL')
-        const alertMessage = `🔴 ${item.ticker} – DELTA: ${delta.toFixed(2)}%\nStrike: ${item.strike}\nSpot: ${item.spot}\nCurrent Call: ${currLabelFormatted} - ${currentPrice.toFixed(2)}\n\n#Future 1: ${f1Label} - ${f1Price.toFixed(2)}\n#Future 2: ${f2Label} - ${f2Price.toFixed(2)}`
+        const alertMessage = `🔴 ${item.ticker} – DELTA: ${delta.toFixed(2)}%\n\nStrike: ${item.strike}\nSpot: ${item.spot}\nCurrent Call: ${currLabelFormatted} - ${currentPrice.toFixed(2)}\n\n#Future 1: ${f1Label} - ${f1Price.toFixed(2)}\n#Future 2: ${f2Label} - ${f2Price.toFixed(2)}`
         sendTelegramMessage(alertMessage);
       }
     }
@@ -1082,7 +1082,7 @@ useEffect(() => {
         const e1Label = e1.label.replace(/C(\d+)/, '$1 CALL')
         const e2Label = e2.label.replace(/C(\d+)/, '$1 CALL')
         const currLabelFormatted = currentLabel.replace(/C(\d+)/, '$1 CALL')
-        const alertMessage = `🟢 ${item.ticker} – DELTA: ${delta.toFixed(2)}%\nStrike: ${item.strike}\nSpot: ${item.spot}\nCurrent Call: ${currLabelFormatted} - ${currentPrice.toFixed(2)}\n\n#Earlier 1: ${e1Label} - ${e1Price.toFixed(2)}\n#Earlier 2: ${e2Label} - ${e2Price.toFixed(2)}`
+        const alertMessage = `🟢 ${item.ticker} – DELTA: ${delta.toFixed(2)}%\n\nStrike: ${item.strike}\nSpot: ${item.spot}\nCurrent Call: ${currLabelFormatted} - ${currentPrice.toFixed(2)}\n\n#Earlier 1: ${e1Label} - ${e1Price.toFixed(2)}\n#Earlier 2: ${e2Label} - ${e2Price.toFixed(2)}`
         sendTelegramMessage(alertMessage)
       }
     }
