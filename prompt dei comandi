@@ -2,6 +2,6 @@ cd C:\Users\Umberto/option-monitor-app
 
 git add .
 
-git commit -m "fix: corregge selezione dinamica delle opzioni future e earlier con scadenze non consecutive"
+git commit -m "fix: colori"
 
 git push origin main

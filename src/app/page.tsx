@@ -85,7 +85,7 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
   const priceToShow = ask > 0 ? ask : (last_trade_price > 0 ? last_trade_price : item.currentCallPrice)
 
   return (
-    <div className="bg-zinc-900 border border-zinc-800 shadow-md rounded-lg p-3">
+    <div className="bg-zinc-900 border border-red-500 shadow-md rounded-lg p-3">
       <div className="flex justify-between items-center mb-1">
         <h2 className="text-base font-bold text-red-500">{item.ticker}</h2>
         <div className="flex items-center gap-2">
