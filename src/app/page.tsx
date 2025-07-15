@@ -194,11 +194,12 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
         <div className="p-1 bg-blue-700 font-bold">Scadenza</div>
         <div className="p-1 bg-blue-700 transition-all duration-300">{item.expiry}</div>
         <div className="p-1 bg-blue-700 font-bold">Δ% Strike/Spot</div>
-        <div className={`p-1 transition-all duration-300 ${deltaColor}`}>{deltaPct.toFixed(2)}%</div>
+        <div className={`p-1 transition-all duration-300 ${deltaColor} ${deltaPct < 0 ? 'font-bold animate-pulse text-red-400' : ''}`}>
+          {deltaPct < 0 ? '⚠️ ' : ''}{deltaPct.toFixed(2)}% </div>
         <div className="p-1 bg-blue-700 font-bold">Prezzo Call attuale</div>
         <div className="p-1 bg-blue-700 transition-all duration-300">{priceToShow.toFixed(2)}</div>
       </div>
-      <div className="mb-1 font-semibold bg-orange-500 text-white text-center rounded py-0.5">Future</div>
+      <div className="mb-1 font-semibold bg-gray-800 text-orange-500 text-center rounded py-0.5">Future</div>
       {item.future.map((opt, i) => {
         const optPriceData = tickerPrices[opt.symbol]
         const bid = tickerPrices[opt.symbol]?.bid ?? 0
@@ -329,7 +330,7 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
           </div>
         )
       })}
-      <div className="mb-1 font-semibold bg-orange-500 text-white text-center rounded py-0.5">Earlier</div>
+      <div className="mb-1 font-semibold bg-gray-800 text-orange-500 text-center rounded py-0.5">Earlier</div>
       {item.earlier.map((opt, i) => {
         const optPriceData = tickerPrices[opt.symbol]
         const bid = tickerPrices[opt.symbol]?.bid ?? 0
