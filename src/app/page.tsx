@@ -194,8 +194,8 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
         <div className="p-1 bg-blue-700 font-bold">Scadenza</div>
         <div className="p-1 bg-blue-700 transition-all duration-300">{item.expiry}</div>
         <div className="p-1 bg-blue-700 font-bold">Δ% Strike/Spot</div>
-        <div className={`p-1 transition-all duration-300 ${deltaColor} ${deltaPct < 0 ? 'font-bold animate-pulse text-red-400' : ''}`}>
-          {deltaPct < 0 ? '⚠️ ' : ''}{deltaPct.toFixed(2)}% </div>
+        <div className={`p-1 transition-all duration-300 ${deltaColor} ${deltaPct < 4 ? 'font-bold animate-pulse text-red-400' : ''}`}>
+          {deltaPct < 4 ? '⚠️ ' : ''}{deltaPct.toFixed(2)}% </div>
         <div className="p-1 bg-blue-700 font-bold">Prezzo Call attuale</div>
         <div className="p-1 bg-blue-700 transition-all duration-300">{priceToShow.toFixed(2)}</div>
       </div>
