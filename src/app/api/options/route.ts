@@ -4,7 +4,6 @@ import { createClient } from '@supabase/supabase-js'
 const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!)
 
 const POLYGON_API_KEY = process.env.POLYGON_API_KEY!
-const ALPHA_VANTAGE_API_KEY = process.env.ALPHA_VANTAGE_API_KEY!
 const CONTRACTS_URL = 'https://api.polygon.io/v3/reference/options/contracts'
 
 function isThirdFriday(dateStr: string): boolean {
@@ -64,11 +63,11 @@ async function fetchAsk(symbol: string): Promise<number | null> {
   return json?.results?.last_quote?.ask ?? null
 }
 
-async function fetchSpotAlphaVantage(ticker: string): Promise<number> {
-  const res: Response = await fetch(`https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${ticker}&apikey=${ALPHA_VANTAGE_API_KEY}`)
+async function fetchSpot(ticker: string): Promise<number> {
+  const res: Response = await fetch(`https://api.polygon.io/v2/last/trade/${ticker}?apiKey=${POLYGON_API_KEY}`)
   if (!res.ok) throw new Error(`Errore fetch spot per ${ticker}`)
   const json: any = await res.json()
-  return parseFloat(json?.["Global Quote"]?.["05. price"] ?? '0')
+  return json?.results?.p ?? 0
 }
 
 function buildExpiriesMap(contracts: any[]) {
@@ -149,7 +148,7 @@ export async function GET() {
         continue
       }
 
-      const spot = await fetchSpotAlphaVantage(ticker)
+      const spot = await fetchSpot(ticker)
       const currentCallPrice = (await fetchAsk(current.ticker)) ?? 0
 
       const expiriesMap = buildExpiriesMap(contracts)
@@ -159,23 +158,23 @@ export async function GET() {
       async function findOption(expiry: string, strikeRef: number, higher: boolean) {
         const strikes = expiriesMap[expiry]
         if (!strikes || strikes.length === 0) return null
-
+        
         let selectedStrike: number | undefined
-
+        
         if (higher) {
           // Preferisci > strikeRef, poi esatto, poi max disponibile
           selectedStrike = strikes.find((s: number) => s > strikeRef) ||
-            strikes.find((s: number) => s === strikeRef) ||
-            strikes[strikes.length - 1]
+                           strikes.find((s: number) => s === strikeRef) ||
+                           strikes[strikes.length - 1]
         } else {
           // Preferisci < strikeRef (dal max descending), poi esatto, poi min disponibile
           selectedStrike = [...strikes].reverse().find((s: number) => s < strikeRef) ||
-            strikes.find((s: number) => s === strikeRef) ||
-            strikes[0]
+                           strikes.find((s: number) => s === strikeRef) ||
+                           strikes[0]
         }
-
+        
         if (!selectedStrike) return null
-
+        
         const match = contracts.find(c => c.expiration_date === expiry && c.strike_price === selectedStrike)
         if (!match) return null
         const bid = await fetchBid(match.ticker)
@@ -226,9 +225,9 @@ export async function GET() {
         expiry: CURRENT_EXPIRY,
         currentCallPrice,
         future: [future1 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '', symbol: '' },
-        future2 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '', symbol: '' }],
+                 future2 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '', symbol: '' }],
         earlier: [earlier1 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '', symbol: '' },
-        earlier2 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '', symbol: '' }]
+                  earlier2 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '', symbol: '' }]
       })
     }
     for (const item of output) {
