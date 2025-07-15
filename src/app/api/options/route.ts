@@ -159,23 +159,23 @@ export async function GET() {
       async function findOption(expiry: string, strikeRef: number, higher: boolean) {
         const strikes = expiriesMap[expiry]
         if (!strikes || strikes.length === 0) return null
-        
+
         let selectedStrike: number | undefined
-        
+
         if (higher) {
           // Preferisci > strikeRef, poi esatto, poi max disponibile
           selectedStrike = strikes.find((s: number) => s > strikeRef) ||
-                           strikes.find((s: number) => s === strikeRef) ||
-                           strikes[strikes.length - 1]
+            strikes.find((s: number) => s === strikeRef) ||
+            strikes[strikes.length - 1]
         } else {
           // Preferisci < strikeRef (dal max descending), poi esatto, poi min disponibile
           selectedStrike = [...strikes].reverse().find((s: number) => s < strikeRef) ||
-                           strikes.find((s: number) => s === strikeRef) ||
-                           strikes[0]
+            strikes.find((s: number) => s === strikeRef) ||
+            strikes[0]
         }
-        
+
         if (!selectedStrike) return null
-        
+
         const match = contracts.find(c => c.expiration_date === expiry && c.strike_price === selectedStrike)
         if (!match) return null
         const bid = await fetchBid(match.ticker)
@@ -226,12 +226,23 @@ export async function GET() {
         expiry: CURRENT_EXPIRY,
         currentCallPrice,
         future: [future1 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '', symbol: '' },
-                 future2 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '', symbol: '' }],
+        future2 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '', symbol: '' }],
         earlier: [earlier1 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '', symbol: '' },
-                  earlier2 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '', symbol: '' }]
+        earlier2 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '', symbol: '' }]
       })
     }
+    for (const item of output) {
+      const { data: stateData, error: stateError } = await supabase
+        .from('option_states')
+        .select('state')
+        .eq('ticker', item.ticker)
+        .single();
 
+      if (!stateError && stateData) {
+        item.future = stateData.state.future || item.future;
+        item.earlier = stateData.state.earlier || item.earlier;
+      }
+    }
     return NextResponse.json(output)
   } catch (err: any) {
     console.error('❌ Errore /api/options:', err.message)

@@ -231,7 +231,7 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
           <div key={i} className="flex items-center justify-between mb-1">
             <span className="flex items-center gap-1">
               {isFattibile(opt, item) && (
-                <span className="text-green-400" title="Fattibile: strike ≥ spot + 4%, prezzo ≥ 90% del prezzo call attuale">🟢</span>
+                <span className="text-green-400" title="Fattibile: strike ≥ spot + 4%, prezzo ≥ 98% del prezzo call attuale">🟢</span>
               )}
               <span title={opt.expiry}>
                 {opt.label} - {optPrice.toFixed(2)} /
@@ -272,6 +272,16 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
                   const itemIdx = updatedData.findIndex(d => d.ticker === item.ticker)
                   updatedData[itemIdx].future[i] = updatedOpt
                   setData(updatedData)
+
+                  fetch('/api/save-state', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      ticker: item.ticker,
+                      future: updatedData[itemIdx].future,
+                      earlier: updatedData[itemIdx].earlier
+                    })
+                  }).catch(err => console.error('Errore salvataggio stato:', err));
                 }}
               >
                 🔼
@@ -298,6 +308,16 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
                   const itemIdx = updatedData.findIndex(d => d.ticker === item.ticker)
                   updatedData[itemIdx].future[i] = updatedOpt
                   setData(updatedData)
+
+                  fetch('/api/save-state', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      ticker: item.ticker,
+                      future: updatedData[itemIdx].future,
+                      earlier: updatedData[itemIdx].earlier
+                    })
+                  }).catch(err => console.error('Errore salvataggio stato:', err));
                 }}
               >
                 🔽
@@ -319,6 +339,16 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
                   const itemIdx = updatedData.findIndex(d => d.ticker === item.ticker)
                   updatedData[itemIdx].future[i] = updatedOpt
                   setData(updatedData)
+
+                  fetch('/api/save-state', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      ticker: item.ticker,
+                      future: updatedData[itemIdx].future,
+                      earlier: updatedData[itemIdx].earlier
+                    })
+                  }).catch(err => console.error('Errore salvataggio stato:', err));
                 }}
               >
                 ◀️
@@ -340,6 +370,16 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
                   const itemIdx = updatedData.findIndex(d => d.ticker === item.ticker)
                   updatedData[itemIdx].future[i] = updatedOpt
                   setData(updatedData)
+
+                  fetch('/api/save-state', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      ticker: item.ticker,
+                      future: updatedData[itemIdx].future,
+                      earlier: updatedData[itemIdx].earlier
+                    })
+                  }).catch(err => console.error('Errore salvataggio stato:', err));
                 }}
               >
                 ▶️
@@ -362,7 +402,7 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
           <div key={i} className="flex items-center justify-between mb-1">
             <span className="flex items-center gap-1">
               {isFattibile(opt, item) && (
-                <span className="text-green-400" title="Fattibile: strike ≥ spot + 4%, prezzo ≥ 90% del prezzo call attuale">🟢</span>
+                <span className="text-green-400" title="Fattibile: strike ≥ spot + 4%, prezzo ≥ 98% del prezzo call attuale">🟢</span>
               )}
               <span title={opt.expiry}>
                 {opt.label} - {optPrice.toFixed(2)} /
@@ -758,12 +798,12 @@ export default function Page(): JSX.Element {
         }
       }
 
-      // Earlier: Collect up to 2 earlier months
+      // Earlier: Collect 1 earlier month
       monthIdx = monthIndex
       year = Number(sel.year)
       const allEarlierMonths: { monthIdx: number, year: number }[] = []
-      attempts = 0 // Reset attempts
-      while (allEarlierMonths.length < 2 && attempts < maxAttempts) {
+      attempts = 0
+      while (allEarlierMonths.length < 1 && attempts < maxAttempts) {
         attempts++
         monthIdx--
         if (monthIdx < 0) {
@@ -776,33 +816,47 @@ export default function Page(): JSX.Element {
           allEarlierMonths.push({ monthIdx, year });
         }
       }
-      allEarlierMonths.reverse(); // Da più recente a vecchia per prendere le 2 più vicine
-      for (let i = 0; i < Math.min(2, allEarlierMonths.length); i++) {
-        const { monthIdx, year } = allEarlierMonths[i]
+      // No reverse needed
+      if (allEarlierMonths.length > 0) {
+        const { monthIdx, year } = allEarlierMonths[0]
         const earlierMonth = monthNames[monthIdx]
         const eStrikeList = tickerChain[year.toString()]?.[earlierMonth] || []
-        let eStrike = [...eStrikeList].reverse().find((s: number) => s < sel.strike!)
-        if (!eStrike && eStrikeList.length > 0) {
-          eStrike = eStrikeList[0]; // Fallback alla prima disponibile
-        }
-        if (eStrike) {
+        let eStrike1 = [...eStrikeList].reverse().find((s: number) => s < sel.strike!)
+        if (!eStrike1 && eStrikeList.length > 0) eStrike1 = eStrikeList[0];
+        if (eStrike1) {
           const expiry = getThirdFriday(year, monthIdx)
-          const symbol = getSymbolFromExpiryStrike(item.ticker, expiry, eStrike)
+          const symbol = getSymbolFromExpiryStrike(item.ticker, expiry, eStrike1)
           if (symbol && symbol.trim() !== '') {
             const price = prices[item.ticker]?.[symbol]?.bid ?? 0
             earlier.push({
-              label: `${earlierMonth} ${String(year).slice(2)} C${eStrike}`,
+              label: `${earlierMonth} ${String(year).slice(2)} C${eStrike1}`,
               symbol,
-              strike: eStrike,
+              strike: eStrike1,
               price,
               expiry
             })
-          } else {
-            console.warn(`Invalid symbol generated for earlier of ${ticker}: ${symbol}`);
+          }
+        }
+        // Second strike on same expiry, < eStrike1
+        if (earlier.length > 0) {
+          let eStrike2 = [...eStrikeList].reverse().find((s: number) => s < eStrike1!)
+          if (!eStrike2 && eStrikeList.length > 1) eStrike2 = eStrikeList[0]; // Fallback min if no lower
+          if (eStrike2 && eStrike2 !== eStrike1) {
+            const expiry = getThirdFriday(year, monthIdx)
+            const symbol = getSymbolFromExpiryStrike(item.ticker, expiry, eStrike2)
+            if (symbol && symbol.trim() !== '') {
+              const price = prices[item.ticker]?.[symbol]?.bid ?? 0
+              earlier.push({
+                label: `${earlierMonth} ${String(year).slice(2)} C${eStrike2}`,
+                symbol,
+                strike: eStrike2,
+                price,
+                expiry
+              })
+            }
           }
         }
       }
-
       // Fallback if incomplete (per chain limitata)
       if (future.length < 2 || earlier.length < 2) {
         console.warn(`Incomplete future/earlier for ${ticker} after update - added ${future.length} future, ${earlier.length} earlier`);
@@ -825,6 +879,16 @@ export default function Page(): JSX.Element {
     setData(updatedData)
     setSelected(prev => ({ ...prev, [ticker]: { year: '', month: '', strike: null } }))
     setShowDropdowns(prev => ({ ...prev, [ticker]: false }))
+
+    fetch('/api/save-state', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ticker,
+        future: updatedData.find(d => d.ticker === ticker)?.future || [],
+        earlier: updatedData.find(d => d.ticker === ticker)?.earlier || []
+      })
+    }).catch(err => console.error('Errore salvataggio stato:', err));
 
     const currentSymbol = getSymbolFromExpiryStrike(ticker, expiryDate, sel.strike!)
     const currentCallPrice = prices[ticker]?.[currentSymbol]?.ask ?? 0
@@ -909,17 +973,17 @@ export default function Page(): JSX.Element {
         }
       }
 
-      // Earlier: Collect up to 2 earlier months
+      // Earlier: Collect 1 earlier month
       monthIdx = selectedMonthIndex
       year = Number(selectedYear)
       const allEarlierMonths: { monthIdx: number, year: number }[] = []
       attempts = 0 // Reset
-      while (allEarlierMonths.length < 2 && attempts < maxAttempts) {
+      while (allEarlierMonths.length < 1 && attempts < maxAttempts) {
         attempts++
         monthIdx--
         if (monthIdx < 0) {
-          year--
           monthIdx = 11
+          year--
         }
         const earlierMonth = monthNames[monthIdx]
         const eStrikeList = tickerChain[year.toString()]?.[earlierMonth] || []
@@ -927,33 +991,50 @@ export default function Page(): JSX.Element {
           allEarlierMonths.push({ monthIdx, year });
         }
       }
-      allEarlierMonths.reverse();
-      for (let i = 0; i < Math.min(2, allEarlierMonths.length); i++) {
-        const { monthIdx, year } = allEarlierMonths[i]
+      if (allEarlierMonths.length > 0) {
+        const { monthIdx, year } = allEarlierMonths[0]
         const earlierMonth = monthNames[monthIdx]
         const eStrikeList = tickerChain[year.toString()]?.[earlierMonth] || []
-        let eStrike = [...eStrikeList].reverse().find((s: number) => s < selectedStrike)
-        if (!eStrike && eStrikeList.length > 0) {
-          eStrike = eStrikeList[0];
+        let eStrike1 = [...eStrikeList].reverse().find((s: number) => s < selectedStrike)
+        if (!eStrike1 && eStrikeList.length > 0) {
+          eStrike1 = eStrikeList[0];
         }
-        if (eStrike) {
+        if (eStrike1) {
           const expiry = getThirdFriday(year, monthIdx)
-          const symbol = getSymbolFromExpiryStrike(item.ticker, expiry, eStrike)
+          const symbol = getSymbolFromExpiryStrike(item.ticker, expiry, eStrike1)
           if (symbol && symbol.trim() !== '') {
             const price = prices[item.ticker]?.[symbol]?.bid ?? 0
             earlier.push({
-              label: `${earlierMonth} ${String(year).slice(2)} C${eStrike}`,
+              label: `${earlierMonth} ${String(year).slice(2)} C${eStrike1}`,
               symbol,
-              strike: eStrike,
+              strike: eStrike1,
               price,
               expiry
             })
-          } else {
-            console.warn(`Invalid symbol generated for earlier of ${ticker}: ${symbol}`);
+          }
+        }
+        // Second strike on same expiry, < eStrike1
+        if (earlier.length > 0) {
+          let eStrike2 = [...eStrikeList].reverse().find((s: number) => s < eStrike1!)
+          if (!eStrike2 && eStrikeList.length > 1) {
+            eStrike2 = eStrikeList[0];
+          }
+          if (eStrike2 && eStrike2 !== eStrike1) {
+            const expiry = getThirdFriday(year, monthIdx)
+            const symbol = getSymbolFromExpiryStrike(item.ticker, expiry, eStrike2)
+            if (symbol && symbol.trim() !== '') {
+              const price = prices[item.ticker]?.[symbol]?.bid ?? 0
+              earlier.push({
+                label: `${earlierMonth} ${String(year).slice(2)} C${eStrike2}`,
+                symbol,
+                strike: eStrike2,
+                price,
+                expiry
+              })
+            }
           }
         }
       }
-
       // Fallback if incomplete
       if (future.length < 2 || earlier.length < 2) {
         console.warn(`Incomplete future/earlier for ${ticker} after roll - added ${future.length} future, ${earlier.length} earlier`);
@@ -974,6 +1055,16 @@ export default function Page(): JSX.Element {
     })
 
     setData(updatedData)
+
+    fetch('/api/save-state', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ticker,
+        future: updatedData.find(d => d.ticker === ticker)?.future || [],
+        earlier: updatedData.find(d => d.ticker === ticker)?.earlier || []
+      })
+    }).catch(err => console.error('Errore salvataggio stato:', err));
 
     const currentSymbol = getSymbolFromExpiryStrike(ticker, expiryDate, selectedStrike)
     const currentCallPrice = prices[ticker]?.[currentSymbol]?.ask ?? 0
@@ -1098,7 +1189,7 @@ export default function Page(): JSX.Element {
     return (
       item.spot < opt.strike &&
       opt.strike >= item.spot * 1.04 &&
-      optPrice >= item.currentCallPrice * 0.9
+      optPrice >= item.currentCallPrice * 0.98
     )
   }
 
