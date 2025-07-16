@@ -20,14 +20,17 @@ export async function GET(req: Request) {
       return NextResponse.json({}, { status: 500 });
     }
     const json = await res.json();
-    const spots: { [key: string]: number } = {};
+    const spots: Record<string, { price: number; changePercent: number }> = {};
     json.tickers?.forEach((result: any) => {
       // Prioritize last trade price (real-time), fallback to day's close or previous day's close
-      spots[result.ticker] = result.lastTrade?.p || result.day?.c || result.prevDay?.c || 0;
+      const price = result.lastTrade?.p || result.day?.c || result.prevDay?.c || 0;
+      // Use today's change percent
+      const changePercent = result.todaysChangePerc || 0;
+      spots[result.ticker] = { price, changePercent };
     });
-    // Fill missing tickers with 0
+    // Fill missing tickers with defaults
     tickers.split(',').forEach(t => {
-      if (!(t in spots)) spots[t] = 0;
+      if (!(t in spots)) spots[t] = { price: 0, changePercent: 0 };
     });
     return NextResponse.json(spots);
   } catch (err) {

@@ -49,7 +49,7 @@ function getThirdFriday(year: number, monthIndex: number): string {
   return `${year}-${String(monthIndex + 1).padStart(2, '0')}-15`
 }
 
-const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRoll, selected, setSelected, showDropdowns, setShowDropdowns, alertsEnabled, setAlertsEnabled, sentAlerts, chain, updateCurrentCall, handleRollaClick, shiftExpiryByMonth, getSymbolFromExpiryStrike, getThirdFriday, data, setData, setChain }: {
+const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRoll, selected, setSelected, showDropdowns, setShowDropdowns, alertsEnabled, setAlertsEnabled, sentAlerts, chain, updateCurrentCall, handleRollaClick, shiftExpiryByMonth, getSymbolFromExpiryStrike, getThirdFriday, data, setData, setChain, spots }: {
   item: OptionData,
   prices: Record<string, Record<string, { bid: number; ask: number; last_trade_price: number; symbol: string }>>,
   isFattibile: (opt: OptionEntry, item: OptionData) => boolean,
@@ -69,7 +69,8 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
   getThirdFriday: (year: number, monthIndex: number) => string,
   data: OptionData[],
   setData: React.Dispatch<React.SetStateAction<OptionData[]>>,
-  setChain: React.Dispatch<React.SetStateAction<Record<string, Record<string, Record<string, number[]>>>>>
+  setChain: React.Dispatch<React.SetStateAction<Record<string, Record<string, Record<string, number[]>>>>>,
+  spots: Record<string, { price: number; changePercent: number }>
 }) => {
   const deltaPct = item.spot > 0 ? ((item.strike - item.spot) / item.spot) * 100 : 0;
   const deltaColor = deltaPct < 4 ? 'font-bold text-red-400' : 'font-bold text-green-400';
@@ -97,6 +98,11 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
   const ask = tickerPrices[currentSymbol]?.ask ?? 0
   const last_trade_price = tickerPrices[currentSymbol]?.last_trade_price ?? 0
   const priceToShow = ask > 0 ? ask : (last_trade_price > 0 ? last_trade_price : item.currentCallPrice)
+
+  const spotData = spots[ticker] || { price: 0, changePercent: 0 };
+  const changePercent = spotData.changePercent;
+  const changeColor = changePercent >= 0 ? 'text-green-400' : 'text-red-400';
+  const changeSign = changePercent >= 0 ? '+' : '';
 
   return (
     <div className="bg-zinc-900 border border-red-500 shadow-md rounded-lg p-3">
@@ -211,7 +217,12 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
       )}
       <div className="grid grid-cols-2 gap-1 mb-2">
         <div className="p-1 bg-[rgba(70,120,240,0.8)] font-bold">Spot</div>
-        <div className="p-1 bg-[rgba(70,120,240,0.8)] transition-all duration-300">{item.spot.toFixed(2)}</div>
+        <div className="p-1 bg-[rgba(70,120,240,0.8)] transition-all duration-300">
+          {item.spot.toFixed(2)} 
+          <span className={`ml-2 ${changeColor}`}>
+            ({changeSign}{changePercent.toFixed(2)}%)
+          </span>
+        </div>
         <div className="p-1 bg-[rgba(70,120,240,0.8)] font-bold">Strike</div>
         <div className="p-1 bg-[rgba(70,120,240,0.8)] transition-all duration-300">{item.strike.toFixed(2)}</div>
         <div className="p-1 bg-[rgba(70,120,240,0.8)] font-bold">Scadenza</div>
@@ -535,7 +546,8 @@ export default function Page(): JSX.Element {
   const [data, setData] = useState<OptionData[]>([])
   const [chain, setChain] = useState<Record<string, Record<string, Record<string, number[]>>>>({})
   const [prices, setPrices] = useState<Record<string, Record<string, { bid: number; ask: number; last_trade_price: number; symbol: string }>>>({})
-  const [spots, setSpots] = useState<Record<string, number>>({}); const [selected, setSelected] = useState<{ [ticker: string]: { year: string, month: string, strike: number | null } }>({})
+  const [spots, setSpots] = useState<Record<string, { price: number; changePercent: number }>>({});
+  const [selected, setSelected] = useState<{ [ticker: string]: { year: string, month: string, strike: number | null } }>({})
   const [showDropdowns, setShowDropdowns] = useState<{ [ticker: string]: boolean }>({})
   const sentAlerts = useRef<{ [ticker: string]: { [level: string]: boolean } }>({});
   const [alertsEnabled, setAlertsEnabled] = useState<{ [ticker: string]: boolean }>({})
@@ -854,18 +866,18 @@ export default function Page(): JSX.Element {
           if (eStrike2 && eStrike2 !== eStrike1) {
             const expiry = getThirdFriday(year, monthIdx)
             const symbol = getSymbolFromExpiryStrike(item.ticker, expiry, eStrike2)
-            if (symbol && symbol.trim() !== '') {
-              const price = prices[item.ticker]?.[symbol]?.bid ?? 0
-              earlier.push({
-                label: `${earlierMonth} ${String(year).slice(2)} C${eStrike2}`,
-                symbol,
-                strike: eStrike2,
-                price,
-                expiry
-              })
-            }
+            if (symbol && symbol.trim() !== '' ) {
+            const price = prices[item.ticker]?.[symbol]?.bid ?? 0
+            earlier.push({
+              label: `${earlierMonth} ${String(year).slice(2)} C${eStrike2}`,
+              symbol,
+              strike: eStrike2,
+              price,
+              expiry
+            })
           }
         }
+      }
       }
       // Fallback if incomplete (per chain limitata)
       if (future.length < 2 || earlier.length < 2) {
@@ -1145,7 +1157,7 @@ export default function Page(): JSX.Element {
   }, [data]);
 
   useEffect(() => {
-    setData(prev => prev.map(item => ({ ...item, spot: (spots[item.ticker] > 0 ? spots[item.ticker] : item.spot) })));
+    setData(prev => prev.map(item => ({ ...item, spot: (spots[item.ticker]?.price > 0 ? spots[item.ticker].price : item.spot) })));
   }, [spots]);
 
   useEffect(() => {
@@ -1345,6 +1357,7 @@ export default function Page(): JSX.Element {
                 data={data}
                 setData={setData}
                 setChain={setChain}
+                spots={spots}
               />
             )
           })}
