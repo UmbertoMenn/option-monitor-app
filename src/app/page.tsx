@@ -1199,11 +1199,22 @@ export default function Page(): JSX.Element {
     const tickerPrices = prices[item.ticker] || {}
     const optPriceData = tickerPrices[opt.symbol]
     if (!optPriceData) return false
-    const optPrice = optPriceData.bid
+    const optBid = optPriceData.bid ?? 0
+    const optLast = optPriceData.last_trade_price ?? 0
+    const liveOptPrice = optBid > 0 ? optBid : optLast
+    if (liveOptPrice <= 0) return false
+
+    const currentSymbol = getSymbolFromExpiryStrike(item.ticker, item.expiry, item.strike)
+    const currentData = tickerPrices[currentSymbol]
+    const currentAsk = currentData?.ask ?? 0
+    const currentLast = currentData?.last_trade_price ?? 0
+    const liveCurrentPrice = currentAsk > 0 ? currentAsk : (currentLast > 0 ? currentLast : item.currentCallPrice)
+    if (liveCurrentPrice <= 0) return false
+
     return (
       item.spot < opt.strike &&
       opt.strike >= item.spot * 1.04 &&
-      optPrice >= item.currentCallPrice * 0.98
+      liveOptPrice >= liveCurrentPrice * 0.98
     )
   }
 
