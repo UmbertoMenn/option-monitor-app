@@ -130,10 +130,10 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
                     if (delta <= level) newSent[level] = true
                   }
                   sentAlerts.current[ticker] = newSent
-                  sendTelegramMessage(`🔔 ALERT ATTIVATI – Ticker: ${item.ticker}`)
+                  //sendTelegramMessage(`🔔 ALERT ATTIVATI – Ticker: ${item.ticker}`)
                 } else {
                   sentAlerts.current[ticker] = {}
-                  sendTelegramMessage(`🔕 ALERT DISATTIVATI – Ticker: ${item.ticker}`)
+                  //sendTelegramMessage(`🔕 ALERT DISATTIVATI – Ticker: ${item.ticker}`)
                 }
                 return next
               })
