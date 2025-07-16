@@ -657,16 +657,11 @@ export default function Page(): JSX.Element {
       setPrices(grouped);
 
       const tickersStr = data.map(item => item.ticker).join(',');
-      const spotRes = await fetch(`https://api.polygon.io/v3/snapshot/stocks?tickers=${tickersStr}&apiKey=${process.env.NEXT_PUBLIC_POLYGON_API_KEY || ''}`);
+      const spotRes = await fetch(`/api/spots?tickers=${tickersStr}`);
       if (spotRes.ok) {
-        const spotJson = await spotRes.json();
-        const newSpots: Record<string, number> = {};
-        spotJson.results.forEach((r: any) => {
-          newSpots[r.ticker] = r.lastQuote?.P || r.session?.close || r.prevDay?.c || 0;
-        });
+        const newSpots = await spotRes.json();
         setSpots(newSpots);
-      }
-      console.log('✅ Prices updated:', grouped);
+      } console.log('✅ Prices updated:', grouped);
     } catch (err) {
       console.error('Errore fetch /api/full-prices:', err);
     }
