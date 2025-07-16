@@ -1157,7 +1157,9 @@ export default function Page(): JSX.Element {
       const delta = ((item.strike - item.spot) / item.spot) * 100
       const tickerPrices = prices[item.ticker] || {}
       const currentSymbol = getSymbolFromExpiryStrike(item.ticker, item.expiry, item.strike)
-      const currentPrice = tickerPrices[currentSymbol]?.ask ?? tickerPrices[currentSymbol]?.last_trade_price ?? item.currentCallPrice
+      const ask = tickerPrices[currentSymbol]?.ask ?? 0;
+      const last_trade_price = tickerPrices[currentSymbol]?.last_trade_price ?? 0;
+      const currentPrice = ask > 0 ? ask : (last_trade_price > 0 ? last_trade_price : item.currentCallPrice);
       const [currYear, currMonth] = item.expiry.split('-')
       const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
       const currMonthIndex = Number(currMonth) - 1
