@@ -532,7 +532,7 @@ export default function Page(): JSX.Element {
   const [data, setData] = useState<OptionData[]>([])
   const [chain, setChain] = useState<Record<string, Record<string, Record<string, number[]>>>>({})
   const [prices, setPrices] = useState<Record<string, Record<string, { bid: number; ask: number; last_trade_price: number; symbol: string }>>>({})
-  const [selected, setSelected] = useState<{ [ticker: string]: { year: string, month: string, strike: number | null } }>({})
+  const [spots, setSpots] = useState<Record<string, number>>({}); const [selected, setSelected] = useState<{ [ticker: string]: { year: string, month: string, strike: number | null } }>({})
   const [showDropdowns, setShowDropdowns] = useState<{ [ticker: string]: boolean }>({})
   const sentAlerts = useRef<{ [ticker: string]: { [level: number]: boolean } }>({})
   const [alertsEnabled, setAlertsEnabled] = useState<{ [ticker: string]: boolean }>({})
@@ -655,6 +655,18 @@ export default function Page(): JSX.Element {
       }
 
       setPrices(grouped);
+
+      const tickersStr = data.map(item => item.ticker).join(',');
+      const spotRes = await fetch(`https://api.polygon.io/v3/snapshot/stocks?tickers=${tickersStr}&apiKey=${process.env.NEXT_PUBLIC_POLYGON_API_KEY || ''}`);
+      if (spotRes.ok) {
+        const spotJson = await spotRes.json();
+        const newSpots: Record<string, number> = {};
+        spotJson.results.forEach((r: any) => {
+          newSpots[r.ticker] = r.lastQuote?.P ?? 0;
+        });
+        setSpots(newSpots);
+      }
+
       console.log('✅ Prices updated:', grouped);
     } catch (err) {
       console.error('Errore fetch /api/full-prices:', err);
@@ -1136,12 +1148,16 @@ export default function Page(): JSX.Element {
   }, [data]);
 
   useEffect(() => {
+    setData(prev => prev.map(item => ({ ...item, spot: spots[item.ticker] || item.spot })));
+  }, [spots]);
+
+  useEffect(() => {
     data.forEach(item => {
       if (!alertsEnabled[item.ticker]) return
       const delta = ((item.strike - item.spot) / item.spot) * 100
       const tickerPrices = prices[item.ticker] || {}
       const currentSymbol = getSymbolFromExpiryStrike(item.ticker, item.expiry, item.strike)
-      const currentPrice = tickerPrices[currentSymbol]?.bid ?? tickerPrices[currentSymbol]?.last_trade_price ?? item.currentCallPrice
+      const currentPrice = tickerPrices[currentSymbol]?.ask ?? tickerPrices[currentSymbol]?.last_trade_price ?? item.currentCallPrice
       const [currYear, currMonth] = item.expiry.split('-')
       const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
       const currMonthIndex = Number(currMonth) - 1

@@ -64,10 +64,10 @@ async function fetchAsk(symbol: string): Promise<number | null> {
 }
 
 async function fetchSpot(ticker: string): Promise<number> {
-  const res: Response = await fetch(`https://api.polygon.io/v2/last/trade/${ticker}?apiKey=${POLYGON_API_KEY}`)
-  if (!res.ok) throw new Error(`Errore fetch spot per ${ticker}`)
-  const json: any = await res.json()
-  return json?.results?.p ?? 0
+  const res: Response = await fetch(`https://api.polygon.io/v3/snapshot/stocks?tickers=${ticker}&apiKey=${POLYGON_API_KEY}`);
+  if (!res.ok) throw new Error(`Errore fetch spot per ${ticker}`);
+  const json: any = await res.json();
+  return json?.results[0]?.lastQuote?.P ?? 0;
 }
 
 function buildExpiriesMap(contracts: any[]) {
