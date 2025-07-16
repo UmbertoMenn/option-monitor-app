@@ -71,7 +71,7 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
   setData: React.Dispatch<React.SetStateAction<OptionData[]>>,
   setChain: React.Dispatch<React.SetStateAction<Record<string, Record<string, Record<string, number[]>>>>>
 }) => {
-  const deltaPct = ((item.strike - item.spot) / item.spot) * 100
+  const deltaPct = item.spot > 0 ? ((item.strike - item.spot) / item.spot) * 100 : 0;
   const deltaColor = deltaPct < 4 ? 'text-red-500' : 'text-green-500'
   let highlightClass = ''
   let icon = ''
@@ -224,7 +224,7 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
         const bid = tickerPrices[opt.symbol]?.bid ?? 0
         const last_trade_price_opt = tickerPrices[opt.symbol]?.last_trade_price ?? 0
         const optPrice = bid > 0 ? bid : last_trade_price_opt
-        const delta = optPriceData ? ((optPrice - priceToShow) / item.spot) * 100 : 0
+        const delta = optPriceData && item.spot > 0 ? ((optPrice - priceToShow) / item.spot) * 100 : 0;
         const deltaColor_opt = delta >= 0 ? 'text-green-400' : 'text-red-400'
         const deltaSign = delta >= 0 ? '+' : ''
 
@@ -395,7 +395,7 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
         const bid = tickerPrices[opt.symbol]?.bid ?? 0
         const last_trade_price_opt = tickerPrices[opt.symbol]?.last_trade_price ?? 0
         const optPrice = bid > 0 ? bid : last_trade_price_opt
-        const delta = optPriceData ? ((optPrice - priceToShow) / item.spot) * 100 : 0
+        const delta = optPriceData && item.spot > 0 ? ((optPrice - priceToShow) / item.spot) * 100 : 0;
         const deltaColor_opt = delta >= 0 ? 'text-green-400' : 'text-red-400'
         const deltaSign = delta >= 0 ? '+' : ''
 
@@ -1147,12 +1147,13 @@ export default function Page(): JSX.Element {
   }, [data]);
 
   useEffect(() => {
-    setData(prev => prev.map(item => ({ ...item, spot: spots[item.ticker] || item.spot })));
+    setData(prev => prev.map(item => ({ ...item, spot: (spots[item.ticker] > 0 ? spots[item.ticker] : item.spot) })));
   }, [spots]);
 
   useEffect(() => {
     data.forEach(item => {
       if (!alertsEnabled[item.ticker]) return
+      if (item.spot <= 0) return;
       const delta = ((item.strike - item.spot) / item.spot) * 100
       const tickerPrices = prices[item.ticker] || {}
       const currentSymbol = getSymbolFromExpiryStrike(item.ticker, item.expiry, item.strike)
