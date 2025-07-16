@@ -65,17 +65,15 @@ async function fetchAsk(symbol: string): Promise<number | null> {
 
 async function fetchSpot(ticker: string): Promise<number> {
   try {
-    const res: Response = await fetch(`https://api.polygon.io/v3/snapshot/stocks?tickers=${ticker}&apiKey=${POLYGON_API_KEY}`);
+    const res: Response = await fetch(`https://api.polygon.io/v2/aggs/ticker/${ticker}/prev?apiKey=${POLYGON_API_KEY}`);
     if (!res.ok) return 0;
     const json: any = await res.json();
-    const result = json?.results?.[0];
-    return result?.lastQuote?.P || result?.session?.close || result?.prevDay?.c || 0;
+    return json?.results?.[0]?.c || 0;
   } catch (err) {
     console.error(`Fallback spot error for ${ticker}:`, err);
     return 0;
   }
-}
-function buildExpiriesMap(contracts: any[]) {
+} function buildExpiriesMap(contracts: any[]) {
   const map: Record<string, number[]> = {}
   for (const c of contracts) {
     if (!isThirdFriday(c.expiration_date)) continue
