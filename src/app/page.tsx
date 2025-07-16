@@ -101,7 +101,7 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
 
   const spotData = spots[ticker] || { price: 0, changePercent: 0 };
   const changePercent = spotData.changePercent;
-  const changeColor = changePercent >= 0 ? 'text-green-400' : 'text-red-400';
+  const changeColor = changePercent >= 0 ? 'text-green-500' : 'text-red-500';
   const changeSign = changePercent >= 0 ? '+' : '';
 
   return (
