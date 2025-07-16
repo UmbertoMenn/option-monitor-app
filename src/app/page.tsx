@@ -232,8 +232,7 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
           <div key={i} className="flex items-center justify-between mb-1">
             <span className="flex items-center gap-1">
               {isFattibile(opt, item) && (
-                <span className="text-green-400" title="Fattibile: strike ≥ spot + 4%, prezzo ≥ 98% del prezzo call attuale">🟢</span>
-              )}
+                <span className={isFattibile(opt, item) ? "text-green-400" : "text-transparent"} title={isFattibile(opt, item) ? "Fattibile: strike ≥ spot + 4%, prezzo ≥ 98% del prezzo call attuale" : ""}>🟢</span>)}
               <span title={opt.expiry}>
                 {opt.label} - {optPrice.toFixed(2)} /
                 {optPriceData && (
@@ -403,8 +402,7 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
           <div key={i} className="flex items-center justify-between mb-1">
             <span className="flex items-center gap-1">
               {isFattibile(opt, item) && (
-                <span className="text-green-400" title="Fattibile: strike ≥ spot + 4%, prezzo ≥ 98% del prezzo call attuale">🟢</span>
-              )}
+                <span className={isFattibile(opt, item) ? "text-green-400" : "text-transparent"} title={isFattibile(opt, item) ? "Fattibile: strike ≥ spot + 4%, prezzo ≥ 98% del prezzo call attuale" : ""}>🟢</span>)}
               <span title={opt.expiry}>
                 {opt.label} - {optPrice.toFixed(2)} /
                 {optPriceData && (
