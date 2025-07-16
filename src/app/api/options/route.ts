@@ -53,14 +53,14 @@ async function fetchBid(symbol: string): Promise<number | null> {
   const res: Response = await fetch(`https://api.polygon.io/v3/snapshot/options/${symbol}?apiKey=${POLYGON_API_KEY}`)
   if (!res.ok) return null
   const json: any = await res.json()
-  return json?.results?.last_quote?.bid ?? null
+  return json?.results?.last_quote?.bid ?? json?.results?.last_trade?.price ?? null
 }
 
 async function fetchAsk(symbol: string): Promise<number | null> {
   const res: Response = await fetch(`https://api.polygon.io/v3/snapshot/options/${symbol}?apiKey=${POLYGON_API_KEY}`)
   if (!res.ok) return null
   const json: any = await res.json()
-  return json?.results?.last_quote?.ask ?? null
+  return json?.results?.last_quote?.ask ?? json?.results?.last_trade?.price ?? null
 }
 
 async function fetchSpot(ticker: string): Promise<number> {

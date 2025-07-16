@@ -34,8 +34,8 @@ export async function GET(req: Request) {
       }
       return {
         symbol,
-        bid: json.results.last_quote?.bid ?? 0,
-        ask: json.results.last_quote?.ask ?? 0,
+        bid: json.results.last_quote?.bid ?? json.results.last_trade?.price ?? 0,
+        ask: json.results.last_quote?.ask ?? json.results.last_trade?.price ?? 0,
         last_trade_price: json.results.last_trade?.price ?? 0
       };
     });

@@ -662,11 +662,10 @@ export default function Page(): JSX.Element {
         const spotJson = await spotRes.json();
         const newSpots: Record<string, number> = {};
         spotJson.results.forEach((r: any) => {
-          newSpots[r.ticker] = r.lastQuote?.P ?? 0;
+          newSpots[r.ticker] = r.lastQuote?.P || r.session?.close || r.prevDay?.c || 0;
         });
         setSpots(newSpots);
       }
-
       console.log('✅ Prices updated:', grouped);
     } catch (err) {
       console.error('Errore fetch /api/full-prices:', err);
