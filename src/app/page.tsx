@@ -72,16 +72,21 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
   setChain: React.Dispatch<React.SetStateAction<Record<string, Record<string, Record<string, number[]>>>>>
 }) => {
   const deltaPct = item.spot > 0 ? ((item.strike - item.spot) / item.spot) * 100 : 0;
-  const deltaColor = deltaPct < 4 ? 'text-red-500' : 'text-green-500'
-  let highlightClass = ''
-  let icon = ''
+  const deltaColor = deltaPct < 4 ? 'font-bold text-red-400' : 'font-bold text-green-400';
+  let highlightClass = '';
+  let icon = '';
+
+  // Calcola se esiste almeno una earlier fattibile
+  const hasFattibileEarlier = item.earlier.some(opt => isFattibile(opt, item));
+
   if (deltaPct < 4) {
-    highlightClass = 'font-bold animate-pulse text-red-400'
-    icon = '⚠️ '
-  } else if (deltaPct > 7) {
-    highlightClass = 'font-bold animate-pulse text-green-400'
-    icon = '⚠️ '
+    highlightClass = 'font-bold animate-pulse text-red-400';
+    icon = '⚠️ ';
+  } else if (hasFattibileEarlier) {
+    highlightClass = 'font-bold animate-pulse text-green-400';
+    icon = '⚠️ ';
   }
+
   const ticker = item.ticker
   const sel = selected[ticker] || { year: '', month: '', strike: null }
   const showDropdown = showDropdowns[ticker] || false
@@ -96,7 +101,7 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
   return (
     <div className="bg-zinc-900 border border-red-500 shadow-md rounded-lg p-3">
       <div className="flex justify-between items-center mb-1">
-        <h2 className="text-base font-bold text-red-500">{item.ticker}</h2>
+        <h2 className="text-base font-bold text-red-400">{item.ticker}</h2>
         <div className="flex items-center gap-2">
           <button
             onClick={() => {
@@ -532,7 +537,7 @@ export default function Page(): JSX.Element {
   const [prices, setPrices] = useState<Record<string, Record<string, { bid: number; ask: number; last_trade_price: number; symbol: string }>>>({})
   const [spots, setSpots] = useState<Record<string, number>>({}); const [selected, setSelected] = useState<{ [ticker: string]: { year: string, month: string, strike: number | null } }>({})
   const [showDropdowns, setShowDropdowns] = useState<{ [ticker: string]: boolean }>({})
-  const sentAlerts = useRef<{ [ticker: string]: { [level: number]: boolean } }>({})
+  const sentAlerts = useRef<{ [ticker: string]: { [level: string]: boolean } }>({});
   const [alertsEnabled, setAlertsEnabled] = useState<{ [ticker: string]: boolean }>({})
   const [pendingRoll, setPendingRoll] = useState<{ ticker: string, opt: OptionEntry } | null>(null)
 
@@ -1145,53 +1150,54 @@ export default function Page(): JSX.Element {
 
   useEffect(() => {
     data.forEach(item => {
-      if (!alertsEnabled[item.ticker]) return
+      if (!alertsEnabled[item.ticker]) return;
       if (item.spot <= 0) return;
-      const delta = ((item.strike - item.spot) / item.spot) * 100
-      const tickerPrices = prices[item.ticker] || {}
-      const currentSymbol = getSymbolFromExpiryStrike(item.ticker, item.expiry, item.strike)
+      const delta = ((item.strike - item.spot) / item.spot) * 100;
+      const tickerPrices = prices[item.ticker] || {};
+      const currentSymbol = getSymbolFromExpiryStrike(item.ticker, item.expiry, item.strike);
       const ask = tickerPrices[currentSymbol]?.ask ?? 0;
       const last_trade_price = tickerPrices[currentSymbol]?.last_trade_price ?? 0;
       const currentPrice = ask > 0 ? ask : (last_trade_price > 0 ? last_trade_price : item.currentCallPrice);
-      const [currYear, currMonth] = item.expiry.split('-')
-      const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
-      const currMonthIndex = Number(currMonth) - 1
-      const currMonthName = monthNames[currMonthIndex]
-      const currentLabel = `${currMonthName} ${currYear.slice(2)} C${item.strike}`
-      const levels = [4, 3, 2, 1]
-      if (!sentAlerts.current[item.ticker]) sentAlerts.current[item.ticker] = {}
+      const [currYear, currMonth] = item.expiry.split('-');
+      const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC'];
+      const currMonthIndex = Number(currMonth) - 1;
+      const currMonthName = monthNames[currMonthIndex];
+      const currentLabel = `${currMonthName} ${currYear.slice(2)} C${item.strike}`;
+      const levels = [4, 3, 2, 1];
+      if (!sentAlerts.current[item.ticker]) sentAlerts.current[item.ticker] = {};
+
+      // Alert per low delta (mantieni invariato)
       for (const level of levels) {
         if (delta < level && !sentAlerts.current[item.ticker][level]) {
-          sentAlerts.current[item.ticker][level] = true
-          const f1 = item.future[0] || { label: 'N/A', price: 0, symbol: '' }
-          const f2 = item.future[1] || { label: 'N/A', price: 0, symbol: '' }
-          const f1Price = tickerPrices[f1.symbol]?.bid ?? tickerPrices[f1.symbol]?.last_trade_price ?? f1.price
-          const f2Price = tickerPrices[f2.symbol]?.bid ?? tickerPrices[f2.symbol]?.last_trade_price ?? f2.price
-          const f1Label = f1.label.replace(/C(\d+)/, '$1 CALL')
-          const f2Label = f2.label.replace(/C(\d+)/, '$1 CALL')
-          const currLabelFormatted = currentLabel.replace(/C(\d+)/, '$1 CALL')
-          const alertMessage = `🔴 ${item.ticker} – DELTA: ${delta.toFixed(2)}%\n\nStrike: ${item.strike}\nSpot: ${item.spot}\nCurrent Call: ${currLabelFormatted} - ${currentPrice.toFixed(2)}\n\n#Future 1: ${f1Label} - ${f1Price.toFixed(2)}\n#Future 2: ${f2Label} - ${f2Price.toFixed(2)}`
+          sentAlerts.current[item.ticker][level] = true;
+          const f1 = item.future[0] || { label: 'N/A', price: 0, symbol: '' };
+          const f2 = item.future[1] || { label: 'N/A', price: 0, symbol: '' };
+          const f1Price = tickerPrices[f1.symbol]?.bid ?? tickerPrices[f1.symbol]?.last_trade_price ?? f1.price;
+          const f2Price = tickerPrices[f2.symbol]?.bid ?? tickerPrices[f2.symbol]?.last_trade_price ?? f2.price;
+          const f1Label = f1.label.replace(/C(\d+)/, '$1 CALL');
+          const f2Label = f2.label.replace(/C(\d+)/, '$1 CALL');
+          const currLabelFormatted = currentLabel.replace(/C(\d+)/, '$1 CALL');
+          const alertMessage = `🔴 ${item.ticker} – DELTA: ${delta.toFixed(2)}%\n\nStrike: ${item.strike}\nSpot: ${item.spot}\nCurrent Call: ${currLabelFormatted} - ${currentPrice.toFixed(2)}\n\n#Future 1: ${f1Label} - ${f1Price.toFixed(2)}\n#Future 2: ${f2Label} - ${f2Price.toFixed(2)}`;
           sendTelegramMessage(alertMessage);
         }
       }
-      const highLevels = [7, 8, 9, 10]
-      for (const level of highLevels) {
-        if (delta > level && !sentAlerts.current[item.ticker][level]) {
-          sentAlerts.current[item.ticker][level] = true
-          const e1 = item.earlier[0] || { label: 'N/A', price: 0, symbol: '' }
-          const e2 = item.earlier[1] || { label: 'N/A', price: 0, symbol: '' }
-          const e1Price = tickerPrices[e1.symbol]?.bid ?? tickerPrices[e1.symbol]?.last_trade_price ?? e1.price
-          const e2Price = tickerPrices[e2.symbol]?.bid ?? tickerPrices[e2.symbol]?.last_trade_price ?? e2.price
-          const e1Label = e1.label.replace(/C(\d+)/, '$1 CALL')
-          const e2Label = e2.label.replace(/C(\d+)/, '$1 CALL')
-          const currLabelFormatted = currentLabel.replace(/C(\d+)/, '$1 CALL')
-          const alertMessage = `🟢 ${item.ticker} – DELTA: ${delta.toFixed(2)}%\n\nStrike: ${item.strike}\nSpot: ${item.spot}\nCurrent Call: ${currLabelFormatted} - ${currentPrice.toFixed(2)}\n\n#Earlier 1: ${e1Label} - ${e1Price.toFixed(2)}\n#Earlier 2: ${e2Label} - ${e2Price.toFixed(2)}`
-          sendTelegramMessage(alertMessage)
-        }
-      }
-    })
-  })
 
+      // Nuovo: Alert per earlier fattibile (sostituisce high delta)
+      const hasFattibileEarlier = item.earlier.some(opt => isFattibile(opt, item));
+      if (hasFattibileEarlier && !sentAlerts.current[item.ticker]['fattibile_high']) {
+        sentAlerts.current[item.ticker]['fattibile_high'] = true;
+        const e1 = item.earlier[0] || { label: 'N/A', price: 0, symbol: '' };
+        const e2 = item.earlier[1] || { label: 'N/A', price: 0, symbol: '' };
+        const e1Price = tickerPrices[e1.symbol]?.bid ?? tickerPrices[e1.symbol]?.last_trade_price ?? e1.price;
+        const e2Price = tickerPrices[e2.symbol]?.bid ?? tickerPrices[e2.symbol]?.last_trade_price ?? e2.price;
+        const e1Label = e1.label.replace(/C(\d+)/, '$1 CALL');
+        const e2Label = e2.label.replace(/C(\d+)/, '$1 CALL');
+        const currLabelFormatted = currentLabel.replace(/C(\d+)/, '$1 CALL');
+        const alertMessage = `🟢 ${item.ticker} – DELTA: ${delta.toFixed(2)}% (Earlier fattibile disponibile)\n\nStrike: ${item.strike}\nSpot: ${item.spot}\nCurrent Call: ${currLabelFormatted} - ${currentPrice.toFixed(2)}\n\n#Earlier 1: ${e1Label} - ${e1Price.toFixed(2)}\n#Earlier 2: ${e2Label} - ${e2Price.toFixed(2)}`;
+        sendTelegramMessage(alertMessage);
+      }
+    });
+  }, [data, prices, spots, alertsEnabled]);  // Aggiungi dipendenze se necessario, ma mantieni come originale
 
   const isFattibile = (opt: OptionEntry, item: OptionData) => {
     const tickerPrices = prices[item.ticker] || {}
