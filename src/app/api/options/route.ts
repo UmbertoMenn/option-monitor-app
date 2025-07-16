@@ -64,12 +64,17 @@ async function fetchAsk(symbol: string): Promise<number | null> {
 }
 
 async function fetchSpot(ticker: string): Promise<number> {
-  const res: Response = await fetch(`https://api.polygon.io/v3/snapshot/stocks?tickers=${ticker}&apiKey=${POLYGON_API_KEY}`);
-  if (!res.ok) throw new Error(`Errore fetch spot per ${ticker}`);
-  const json: any = await res.json();
-  return json?.results[0]?.lastQuote?.P ?? 0;
+  try {
+    const res: Response = await fetch(`https://api.polygon.io/v3/snapshot/stocks?tickers=${ticker}&apiKey=${POLYGON_API_KEY}`);
+    if (!res.ok) return 0;
+    const json: any = await res.json();
+    const result = json?.results?.[0];
+    return result?.lastQuote?.P || result?.session?.close || result?.prevDay?.c || 0;
+  } catch (err) {
+    console.error(`Fallback spot error for ${ticker}:`, err);
+    return 0;
+  }
 }
-
 function buildExpiriesMap(contracts: any[]) {
   const map: Record<string, number[]> = {}
   for (const c of contracts) {
@@ -158,23 +163,23 @@ export async function GET() {
       async function findOption(expiry: string, strikeRef: number, higher: boolean) {
         const strikes = expiriesMap[expiry]
         if (!strikes || strikes.length === 0) return null
-        
+
         let selectedStrike: number | undefined
-        
+
         if (higher) {
           // Preferisci > strikeRef, poi esatto, poi max disponibile
           selectedStrike = strikes.find((s: number) => s > strikeRef) ||
-                           strikes.find((s: number) => s === strikeRef) ||
-                           strikes[strikes.length - 1]
+            strikes.find((s: number) => s === strikeRef) ||
+            strikes[strikes.length - 1]
         } else {
           // Preferisci < strikeRef (dal max descending), poi esatto, poi min disponibile
           selectedStrike = [...strikes].reverse().find((s: number) => s < strikeRef) ||
-                           strikes.find((s: number) => s === strikeRef) ||
-                           strikes[0]
+            strikes.find((s: number) => s === strikeRef) ||
+            strikes[0]
         }
-        
+
         if (!selectedStrike) return null
-        
+
         const match = contracts.find(c => c.expiration_date === expiry && c.strike_price === selectedStrike)
         if (!match) return null
         const bid = await fetchBid(match.ticker)
@@ -225,9 +230,9 @@ export async function GET() {
         expiry: CURRENT_EXPIRY,
         currentCallPrice,
         future: [future1 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '', symbol: '' },
-                 future2 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '', symbol: '' }],
+        future2 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '', symbol: '' }],
         earlier: [earlier1 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '', symbol: '' },
-                  earlier2 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '', symbol: '' }]
+        earlier2 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '', symbol: '' }]
       })
     }
     for (const item of output) {
