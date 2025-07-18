@@ -255,21 +255,22 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
         return (
           <div key={i} className="flex items-center justify-between mb-1">
             <span className="flex items-center gap-1">
-              {isFattibile(opt, item) && (
-                <span className={isFattibile(opt, item) ? "text-green-400" : "text-transparent"} title={isFattibile(opt, item) ? "Fattibile: strike ≥ spot + 4%, prezzo ≥ prezzo call attuale" : ""}>🟢</span>)}
               <span title={opt.expiry}>
                 <span className="bg-zinc-800 px-2 py-1 rounded border border-red-400">{opt.label}</span><span className="bg-zinc-800 px-2 py-1 rounded border border-red-400">{optBid.toFixed(2)} / {optAsk.toFixed(2)}</span>
+                /
                 {optPriceData && (
                   <span title="Premio aggiuntivo/riduttivo rispetto alla call attuale, diviso il prezzo spot" className={`ml-1 ${deltaColor_opt}`}>
                     {deltaSign}{delta.toFixed(2)}%
                   </span>
                 )}
+                {isFattibile(opt, item) && (
+                  <span className={isFattibile(opt, item) ? "text-green-400" : "text-transparent"} title={isFattibile(opt, item) ? "Fattibile: strike ≥ spot + 4%, prezzo ≥ prezzo call attuale" : ""}>🟢</span>)}
               </span>
             </span>
             <div className="flex gap-1 items-center">
               <button
                 onClick={() => setPendingRoll({ ticker: item.ticker, opt })}
-                className="bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold px-2 py-0.5 rounded"
+                className="bg-[rgba(70,120,240,0.8)] hover:bg-[rgba(70,120,240,1)] text-white text-xs font-bold px-2 py-0.5 rounded"
                 title="Aggiorna la call attuale con questa opzione"
               >
                 ROLLA
@@ -498,21 +499,22 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
         return (
           <div key={i} className="flex items-center justify-between mb-1">
             <span className="flex items-center gap-1">
-              {isFattibile(opt, item) && (
-                <span className={isFattibile(opt, item) ? "text-green-400" : "text-transparent"} title={isFattibile(opt, item) ? "Fattibile: strike ≥ spot + 4%, prezzo ≥ 98% del prezzo call attuale" : ""}>🟢</span>)}
               <span title={opt.expiry}>
                 <span className="bg-zinc-800 px-2 py-1 rounded border border-red-400">{opt.label}</span><span className="bg-zinc-800 px-2 py-1 rounded border border-red-400">{optBid.toFixed(2)} / {optAsk.toFixed(2)}</span>
+                /
                 {optPriceData && (
                   <span title="Premio aggiuntivo/riduttivo rispetto alla call attuale, diviso il prezzo spot" className={`ml-1 ${deltaColor_opt}`}>
                     {deltaSign}{delta.toFixed(2)}%
                   </span>
                 )}
+                {isFattibile(opt, item) && (
+                  <span className={isFattibile(opt, item) ? "text-green-400" : "text-transparent"} title={isFattibile(opt, item) ? "Fattibile: strike ≥ spot + 4%, prezzo ≥ prezzo call attuale" : ""}>🟢</span>)}
               </span>
             </span>
             <div className="flex gap-1 items-center">
               <button
                 onClick={() => setPendingRoll({ ticker: item.ticker, opt })}
-                className="bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold px-2 py-0.5 rounded"
+                className="bg-[rgba(70,120,240,0.8)] hover:bg-[rgba(70,120,240,1)] text-white text-xs font-bold px-2 py-0.5 rounded"
                 title="Aggiorna la call attuale con questa opzione"
               >
                 ROLLA
