@@ -14,7 +14,9 @@ function getSymbolFromExpiryStrike(ticker: string, expiry: string, strike: numbe
 
 interface OptionEntry {
   label: string
-  price: number
+  bid: number
+  ask: number
+  last_trade_price: number
   strike: number
   expiry: string
   symbol: string
@@ -25,7 +27,9 @@ interface OptionData {
   spot: number
   strike: number
   expiry: string
-  currentCallPrice: number
+  current_bid: number
+  current_ask: number
+  current_last_trade_price: number
   earlier: OptionEntry[]
   future: OptionEntry[]
   invalid?: boolean
@@ -98,10 +102,10 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
 
   const currentSymbol = getSymbolFromExpiryStrike(item.ticker, item.expiry, item.strike)
   const tickerPrices = prices[item.ticker] || {}
-  const ask = tickerPrices[currentSymbol]?.ask ?? 0
-  const last_trade_price = tickerPrices[currentSymbol]?.last_trade_price ?? 0
-  const priceToShow = ask > 0 ? ask : (last_trade_price > 0 ? last_trade_price : item.currentCallPrice);
-  console.log(`[${item.ticker}] Current Symbol: ${currentSymbol}, Ask: ${ask}, Last: ${last_trade_price}, Shown: ${priceToShow}`);
+  const currentData = tickerPrices[currentSymbol] ?? { bid: item.current_bid, ask: item.current_ask, last_trade_price: item.current_last_trade_price }
+  const currentBidToShow = currentData.bid
+  const currentAskToShow = currentData.ask > 0 ? currentData.ask : currentData.last_trade_price
+  console.log(`[${item.ticker}] Current Symbol: ${currentSymbol}, Bid: ${currentBidToShow}, Ask: ${currentAskToShow}, Last: ${currentData.last_trade_price}`);
   const spotData = spots[ticker] || { price: 0, changePercent: 0 };
   const changePercent = spotData.changePercent;
   const changeColor = changePercent >= 0 ? 'text-green-300' : 'text-red-300';
@@ -234,17 +238,17 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
         <div className={`p-1 transition-all duration-300 ${deltaColor} ${highlightClass}`}>
           {icon}{deltaPct.toFixed(2)}%
         </div>
-        <div className="p-1 bg-[rgba(70,120,240,0.8)] font-bold">Prezzo Call attuale</div>
-        <div className="p-1 bg-[rgba(70,120,240,0.8)] transition-all duration-300">{priceToShow.toFixed(2)}</div>
+        <div className="p-1 bg-[rgba(70,120,240,0.8)] font-bold">Current Bid/Ask</div>
+        <div className="p-1 bg-[rgba(70,120,240,0.8)] transition-all duration-300">
+          <span className="bg-zinc-800 px-2 py-1 rounded">{currentBidToShow.toFixed(2)} / {currentAskToShow.toFixed(2)}</span>
+        </div>
       </div>
       <div className="mb-1 font-semibold bg-gray-800 text-orange-500 text-center rounded py-0.5">Future</div>
       {item.future.map((opt, i) => {
-        const optPriceData = tickerPrices[opt.symbol]
-        const bid = tickerPrices[opt.symbol]?.bid ?? 0
-        const last_trade_price_opt = tickerPrices[opt.symbol]?.last_trade_price ?? 0
-        const optPrice = bid > 0 ? bid : last_trade_price_opt
-        const displayPrice = optPrice > 0 ? optPrice : opt.price; // Aggiunto fallback a opt.price
-        const delta = optPriceData && item.spot > 0 ? ((optPrice - priceToShow) / item.spot) * 100 : 0;
+        const optData = tickerPrices[opt.symbol] ?? { bid: opt.bid, ask: opt.ask, last_trade_price: opt.last_trade_price }
+        const optBid = optData.bid > 0 ? optData.bid : optData.last_trade_price
+        const optAsk = optData.ask
+        const delta = optData && item.spot > 0 ? ((optBid - currentAskToShow) / item.spot) * 100 : 0;
         const deltaColor_opt = delta >= 0 ? 'text-green-400' : 'text-red-400'
         const deltaSign = delta >= 0 ? '+' : ''
 
@@ -252,14 +256,14 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
           <div key={i} className="flex items-center justify-between mb-1">
             <span className="flex items-center gap-1">
               {isFattibile(opt, item) && (
-                <span className={isFattibile(opt, item) ? "text-green-400" : "text-transparent"} title={isFattibile(opt, item) ? "Fattibile: strike ≥ spot + 4%, prezzo ≥ prezzo call attuale" : ""}>🟢</span>)}
+                <span className={isFattibile(opt, item) ? "text-green-400" : "text-transparent"} title={isFattibile(opt, item) ? "Fattibile: strike ≥ spot + 4%, bid ≥ ask call attuale" : ""}>🟢</span>)}
               <span title={opt.expiry}>
-                {opt.label} - {displayPrice.toFixed(2)} /
-                {optPriceData && (
+                {opt.label} - <span className="bg-zinc-800 px-2 py-1 rounded">{optBid.toFixed(2)} / {optAsk.toFixed(2)}</span> /
+                {optData.bid > 0 || optData.ask > 0 || optData.last_trade_price > 0 ? (
                   <span title="Premio aggiuntivo/riduttivo rispetto alla call attuale, diviso il prezzo spot" className={`ml-1 ${deltaColor_opt}`}>
                     {deltaSign}{delta.toFixed(2)}%
                   </span>
-                )}
+                ) : null}
               </span>
             </span>
             <div className="flex gap-1 items-center">
@@ -299,7 +303,9 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
                     strike: nextStrike,
                     label: `${monthNames[monthIndex]} ${year.slice(2)} C${nextStrike}`,
                     symbol: newSymbol,
-                    price: newData.bid > 0 ? newData.bid : (newData.last_trade_price > 0 ? newData.last_trade_price : 0) // Imposta fallback price
+                    bid: newData.bid,
+                    ask: newData.ask,
+                    last_trade_price: newData.last_trade_price
                   }
 
                   const updatedData = data.map((d, idx) => {
@@ -352,7 +358,9 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
                     strike: prevStrike,
                     label: `${monthNames[monthIndex]} ${year.slice(2)} C${prevStrike}`,
                     symbol: newSymbol,
-                    price: newData.bid > 0 ? newData.bid : (newData.last_trade_price > 0 ? newData.last_trade_price : 0)
+                    bid: newData.bid,
+                    ask: newData.ask,
+                    last_trade_price: newData.last_trade_price
                   }
 
                   const updatedData = data.map((d, idx) => {
@@ -385,11 +393,10 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
 
                   const newSymbol = getSymbolFromExpiryStrike(item.ticker, shift.expiry, shift.strike)
                   const res = await fetch(`/api/full-prices?symbols=${newSymbol}`)
-                  let newPrice = 0
+                  let newData = { bid: 0, ask: 0, last_trade_price: 0 }
                   if (res.ok) {
                     const json = await res.json()
-                    const newData = json[newSymbol] || { bid: 0, ask: 0, last_trade_price: 0 }
-                    newPrice = newData.bid > 0 ? newData.bid : (newData.last_trade_price > 0 ? newData.last_trade_price : 0)
+                    newData = json[newSymbol] || { bid: 0, ask: 0, last_trade_price: 0 }
                     setPrices((prev: PricesType) => ({
                       ...prev,
                       [item.ticker]: { ...prev[item.ticker], [newSymbol]: { ...newData, symbol: newSymbol } }
@@ -400,7 +407,9 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
                     ...opt,
                     ...shift,
                     symbol: newSymbol,
-                    price: newPrice // Override price con valore fetchato
+                    bid: newData.bid,
+                    ask: newData.ask,
+                    last_trade_price: newData.last_trade_price
                   }
 
                   const updatedData = data.map((d, idx) => {
@@ -433,11 +442,10 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
 
                   const newSymbol = getSymbolFromExpiryStrike(item.ticker, shift.expiry, shift.strike)
                   const res = await fetch(`/api/full-prices?symbols=${newSymbol}`)
-                  let newPrice = 0
+                  let newData = { bid: 0, ask: 0, last_trade_price: 0 }
                   if (res.ok) {
                     const json = await res.json()
-                    const newData = json[newSymbol] || { bid: 0, ask: 0, last_trade_price: 0 }
-                    newPrice = newData.bid > 0 ? newData.bid : (newData.last_trade_price > 0 ? newData.last_trade_price : 0)
+                    newData = json[newSymbol] || { bid: 0, ask: 0, last_trade_price: 0 }
                     setPrices((prev: PricesType) => ({
                       ...prev,
                       [item.ticker]: { ...prev[item.ticker], [newSymbol]: { ...newData, symbol: newSymbol } }
@@ -448,7 +456,9 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
                     ...opt,
                     ...shift,
                     symbol: newSymbol,
-                    price: newPrice
+                    bid: newData.bid,
+                    ask: newData.ask,
+                    last_trade_price: newData.last_trade_price
                   }
 
                   const updatedData = data.map((d, idx) => {
@@ -478,12 +488,10 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
       })}
       <div className="mb-1 font-semibold bg-gray-800 text-orange-500 text-center rounded py-0.5">Earlier</div>
       {item.earlier.map((opt, i) => {
-        const optPriceData = tickerPrices[opt.symbol]
-        const bid = tickerPrices[opt.symbol]?.bid ?? 0
-        const last_trade_price_opt = tickerPrices[opt.symbol]?.last_trade_price ?? 0
-        const optPrice = bid > 0 ? bid : last_trade_price_opt
-        const displayPrice = optPrice > 0 ? optPrice : opt.price; // Aggiunto fallback
-        const delta = optPriceData && item.spot > 0 ? ((optPrice - priceToShow) / item.spot) * 100 : 0;
+        const optData = tickerPrices[opt.symbol] ?? { bid: opt.bid, ask: opt.ask, last_trade_price: opt.last_trade_price }
+        const optBid = optData.bid > 0 ? optData.bid : optData.last_trade_price
+        const optAsk = optData.ask
+        const delta = optData && item.spot > 0 ? ((optBid - currentAskToShow) / item.spot) * 100 : 0;
         const deltaColor_opt = delta >= 0 ? 'text-green-400' : 'text-red-400'
         const deltaSign = delta >= 0 ? '+' : ''
 
@@ -491,14 +499,14 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
           <div key={i} className="flex items-center justify-between mb-1">
             <span className="flex items-center gap-1">
               {isFattibile(opt, item) && (
-                <span className={isFattibile(opt, item) ? "text-green-400" : "text-transparent"} title={isFattibile(opt, item) ? "Fattibile: strike ≥ spot + 4%, prezzo ≥ 98% del prezzo call attuale" : ""}>🟢</span>)}
+                <span className={isFattibile(opt, item) ? "text-green-400" : "text-transparent"} title={isFattibile(opt, item) ? "Fattibile: strike ≥ spot + 4%, bid ≥ 98% dell'ask call attuale" : ""}>🟢</span>)}
               <span title={opt.expiry}>
-                {opt.label} - {displayPrice.toFixed(2)} /
-                {optPriceData && (
+                {opt.label} - <span className="bg-zinc-800 px-2 py-1 rounded">{optBid.toFixed(2)} / {optAsk.toFixed(2)}</span> /
+                {optData.bid > 0 || optData.ask > 0 || optData.last_trade_price > 0 ? (
                   <span title="Premio aggiuntivo/riduttivo rispetto alla call attuale, diviso il prezzo spot" className={`ml-1 ${deltaColor_opt}`}>
                     {deltaSign}{delta.toFixed(2)}%
                   </span>
-                )}
+                ) : null}
               </span>
             </span>
             <div className="flex gap-1 items-center">
@@ -537,7 +545,9 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
                     strike: nextStrike,
                     label: `${monthNames[monthIndex]} ${year.slice(2)} C${nextStrike}`,
                     symbol: newSymbol,
-                    price: newData.bid > 0 ? newData.bid : (newData.last_trade_price > 0 ? newData.last_trade_price : 0)
+                    bid: newData.bid,
+                    ask: newData.ask,
+                    last_trade_price: newData.last_trade_price
                   }
 
                   const updatedData = data.map((d, idx) => {
@@ -579,7 +589,9 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
                     strike: prevStrike,
                     label: `${monthNames[monthIndex]} ${year.slice(2)} C${prevStrike}`,
                     symbol: newSymbol,
-                    price: newData.bid > 0 ? newData.bid : (newData.last_trade_price > 0 ? newData.last_trade_price : 0)
+                    bid: newData.bid,
+                    ask: newData.ask,
+                    last_trade_price: newData.last_trade_price
                   }
 
                   const updatedData = data.map((d, idx) => {
@@ -602,11 +614,10 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
 
                   const newSymbol = getSymbolFromExpiryStrike(item.ticker, shift.expiry, shift.strike)
                   const res = await fetch(`/api/full-prices?symbols=${newSymbol}`)
-                  let newPrice = 0
+                  let newData = { bid: 0, ask: 0, last_trade_price: 0 }
                   if (res.ok) {
                     const json = await res.json()
-                    const newData = json[newSymbol] || { bid: 0, ask: 0, last_trade_price: 0 }
-                    newPrice = newData.bid > 0 ? newData.bid : (newData.last_trade_price > 0 ? newData.last_trade_price : 0)
+                    newData = json[newSymbol] || { bid: 0, ask: 0, last_trade_price: 0 }
                     setPrices((prev: PricesType) => ({
                       ...prev,
                       [item.ticker]: { ...prev[item.ticker], [newSymbol]: { ...newData, symbol: newSymbol } }
@@ -617,7 +628,9 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
                     ...opt,
                     ...shift,
                     symbol: newSymbol,
-                    price: newPrice
+                    bid: newData.bid,
+                    ask: newData.ask,
+                    last_trade_price: newData.last_trade_price
                   }
 
                   const updatedData = data.map((d, idx) => {
@@ -640,11 +653,10 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
 
                   const newSymbol = getSymbolFromExpiryStrike(item.ticker, shift.expiry, shift.strike)
                   const res = await fetch(`/api/full-prices?symbols=${newSymbol}`)
-                  let newPrice = 0
+                  let newData = { bid: 0, ask: 0, last_trade_price: 0 }
                   if (res.ok) {
                     const json = await res.json()
-                    const newData = json[newSymbol] || { bid: 0, ask: 0, last_trade_price: 0 }
-                    newPrice = newData.bid > 0 ? newData.bid : (newData.last_trade_price > 0 ? newData.last_trade_price : 0)
+                    newData = json[newSymbol] || { bid: 0, ask: 0, last_trade_price: 0 }
                     setPrices((prev: PricesType) => ({
                       ...prev,
                       [item.ticker]: { ...prev[item.ticker], [newSymbol]: { ...newData, symbol: newSymbol } }
@@ -655,7 +667,9 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
                     ...opt,
                     ...shift,
                     symbol: newSymbol,
-                    price: newPrice
+                    bid: newData.bid,
+                    ask: newData.ask,
+                    last_trade_price: newData.last_trade_price
                   }
 
                   const updatedData = data.map((d, idx) => {
@@ -878,14 +892,16 @@ export default function Page(): JSX.Element {
 
       const expiry = getThirdFriday(year, monthIdx)
       const symbol = getSymbolFromExpiryStrike(ticker, expiry, targetStrike)
-      const price = prices[ticker]?.[symbol]?.bid ?? 0
+      const optPrices = prices[ticker]?.[symbol] ?? { bid: 0, ask: 0, last_trade_price: 0 }
 
       return {
         label: `${monthName} ${String(year).slice(2)} C${targetStrike}`,
         symbol,
         expiry,
         strike: targetStrike,
-        price,
+        bid: optPrices.bid,
+        ask: optPrices.ask,
+        last_trade_price: optPrices.last_trade_price
       }
     }
 
@@ -907,7 +923,10 @@ export default function Page(): JSX.Element {
       if (item.ticker !== ticker) return item
 
       const currentSymbol = getSymbolFromExpiryStrike(item.ticker, expiryDate, sel.strike!)
-      const currentCallPrice = prices[item.ticker]?.[currentSymbol]?.ask ?? 0
+      const currentPrices = prices[item.ticker]?.[currentSymbol] ?? { bid: 0, ask: 0, last_trade_price: 0 }
+      const current_bid = currentPrices.bid
+      const current_ask = currentPrices.ask
+      const current_last_trade_price = currentPrices.last_trade_price
       let future: OptionEntry[] = []
       let earlier: OptionEntry[] = []
 
@@ -943,12 +962,14 @@ export default function Page(): JSX.Element {
           const expiry = getThirdFriday(year, monthIdx)
           const symbol = getSymbolFromExpiryStrike(item.ticker, expiry, fStrike)
           if (symbol && symbol.trim() !== '') {
-            const price = prices[item.ticker]?.[symbol]?.bid ?? 0
+            const optPrices = prices[item.ticker]?.[symbol] ?? { bid: 0, ask: 0, last_trade_price: 0 }
             future.push({
               label: `${futureMonth} ${String(year).slice(2)} C${fStrike}`,
               symbol,
               strike: fStrike,
-              price,
+              bid: optPrices.bid,
+              ask: optPrices.ask,
+              last_trade_price: optPrices.last_trade_price,
               expiry
             })
             strikeRef = fStrike
@@ -987,12 +1008,14 @@ export default function Page(): JSX.Element {
           const expiry = getThirdFriday(year, monthIdx)
           const symbol = getSymbolFromExpiryStrike(item.ticker, expiry, eStrike1)
           if (symbol && symbol.trim() !== '') {
-            const price = prices[item.ticker]?.[symbol]?.bid ?? 0
+            const optPrices = prices[item.ticker]?.[symbol] ?? { bid: 0, ask: 0, last_trade_price: 0 }
             earlier.push({
               label: `${earlierMonth} ${String(year).slice(2)} C${eStrike1}`,
               symbol,
               strike: eStrike1,
-              price,
+              bid: optPrices.bid,
+              ask: optPrices.ask,
+              last_trade_price: optPrices.last_trade_price,
               expiry
             })
             strikeRef = eStrike1
@@ -1005,25 +1028,29 @@ export default function Page(): JSX.Element {
           const expiry = getThirdFriday(year, monthIdx)
           const symbol = getSymbolFromExpiryStrike(item.ticker, expiry, eStrike2)
           if (symbol && symbol.trim() !== '') {
-            const price = prices[item.ticker]?.[symbol]?.bid ?? 0
+            const optPrices = prices[item.ticker]?.[symbol] ?? { bid: 0, ask: 0, last_trade_price: 0 }
             earlier.push({
               label: `${earlierMonth} ${String(year).slice(2)} C${eStrike2}`,
               symbol,
               strike: eStrike2,
-              price,
+              bid: optPrices.bid,
+              ask: optPrices.ask,
+              last_trade_price: optPrices.last_trade_price,
               expiry
             })
           }
         }
       }
-      while (future.length < 2) future.push({ label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '', symbol: '' });
-      while (earlier.length < 2) earlier.push({ label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '', symbol: '' });
+      while (future.length < 2) future.push({ label: 'OPZIONE INESISTENTE', strike: 0, bid: 0, ask: 0, last_trade_price: 0, expiry: '', symbol: '' });
+      while (earlier.length < 2) earlier.push({ label: 'OPZIONE INESISTENTE', strike: 0, bid: 0, ask: 0, last_trade_price: 0, expiry: '', symbol: '' });
 
       return {
         ...item,
         strike: sel.strike!,
         expiry: expiryDate,
-        currentCallPrice,
+        current_bid,
+        current_ask,
+        current_last_trade_price,
         future,
         earlier,
         invalid: false
@@ -1045,7 +1072,10 @@ export default function Page(): JSX.Element {
     }).catch(err => console.error('Errore salvataggio stato:', err));
 
     const currentSymbol = getSymbolFromExpiryStrike(ticker, expiryDate, sel.strike!)
-    const currentCallPrice = prices[ticker]?.[currentSymbol]?.ask ?? 0
+    const currentPrices = prices[ticker]?.[currentSymbol] ?? { bid: 0, ask: 0, last_trade_price: 0 }
+    const current_bid = currentPrices.bid
+    const current_ask = currentPrices.ask
+    const current_last_trade_price = currentPrices.last_trade_price
 
     const confirmRes = await fetch('/api/update-call', {
       method: 'POST',
@@ -1054,7 +1084,9 @@ export default function Page(): JSX.Element {
         ticker,
         strike: sel.strike,
         expiry: expiryDate,
-        currentCallPrice,
+        current_bid,
+        current_ask,
+        current_last_trade_price,
       })
     })
     const confirmJson = await confirmRes.json()
@@ -1076,7 +1108,10 @@ export default function Page(): JSX.Element {
       if (item.ticker !== ticker) return item
 
       const currentSymbol = getSymbolFromExpiryStrike(item.ticker, expiryDate, selectedStrike)
-      const currentCallPrice = prices[item.ticker]?.[currentSymbol]?.ask ?? 0
+      const currentPrices = prices[item.ticker]?.[currentSymbol] ?? { bid: 0, ask: 0, last_trade_price: 0 }
+      const current_bid = currentPrices.bid
+      const current_ask = currentPrices.ask
+      const current_last_trade_price = currentPrices.last_trade_price
       let future: OptionEntry[] = []
       let earlier: OptionEntry[] = []
 
@@ -1112,12 +1147,14 @@ export default function Page(): JSX.Element {
           const expiry = getThirdFriday(year, monthIdx)
           const symbol = getSymbolFromExpiryStrike(item.ticker, expiry, fStrike)
           if (symbol && symbol.trim() !== '') {
-            const price = prices[item.ticker]?.[symbol]?.bid ?? 0
+            const optPrices = prices[item.ticker]?.[symbol] ?? { bid: 0, ask: 0, last_trade_price: 0 }
             future.push({
               label: `${futureMonth} ${String(year).slice(2)} C${fStrike}`,
               symbol,
               strike: fStrike,
-              price,
+              bid: optPrices.bid,
+              ask: optPrices.ask,
+              last_trade_price: optPrices.last_trade_price,
               expiry
             })
             strikeRef = fStrike
@@ -1156,12 +1193,14 @@ export default function Page(): JSX.Element {
           const expiry = getThirdFriday(year, monthIdx)
           const symbol = getSymbolFromExpiryStrike(item.ticker, expiry, eStrike1)
           if (symbol && symbol.trim() !== '') {
-            const price = prices[item.ticker]?.[symbol]?.bid ?? 0
+            const optPrices = prices[item.ticker]?.[symbol] ?? { bid: 0, ask: 0, last_trade_price: 0 }
             earlier.push({
               label: `${earlierMonth} ${String(year).slice(2)} C${eStrike1}`,
               symbol,
               strike: eStrike1,
-              price,
+              bid: optPrices.bid,
+              ask: optPrices.ask,
+              last_trade_price: optPrices.last_trade_price,
               expiry
             })
             strikeRef = eStrike1
@@ -1174,25 +1213,29 @@ export default function Page(): JSX.Element {
           const expiry = getThirdFriday(year, monthIdx)
           const symbol = getSymbolFromExpiryStrike(item.ticker, expiry, eStrike2)
           if (symbol && symbol.trim() !== '') {
-            const price = prices[item.ticker]?.[symbol]?.bid ?? 0
+            const optPrices = prices[item.ticker]?.[symbol] ?? { bid: 0, ask: 0, last_trade_price: 0 }
             earlier.push({
               label: `${earlierMonth} ${String(year).slice(2)} C${eStrike2}`,
               symbol,
               strike: eStrike2,
-              price,
+              bid: optPrices.bid,
+              ask: optPrices.ask,
+              last_trade_price: optPrices.last_trade_price,
               expiry
             })
           }
         }
       }
-      while (future.length < 2) future.push({ label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '', symbol: '' });
-      while (earlier.length < 2) earlier.push({ label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '', symbol: '' });
+      while (future.length < 2) future.push({ label: 'OPZIONE INESISTENTE', strike: 0, bid: 0, ask: 0, last_trade_price: 0, expiry: '', symbol: '' });
+      while (earlier.length < 2) earlier.push({ label: 'OPZIONE INESISTENTE', strike: 0, bid: 0, ask: 0, last_trade_price: 0, expiry: '', symbol: '' });
 
       return {
         ...item,
         strike: selectedStrike,
         expiry: expiryDate,
-        currentCallPrice,
+        current_bid,
+        current_ask,
+        current_last_trade_price,
         future,
         earlier,
         invalid: false
@@ -1212,7 +1255,10 @@ export default function Page(): JSX.Element {
     }).catch(err => console.error('Errore salvataggio stato:', err));
 
     const currentSymbol = getSymbolFromExpiryStrike(ticker, expiryDate, selectedStrike)
-    const currentCallPrice = prices[ticker]?.[currentSymbol]?.ask ?? 0
+    const currentPrices = prices[ticker]?.[currentSymbol] ?? { bid: 0, ask: 0, last_trade_price: 0 }
+    const current_bid = currentPrices.bid
+    const current_ask = currentPrices.ask
+    const current_last_trade_price = currentPrices.last_trade_price
 
     const confirmRes = await fetch('/api/update-call', {
       method: 'POST',
@@ -1221,7 +1267,9 @@ export default function Page(): JSX.Element {
         ticker,
         strike: selectedStrike,
         expiry: expiryDate,
-        currentCallPrice,
+        current_bid,
+        current_ask,
+        current_last_trade_price,
       })
     })
     const confirmJson = await confirmRes.json()
@@ -1293,9 +1341,9 @@ export default function Page(): JSX.Element {
       const delta = ((item.strike - item.spot) / item.spot) * 100;
       const tickerPrices = prices[item.ticker] || {};
       const currentSymbol = getSymbolFromExpiryStrike(item.ticker, item.expiry, item.strike);
-      const ask = tickerPrices[currentSymbol]?.ask ?? 0;
-      const last_trade_price = tickerPrices[currentSymbol]?.last_trade_price ?? 0;
-      const currentPrice = ask > 0 ? ask : (last_trade_price > 0 ? last_trade_price : item.currentCallPrice);
+      const currentAsk = tickerPrices[currentSymbol]?.ask ?? item.current_ask;
+      const currentLast = tickerPrices[currentSymbol]?.last_trade_price ?? item.current_last_trade_price;
+      const currentPrice = currentAsk > 0 ? currentAsk : (currentLast > 0 ? currentLast : 0);
       const [currYear, currMonth] = item.expiry.split('-');
       const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC'];
       const currMonthIndex = Number(currMonth) - 1;
@@ -1306,10 +1354,14 @@ export default function Page(): JSX.Element {
 
       // Alert per low delta (mantieni invariato)
       for (const level of levels) {
-        const f1 = item.future[0] || { label: 'N/A', price: 0, symbol: '' };
-        const f2 = item.future[1] || { label: 'N/A', price: 0, symbol: '' };
-        const f1Price = tickerPrices[f1.symbol]?.bid ?? tickerPrices[f1.symbol]?.last_trade_price ?? f1.price;
-        const f2Price = tickerPrices[f2.symbol]?.bid ?? tickerPrices[f2.symbol]?.last_trade_price ?? f2.price;
+        const f1 = item.future[0] || { label: 'N/A', bid: 0, last_trade_price: 0, symbol: '' };
+        const f2 = item.future[1] || { label: 'N/A', bid: 0, last_trade_price: 0, symbol: '' };
+        const f1Bid = tickerPrices[f1.symbol]?.bid ?? f1.bid;
+        const f1Last = tickerPrices[f1.symbol]?.last_trade_price ?? f1.last_trade_price;
+        const f1Price = f1Bid > 0 ? f1Bid : f1Last;
+        const f2Bid = tickerPrices[f2.symbol]?.bid ?? f2.bid;
+        const f2Last = tickerPrices[f2.symbol]?.last_trade_price ?? f2.last_trade_price;
+        const f2Price = f2Bid > 0 ? f2Bid : f2Last;
         // Add check: only send if all relevant prices are non-zero
         if (currentPrice > 0 && f1Price > 0 && f2Price > 0 && delta < level && !sentAlerts.current[item.ticker][level]) {
           sentAlerts.current[item.ticker][level] = true;
@@ -1323,10 +1375,14 @@ export default function Page(): JSX.Element {
 
       // Nuovo: Alert per earlier fattibile (sostituisce high delta)
       const hasFattibileEarlier = item.earlier.some(opt => isFattibile(opt, item));
-      const e1 = item.earlier[0] || { label: 'N/A', price: 0, symbol: '' };
-      const e2 = item.earlier[1] || { label: 'N/A', price: 0, symbol: '' };
-      const e1Price = tickerPrices[e1.symbol]?.bid ?? tickerPrices[e1.symbol]?.last_trade_price ?? e1.price;
-      const e2Price = tickerPrices[e2.symbol]?.bid ?? tickerPrices[e2.symbol]?.last_trade_price ?? e2.price;
+      const e1 = item.earlier[0] || { label: 'N/A', bid: 0, last_trade_price: 0, symbol: '' };
+      const e2 = item.earlier[1] || { label: 'N/A', bid: 0, last_trade_price: 0, symbol: '' };
+      const e1Bid = tickerPrices[e1.symbol]?.bid ?? e1.bid;
+      const e1Last = tickerPrices[e1.symbol]?.last_trade_price ?? e1.last_trade_price;
+      const e1Price = e1Bid > 0 ? e1Bid : e1Last;
+      const e2Bid = tickerPrices[e2.symbol]?.bid ?? e2.bid;
+      const e2Last = tickerPrices[e2.symbol]?.last_trade_price ?? e2.last_trade_price;
+      const e2Price = e2Bid > 0 ? e2Bid : e2Last;
       // Add similar check for earlier alert
       if (currentPrice > 0 && e1Price > 0 && e2Price > 0 && hasFattibileEarlier && !sentAlerts.current[item.ticker]['fattibile_high']) {
         sentAlerts.current[item.ticker]['fattibile_high'] = true;
@@ -1341,16 +1397,16 @@ export default function Page(): JSX.Element {
 
   useEffect(() => {
     if (Object.keys(prices).length === 0) return;  // Evita aggiornamenti prematuri se prices è vuoto
-    setData((prevData: OptionData[]) => prevData.map(item => {
-      if (!item) return item; // Safeguard
+    setData((prev: OptionData[]) => prev.map(item => {
+      if (!item) return item; // Safeguard per item undefined
       const currentSymbol = getSymbolFromExpiryStrike(item.ticker, item.expiry, item.strike);
       const tickerPrices = prices[item.ticker] || {};
-      const ask = tickerPrices[currentSymbol]?.ask ?? 0;
-      const last_trade_price = tickerPrices[currentSymbol]?.last_trade_price ?? 0;
-      const newCurrentPrice = ask > 0 ? ask : (last_trade_price > 0 ? last_trade_price : item.currentCallPrice);
+      const currentData = tickerPrices[currentSymbol] ?? { bid: item.current_bid, ask: item.current_ask, last_trade_price: item.current_last_trade_price };
       return {
         ...item,
-        currentCallPrice: newCurrentPrice  // Aggiorna solo questo campo con il valore live
+        current_bid: currentData.bid,
+        current_ask: currentData.ask,
+        current_last_trade_price: currentData.last_trade_price
       };
     }));
   }, [prices, getSymbolFromExpiryStrike]);  // Esegui ogni volta che prices cambia
@@ -1360,16 +1416,16 @@ export default function Page(): JSX.Element {
     const tickerPrices = prices[item.ticker] || {}
     const optPriceData = tickerPrices[opt.symbol]
     if (!optPriceData) return false
-    const optBid = optPriceData.bid ?? 0
-    const optLast = optPriceData.last_trade_price ?? 0
+    const optBid = optPriceData.bid ?? opt.bid
+    const optLast = optPriceData.last_trade_price ?? opt.last_trade_price
     const liveOptPrice = optBid > 0 ? optBid : optLast
     if (liveOptPrice <= 0) return false
 
     const currentSymbol = getSymbolFromExpiryStrike(item.ticker, item.expiry, item.strike)
-    const currentData = tickerPrices[currentSymbol]
-    const currentAsk = currentData?.ask ?? 0
-    const currentLast = currentData?.last_trade_price ?? 0
-    const liveCurrentPrice = currentAsk > 0 ? currentAsk : (currentLast > 0 ? currentLast : item.currentCallPrice)
+    const currentData = tickerPrices[currentSymbol] ?? { ask: item.current_ask, last_trade_price: item.current_last_trade_price }
+    const currentAsk = currentData.ask
+    const currentLast = currentData.last_trade_price
+    const liveCurrentPrice = currentAsk > 0 ? currentAsk : currentLast
     if (liveCurrentPrice <= 0) return false
 
     return (

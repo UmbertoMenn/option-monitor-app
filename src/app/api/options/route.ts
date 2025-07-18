@@ -49,20 +49,6 @@ async function fetchContracts(ticker: string): Promise<any[]> {
   return contracts
 }
 
-async function fetchBid(symbol: string): Promise<number | null> {
-  const res: Response = await fetch(`https://api.polygon.io/v3/snapshot/options/${symbol}?apiKey=${POLYGON_API_KEY}`)
-  if (!res.ok) return null
-  const json: any = await res.json()
-  return json?.results?.last_quote?.bid ?? json?.results?.last_trade?.price ?? null
-}
-
-async function fetchAsk(symbol: string): Promise<number | null> {
-  const res: Response = await fetch(`https://api.polygon.io/v3/snapshot/options/${symbol}?apiKey=${POLYGON_API_KEY}`)
-  if (!res.ok) return null
-  const json: any = await res.json()
-  return json?.results?.last_quote?.ask ?? json?.results?.last_trade?.price ?? null
-}
-
 async function fetchSpot(ticker: string): Promise<number> {
   try {
     const res: Response = await fetch(`https://api.polygon.io/v2/aggs/ticker/${ticker}/prev?apiKey=${POLYGON_API_KEY}`);
@@ -73,7 +59,24 @@ async function fetchSpot(ticker: string): Promise<number> {
     console.error(`Fallback spot error for ${ticker}:`, err);
     return 0;
   }
-} function buildExpiriesMap(contracts: any[]) {
+}
+
+async function fetchSnapshot(symbol: string): Promise<{ bid: number; ask: number; last_trade_price: number } | null> {
+  const match = /^O:([A-Z]+)\d+C\d+$/.exec(symbol);
+  if (!match) return null;
+  const underlying = match[1];
+  const res: Response = await fetch(`https://api.polygon.io/v3/snapshot/options/${underlying}/${symbol}?apiKey=${POLYGON_API_KEY}`);
+  if (!res.ok) return null;
+  const json: any = await res.json();
+  if (json.status !== "OK" || !json.results) return null;
+  return {
+    bid: json.results.last_quote?.bid ?? json.results.last_trade?.price ?? 0,
+    ask: json.results.last_quote?.ask ?? json.results.last_trade?.price ?? 0,
+    last_trade_price: json.results.last_trade?.price ?? 0
+  };
+}
+
+function buildExpiriesMap(contracts: any[]) {
   const map: Record<string, number[]> = {}
   for (const c of contracts) {
     if (!isThirdFriday(c.expiration_date)) continue
@@ -87,7 +90,9 @@ async function fetchSpot(ticker: string): Promise<number> {
 interface OptionEntry {
   label: string
   strike: number
-  price: number
+  bid: number
+  ask: number
+  last_trade_price: number
   expiry: string
   symbol: string
 }
@@ -97,7 +102,9 @@ interface OptionData {
   spot: number
   strike: number
   expiry: string
-  currentCallPrice: number
+  current_bid: number
+  current_ask: number
+  current_last_trade_price: number
   future: OptionEntry[]
   earlier: OptionEntry[]
   invalid?: boolean
@@ -143,7 +150,9 @@ export async function GET() {
           spot: 0,
           strike: CURRENT_STRIKE,
           expiry: CURRENT_EXPIRY,
-          currentCallPrice: 0,
+          current_bid: 0,
+          current_ask: 0,
+          current_last_trade_price: 0,
           earlier: [],
           future: [],
           invalid: true
@@ -152,8 +161,7 @@ export async function GET() {
       }
 
       const spot = await fetchSpot(ticker)
-      const currentCallPrice = (await fetchAsk(current.ticker)) ?? 0
-
+      const currentPrices = await fetchSnapshot(current.ticker) ?? { bid: 0, ask: 0, last_trade_price: 0 };
       const expiriesMap = buildExpiriesMap(contracts)
       const monthlyExpiries = Object.keys(expiriesMap).sort()
       const curIdx = monthlyExpiries.indexOf(CURRENT_EXPIRY)
@@ -180,11 +188,14 @@ export async function GET() {
 
         const match = contracts.find(c => c.expiration_date === expiry && c.strike_price === selectedStrike)
         if (!match) return null
-        const bid = await fetchBid(match.ticker)
+        const prices = await fetchSnapshot(match.ticker);
+        if (!prices) return null;
         return {
           label: `${formatExpiryLabel(expiry)} C${selectedStrike}`,
           strike: selectedStrike,
-          price: bid ?? 0,
+          bid: prices.bid,
+          ask: prices.ask,
+          last_trade_price: prices.last_trade_price,
           expiry,
           symbol: match.ticker
         } as OptionEntry
@@ -226,11 +237,13 @@ export async function GET() {
         spot,
         strike: CURRENT_STRIKE,
         expiry: CURRENT_EXPIRY,
-        currentCallPrice,
-        future: [future1 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '', symbol: '' },
-        future2 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '', symbol: '' }],
-        earlier: [earlier1 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '', symbol: '' },
-        earlier2 || { label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '', symbol: '' }]
+        current_bid: currentPrices.bid,
+        current_ask: currentPrices.ask,
+        current_last_trade_price: currentPrices.last_trade_price,
+        future: [future1 || { label: 'OPZIONE INESISTENTE', strike: 0, bid: 0, ask: 0, last_trade_price: 0, expiry: '', symbol: '' },
+        future2 || { label: 'OPZIONE INESISTENTE', strike: 0, bid: 0, ask: 0, last_trade_price: 0, expiry: '', symbol: '' }],
+        earlier: [earlier1 || { label: 'OPZIONE INESISTENTE', strike: 0, bid: 0, ask: 0, last_trade_price: 0, expiry: '', symbol: '' },
+        earlier2 || { label: 'OPZIONE INESISTENTE', strike: 0, bid: 0, ask: 0, last_trade_price: 0, expiry: '', symbol: '' }]
       })
     }
     for (const item of output) {
