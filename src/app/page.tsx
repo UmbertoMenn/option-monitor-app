@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState, useRef } from 'react'
+import React, { useEffect, useState, useRef, useCallback } from 'react'
 import { sendTelegramMessage } from './telegram';
 
 function formatStrike(strike: number): string {
@@ -97,8 +97,7 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
   const tickerPrices = prices[item.ticker] || {}
   const ask = tickerPrices[currentSymbol]?.ask ?? 0
   const last_trade_price = tickerPrices[currentSymbol]?.last_trade_price ?? 0
-  const priceToShow = last_trade_price > 0 ? last_trade_price : (ask > 0 ? ask : item.currentCallPrice)  // Priorità a last_trade_price per aggiornamenti reali
-  // Opzionale: Se vuoi rimuovere fallback: const priceToShow = last_trade_price > 0 ? last_trade_price : ask
+  const priceToShow = ask > 0 ? ask : (last_trade_price > 0 ? last_trade_price : item.currentCallPrice);
   console.log(`[${item.ticker}] Current Symbol: ${currentSymbol}, Ask: ${ask}, Last: ${last_trade_price}, Shown: ${priceToShow}`);
   const spotData = spots[ticker] || { price: 0, changePercent: 0 };
   const changePercent = spotData.changePercent;
@@ -249,7 +248,7 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
           <div key={i} className="flex items-center justify-between mb-1">
             <span className="flex items-center gap-1">
               {isFattibile(opt, item) && (
-                <span className={isFattibile(opt, item) ? "text-green-400" : "text-transparent"} title={isFattibile(opt, item) ? "Fattibile: strike ≥ spot + 4%, prezzo ≥ 98% del prezzo call attuale" : ""}>🟢</span>)}
+                <span className={isFattibile(opt, item) ? "text-green-400" : "text-transparent"} title={isFattibile(opt, item) ? "Fattibile: strike ≥ spot + 4%, prezzo ≥ prezzo call attuale" : ""}>🟢</span>)}
               <span title={opt.expiry}>
                 {opt.label} - {optPrice.toFixed(2)} /
                 {optPriceData && (
@@ -285,9 +284,12 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
                     symbol: getSymbolFromExpiryStrike(item.ticker, opt.expiry, nextStrike)
                   }
 
-                  const updatedData = [...data]
-                  const itemIdx = updatedData.findIndex(d => d.ticker === item.ticker)
-                  updatedData[itemIdx].future[i] = updatedOpt
+                  const updatedData = data.map((d, idx) => {
+                    if (d.ticker !== item.ticker) return d;
+                    const newFuture = [...d.future];
+                    newFuture[i] = updatedOpt;
+                    return { ...d, future: newFuture };
+                  });
                   setData(updatedData)
 
                   fetch('/api/save-state', {
@@ -295,8 +297,8 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                       ticker: item.ticker,
-                      future: updatedData[itemIdx].future,
-                      earlier: updatedData[itemIdx].earlier
+                      future: updatedData.find(d => d.ticker === item.ticker)?.future || [],
+                      earlier: updatedData.find(d => d.ticker === item.ticker)?.earlier || []
                     })
                   }).catch(err => console.error('Errore salvataggio stato:', err));
                 }}
@@ -321,9 +323,12 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
                     symbol: getSymbolFromExpiryStrike(item.ticker, opt.expiry, prevStrike)
                   }
 
-                  const updatedData = [...data]
-                  const itemIdx = updatedData.findIndex(d => d.ticker === item.ticker)
-                  updatedData[itemIdx].future[i] = updatedOpt
+                  const updatedData = data.map((d, idx) => {
+                    if (d.ticker !== item.ticker) return d;
+                    const newFuture = [...d.future];
+                    newFuture[i] = updatedOpt;
+                    return { ...d, future: newFuture };
+                  });
                   setData(updatedData)
 
                   fetch('/api/save-state', {
@@ -331,8 +336,8 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                       ticker: item.ticker,
-                      future: updatedData[itemIdx].future,
-                      earlier: updatedData[itemIdx].earlier
+                      future: updatedData.find(d => d.ticker === item.ticker)?.future || [],
+                      earlier: updatedData.find(d => d.ticker === item.ticker)?.earlier || []
                     })
                   }).catch(err => console.error('Errore salvataggio stato:', err));
                 }}
@@ -352,9 +357,12 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
                     symbol: getSymbolFromExpiryStrike(item.ticker, shift.expiry, shift.strike)
                   }
 
-                  const updatedData = [...data]
-                  const itemIdx = updatedData.findIndex(d => d.ticker === item.ticker)
-                  updatedData[itemIdx].future[i] = updatedOpt
+                  const updatedData = data.map((d, idx) => {
+                    if (d.ticker !== item.ticker) return d;
+                    const newFuture = [...d.future];
+                    newFuture[i] = updatedOpt;
+                    return { ...d, future: newFuture };
+                  });
                   setData(updatedData)
 
                   fetch('/api/save-state', {
@@ -362,8 +370,8 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                       ticker: item.ticker,
-                      future: updatedData[itemIdx].future,
-                      earlier: updatedData[itemIdx].earlier
+                      future: updatedData.find(d => d.ticker === item.ticker)?.future || [],
+                      earlier: updatedData.find(d => d.ticker === item.ticker)?.earlier || []
                     })
                   }).catch(err => console.error('Errore salvataggio stato:', err));
                 }}
@@ -383,9 +391,12 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
                     symbol: getSymbolFromExpiryStrike(item.ticker, shift.expiry, shift.strike)
                   }
 
-                  const updatedData = [...data]
-                  const itemIdx = updatedData.findIndex(d => d.ticker === item.ticker)
-                  updatedData[itemIdx].future[i] = updatedOpt
+                  const updatedData = data.map((d, idx) => {
+                    if (d.ticker !== item.ticker) return d;
+                    const newFuture = [...d.future];
+                    newFuture[i] = updatedOpt;
+                    return { ...d, future: newFuture };
+                  });
                   setData(updatedData)
 
                   fetch('/api/save-state', {
@@ -393,8 +404,8 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                       ticker: item.ticker,
-                      future: updatedData[itemIdx].future,
-                      earlier: updatedData[itemIdx].earlier
+                      future: updatedData.find(d => d.ticker === item.ticker)?.future || [],
+                      earlier: updatedData.find(d => d.ticker === item.ticker)?.earlier || []
                     })
                   }).catch(err => console.error('Errore salvataggio stato:', err));
                 }}
@@ -455,9 +466,12 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
                     symbol: getSymbolFromExpiryStrike(item.ticker, opt.expiry, nextStrike)
                   }
 
-                  const updatedData = [...data]
-                  const itemIdx = updatedData.findIndex(d => d.ticker === item.ticker)
-                  updatedData[itemIdx].earlier[i] = updatedOpt
+                  const updatedData = data.map((d, idx) => {
+                    if (d.ticker !== item.ticker) return d;
+                    const newEarlier = [...d.earlier];
+                    newEarlier[i] = updatedOpt;
+                    return { ...d, earlier: newEarlier };
+                  });
                   setData(updatedData)
                 }}
               >
@@ -481,9 +495,12 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
                     symbol: getSymbolFromExpiryStrike(item.ticker, opt.expiry, prevStrike)
                   }
 
-                  const updatedData = [...data]
-                  const itemIdx = updatedData.findIndex(d => d.ticker === item.ticker)
-                  updatedData[itemIdx].earlier[i] = updatedOpt
+                  const updatedData = data.map((d, idx) => {
+                    if (d.ticker !== item.ticker) return d;
+                    const newEarlier = [...d.earlier];
+                    newEarlier[i] = updatedOpt;
+                    return { ...d, earlier: newEarlier };
+                  });
                   setData(updatedData)
                 }}
               >
@@ -502,9 +519,12 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
                     symbol: getSymbolFromExpiryStrike(item.ticker, shift.expiry, shift.strike)
                   }
 
-                  const updatedData = [...data]
-                  const itemIdx = updatedData.findIndex(d => d.ticker === item.ticker)
-                  updatedData[itemIdx].earlier[i] = updatedOpt
+                  const updatedData = data.map((d, idx) => {
+                    if (d.ticker !== item.ticker) return d;
+                    const newEarlier = [...d.earlier];
+                    newEarlier[i] = updatedOpt;
+                    return { ...d, earlier: newEarlier };
+                  });
                   setData(updatedData)
                 }}
               >
@@ -523,9 +543,12 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
                     symbol: getSymbolFromExpiryStrike(item.ticker, shift.expiry, shift.strike)
                   }
 
-                  const updatedData = [...data]
-                  const itemIdx = updatedData.findIndex(d => d.ticker === item.ticker)
-                  updatedData[itemIdx].earlier[i] = updatedOpt
+                  const updatedData = data.map((d, idx) => {
+                    if (d.ticker !== item.ticker) return d;
+                    const newEarlier = [...d.earlier];
+                    newEarlier[i] = updatedOpt;
+                    return { ...d, earlier: newEarlier };
+                  });
                   setData(updatedData)
                 }}
               >
@@ -671,7 +694,7 @@ export default function Page(): JSX.Element {
       }
 
       setPrices(grouped);
-      
+
       console.log('Updated prices for current calls:', Object.keys(grouped).map(t => {
         const currentItem = data.find(d => d.ticker === t);
         if (!currentItem) return `${t}: N/A`;
@@ -690,12 +713,7 @@ export default function Page(): JSX.Element {
     }
   };
 
-  function shiftExpiryByMonth(
-    ticker: string,
-    opt: OptionEntry,
-    direction: 'next' | 'prev',
-    type: 'future' | 'earlier'
-  ): OptionEntry | null {
+  const shiftExpiryByMonth = useCallback((ticker: string, opt: OptionEntry, direction: 'next' | 'prev', type: 'future' | 'earlier'): OptionEntry | null => {
     const tickerChain = chain[ticker] || {}
     const [yearStr, monthStr] = opt.expiry.split('-')
     let year = Number(yearStr)
@@ -731,18 +749,15 @@ export default function Page(): JSX.Element {
       let targetStrike: number | undefined
 
       if (type === 'future') {
-        // Preferisci > strike, poi esatto, poi max disponibile
         targetStrike = strikes.find((s: number) => s > strike) ||
           strikes.find((s: number) => s === strike) ||
           strikes[strikes.length - 1]
       } else {
-        // Preferisci < strike (dal max descending), poi esatto, poi min disponibile
         targetStrike = [...strikes].reverse().find((s: number) => s < strike) ||
           strikes.find((s: number) => s === strike) ||
           strikes[0]
       }
 
-      // Se dopo fallback non c'è (impossibile se strikes>0), continua
       if (!targetStrike) continue
 
       const expiry = getThirdFriday(year, monthIdx)
@@ -758,12 +773,11 @@ export default function Page(): JSX.Element {
       }
     }
 
-    // Alert solo se davvero nessuna scadenza con strikes trovata
     alert(`Nessuna scadenza ${direction === 'next' ? 'successiva' : 'precedente'} disponibile per ${ticker}.`);
     return null
-  }
+  }, [chain, prices, getThirdFriday, getSymbolFromExpiryStrike]);
 
-  const updateCurrentCall = async (ticker: string) => {
+  const updateCurrentCall = useCallback(async (ticker: string) => {
     const sel = selected[ticker] || { year: '', month: '', strike: null }
     if (!sel.year || !sel.month || !sel.strike) return
 
@@ -783,12 +797,12 @@ export default function Page(): JSX.Element {
 
       const tickerChain = chain[item.ticker] || {}
 
-      // Future: Collect up to 2 future months
       let monthIdx = monthIndex
       let year = Number(sel.year)
+      let strikeRef = sel.strike!
       const allFutureMonths: { monthIdx: number, year: number }[] = []
       let attempts = 0
-      const maxAttempts = 60 // Limite per sicurezza
+      const maxAttempts = 60
       while (allFutureMonths.length < 2 && attempts < maxAttempts) {
         attempts++
         monthIdx++
@@ -806,10 +820,9 @@ export default function Page(): JSX.Element {
         const { monthIdx, year } = allFutureMonths[i]
         const futureMonth = monthNames[monthIdx]
         const fStrikeList = tickerChain[year.toString()]?.[futureMonth] || []
-        let fStrike = fStrikeList.find((s: number) => s > sel.strike!)
-        if (!fStrike && fStrikeList.length > 0) {
-          fStrike = fStrikeList[fStrikeList.length - 1]; // Fallback all'ultima disponibile
-        }
+        let fStrike = fStrikeList.find((s: number) => s > strikeRef) ||
+          fStrikeList.find((s: number) => s === strikeRef) ||
+          fStrikeList[fStrikeList.length - 1]
         if (fStrike) {
           const expiry = getThirdFriday(year, monthIdx)
           const symbol = getSymbolFromExpiryStrike(item.ticker, expiry, fStrike)
@@ -822,15 +835,16 @@ export default function Page(): JSX.Element {
               price,
               expiry
             })
+            strikeRef = fStrike
           } else {
             console.warn(`Invalid symbol generated for future of ${ticker}: ${symbol}`);
           }
         }
       }
 
-      // Earlier: Collect 1 earlier month
       monthIdx = monthIndex
       year = Number(sel.year)
+      strikeRef = sel.strike!
       const allEarlierMonths: { monthIdx: number, year: number }[] = []
       attempts = 0
       while (allEarlierMonths.length < 1 && attempts < maxAttempts) {
@@ -846,13 +860,13 @@ export default function Page(): JSX.Element {
           allEarlierMonths.push({ monthIdx, year });
         }
       }
-      // No reverse needed
       if (allEarlierMonths.length > 0) {
         const { monthIdx, year } = allEarlierMonths[0]
         const earlierMonth = monthNames[monthIdx]
         const eStrikeList = tickerChain[year.toString()]?.[earlierMonth] || []
-        let eStrike1 = [...eStrikeList].reverse().find((s: number) => s < sel.strike!)
-        if (!eStrike1 && eStrikeList.length > 0) eStrike1 = eStrikeList[0];
+        let eStrike1 = [...eStrikeList].reverse().find((s: number) => s < strikeRef) ||
+          eStrikeList.find((s: number) => s === strikeRef) ||
+          eStrikeList[0]
         if (eStrike1) {
           const expiry = getThirdFriday(year, monthIdx)
           const symbol = getSymbolFromExpiryStrike(item.ticker, expiry, eStrike1)
@@ -865,35 +879,29 @@ export default function Page(): JSX.Element {
               price,
               expiry
             })
+            strikeRef = eStrike1
           }
         }
-        // Second strike on same expiry, < eStrike1
-        if (earlier.length > 0) {
-          let eStrike2 = [...eStrikeList].reverse().find((s: number) => s < eStrike1!)
-          if (!eStrike2 && eStrikeList.length > 1) eStrike2 = eStrikeList[0]; // Fallback min if no lower
-          if (eStrike2 && eStrike2 !== eStrike1) {
-            const expiry = getThirdFriday(year, monthIdx)
-            const symbol = getSymbolFromExpiryStrike(item.ticker, expiry, eStrike2)
-            if (symbol && symbol.trim() !== '') {
-              const price = prices[item.ticker]?.[symbol]?.bid ?? 0
-              earlier.push({
-                label: `${earlierMonth} ${String(year).slice(2)} C${eStrike2}`,
-                symbol,
-                strike: eStrike2,
-                price,
-                expiry
-              })
-            }
+        let eStrike2 = [...eStrikeList].reverse().find((s: number) => s < strikeRef) ||
+          eStrikeList.find((s: number) => s === strikeRef) ||
+          eStrikeList[0]
+        if (eStrike2 && eStrike2 !== eStrike1) {
+          const expiry = getThirdFriday(year, monthIdx)
+          const symbol = getSymbolFromExpiryStrike(item.ticker, expiry, eStrike2)
+          if (symbol && symbol.trim() !== '') {
+            const price = prices[item.ticker]?.[symbol]?.bid ?? 0
+            earlier.push({
+              label: `${earlierMonth} ${String(year).slice(2)} C${eStrike2}`,
+              symbol,
+              strike: eStrike2,
+              price,
+              expiry
+            })
           }
         }
       }
-      // Fallback if incomplete (per chain limitata)
-      if (future.length < 2 || earlier.length < 2) {
-        console.warn(`Incomplete future/earlier for ${ticker} after update - added ${future.length} future, ${earlier.length} earlier`);
-        alert(`Update parziale per ${ticker}: Chain limitata su Polygon (solo ${future.length} future e ${earlier.length} earlier trovate). Prova altro expiry/strike.`);
-        while (future.length < 2) future.push({ label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '', symbol: '' });
-        while (earlier.length < 2) earlier.push({ label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '', symbol: '' });
-      }
+      while (future.length < 2) future.push({ label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '', symbol: '' });
+      while (earlier.length < 2) earlier.push({ label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '', symbol: '' });
 
       return {
         ...item,
@@ -937,9 +945,9 @@ export default function Page(): JSX.Element {
     if (!confirmJson.success) {
       console.error('Errore salvataggio su Supabase per', ticker)
     }
-  }
+  }, [selected, data, prices, chain, getSymbolFromExpiryStrike, getThirdFriday, setData, setSelected, setShowDropdowns]);
 
-  const handleRollaClick = async (ticker: string, opt: OptionEntry) => {
+  const handleRollaClick = useCallback(async (ticker: string, opt: OptionEntry) => {
     const [yearStr, monthStr] = opt.expiry.split('-')
     const selectedYear = yearStr
     const selectedMonthIndex = Number(monthStr) - 1
@@ -958,9 +966,9 @@ export default function Page(): JSX.Element {
 
       const tickerChain = chain[item.ticker] || {}
 
-      // Future: Collect up to 2 future months
       let monthIdx = selectedMonthIndex
       let year = Number(selectedYear)
+      let strikeRef = selectedStrike
       const allFutureMonths: { monthIdx: number, year: number }[] = []
       let attempts = 0
       const maxAttempts = 60
@@ -968,8 +976,8 @@ export default function Page(): JSX.Element {
         attempts++
         monthIdx++
         if (monthIdx >= 12) {
-          year++
           monthIdx = 0
+          year++
         }
         const futureMonth = monthNames[monthIdx]
         const fStrikeList = tickerChain[year.toString()]?.[futureMonth] || []
@@ -981,10 +989,9 @@ export default function Page(): JSX.Element {
         const { monthIdx, year } = allFutureMonths[i]
         const futureMonth = monthNames[monthIdx]
         const fStrikeList = tickerChain[year.toString()]?.[futureMonth] || []
-        let fStrike = fStrikeList.find((s: number) => s > selectedStrike)
-        if (!fStrike && fStrikeList.length > 0) {
-          fStrike = fStrikeList[fStrikeList.length - 1];
-        }
+        let fStrike = fStrikeList.find((s: number) => s > strikeRef) ||
+          fStrikeList.find((s: number) => s === strikeRef) ||
+          fStrikeList[fStrikeList.length - 1]
         if (fStrike) {
           const expiry = getThirdFriday(year, monthIdx)
           const symbol = getSymbolFromExpiryStrike(item.ticker, expiry, fStrike)
@@ -997,17 +1004,18 @@ export default function Page(): JSX.Element {
               price,
               expiry
             })
+            strikeRef = fStrike
           } else {
             console.warn(`Invalid symbol generated for future of ${ticker}: ${symbol}`);
           }
         }
       }
 
-      // Earlier: Collect 1 earlier month
       monthIdx = selectedMonthIndex
       year = Number(selectedYear)
+      strikeRef = selectedStrike
       const allEarlierMonths: { monthIdx: number, year: number }[] = []
-      attempts = 0 // Reset
+      attempts = 0
       while (allEarlierMonths.length < 1 && attempts < maxAttempts) {
         attempts++
         monthIdx--
@@ -1025,10 +1033,9 @@ export default function Page(): JSX.Element {
         const { monthIdx, year } = allEarlierMonths[0]
         const earlierMonth = monthNames[monthIdx]
         const eStrikeList = tickerChain[year.toString()]?.[earlierMonth] || []
-        let eStrike1 = [...eStrikeList].reverse().find((s: number) => s < selectedStrike)
-        if (!eStrike1 && eStrikeList.length > 0) {
-          eStrike1 = eStrikeList[0];
-        }
+        let eStrike1 = [...eStrikeList].reverse().find((s: number) => s < strikeRef) ||
+          eStrikeList.find((s: number) => s === strikeRef) ||
+          eStrikeList[0]
         if (eStrike1) {
           const expiry = getThirdFriday(year, monthIdx)
           const symbol = getSymbolFromExpiryStrike(item.ticker, expiry, eStrike1)
@@ -1041,37 +1048,29 @@ export default function Page(): JSX.Element {
               price,
               expiry
             })
+            strikeRef = eStrike1
           }
         }
-        // Second strike on same expiry, < eStrike1
-        if (earlier.length > 0) {
-          let eStrike2 = [...eStrikeList].reverse().find((s: number) => s < eStrike1!)
-          if (!eStrike2 && eStrikeList.length > 1) {
-            eStrike2 = eStrikeList[0];
-          }
-          if (eStrike2 && eStrike2 !== eStrike1) {
-            const expiry = getThirdFriday(year, monthIdx)
-            const symbol = getSymbolFromExpiryStrike(item.ticker, expiry, eStrike2)
-            if (symbol && symbol.trim() !== '') {
-              const price = prices[item.ticker]?.[symbol]?.bid ?? 0
-              earlier.push({
-                label: `${earlierMonth} ${String(year).slice(2)} C${eStrike2}`,
-                symbol,
-                strike: eStrike2,
-                price,
-                expiry
-              })
-            }
+        let eStrike2 = [...eStrikeList].reverse().find((s: number) => s < strikeRef) ||
+          eStrikeList.find((s: number) => s === strikeRef) ||
+          eStrikeList[0]
+        if (eStrike2 && eStrike2 !== eStrike1) {
+          const expiry = getThirdFriday(year, monthIdx)
+          const symbol = getSymbolFromExpiryStrike(item.ticker, expiry, eStrike2)
+          if (symbol && symbol.trim() !== '') {
+            const price = prices[item.ticker]?.[symbol]?.bid ?? 0
+            earlier.push({
+              label: `${earlierMonth} ${String(year).slice(2)} C${eStrike2}`,
+              symbol,
+              strike: eStrike2,
+              price,
+              expiry
+            })
           }
         }
       }
-      // Fallback if incomplete
-      if (future.length < 2 || earlier.length < 2) {
-        console.warn(`Incomplete future/earlier for ${ticker} after roll - added ${future.length} future, ${earlier.length} earlier`);
-        alert(`Roll parziale per ${ticker}: Chain limitata su Polygon (solo ${future.length} future e ${earlier.length} earlier trovate). Prova altro option.`);
-        while (future.length < 2) future.push({ label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '', symbol: '' });
-        while (earlier.length < 2) earlier.push({ label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '', symbol: '' });
-      }
+      while (future.length < 2) future.push({ label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '', symbol: '' });
+      while (earlier.length < 2) earlier.push({ label: 'OPZIONE INESISTENTE', strike: 0, price: 0, expiry: '', symbol: '' });
 
       return {
         ...item,
@@ -1113,7 +1112,7 @@ export default function Page(): JSX.Element {
     if (!confirmJson.success) {
       console.error('Errore salvataggio su Supabase per', ticker)
     }
-  }
+  }, [data, prices, chain, getSymbolFromExpiryStrike, getThirdFriday, setData]);
 
   useEffect(() => {
     fetchTickers()
@@ -1161,7 +1160,7 @@ export default function Page(): JSX.Element {
     if (data.length === 0) return
     const interval = setInterval(() => {
       fetchPrices()
-    }, 1000)
+    }, 500)
     return () => clearInterval(interval)
   }, [data]);
 
@@ -1229,7 +1228,7 @@ export default function Page(): JSX.Element {
       const tickerPrices = prices[item.ticker] || {};
       const ask = tickerPrices[currentSymbol]?.ask ?? 0;
       const last_trade_price = tickerPrices[currentSymbol]?.last_trade_price ?? 0;
-      const newCurrentPrice = last_trade_price > 0 ? last_trade_price : (ask > 0 ? ask : item.currentCallPrice);
+      const newCurrentPrice = ask > 0 ? ask : (last_trade_price > 0 ? last_trade_price : item.currentCallPrice);
       return {
         ...item,
         currentCallPrice: newCurrentPrice  // Aggiorna solo questo campo con il valore live
@@ -1257,7 +1256,7 @@ export default function Page(): JSX.Element {
     return (
       item.spot < opt.strike &&
       opt.strike >= item.spot * 1.04 &&
-      liveOptPrice >= liveCurrentPrice * 0.98
+      liveOptPrice >= liveCurrentPrice * 1.00
     )
   }
 

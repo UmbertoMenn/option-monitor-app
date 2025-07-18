@@ -1,26 +1,42 @@
-import { NextResponse } from 'next/server'
+import { NextResponse } from 'next/server';
+import { LRUCache } from 'lru-cache';
 
-const POLYGON_API_KEY = process.env.POLYGON_API_KEY!
+const POLYGON_API_KEY = process.env.POLYGON_API_KEY!;
+
+interface CacheData {
+  symbol: string;
+  bid: number;
+  ask: number;
+  last_trade_price: number;
+}
+
+const cache = new LRUCache<string, CacheData>({ max: 500, ttl: 1000 * 5 });  // Cache up to 500 items for 5 seconds
 
 export async function GET(req: Request) {
   try {
-    const { searchParams } = new URL(req.url)
-    const symbols = searchParams.get('symbols')
-    console.log('Simboli richiesti:', symbols)
+    const { searchParams } = new URL(req.url);
+    const symbols = searchParams.get('symbols');
+    console.log('Simboli richiesti:', symbols);
 
     if (!symbols) {
-      return NextResponse.json({ error: 'Missing symbols' }, { status: 400 })
+      return NextResponse.json({ error: 'Missing symbols' }, { status: 400 });
     }
 
     const symbolList = symbols.split(',');
 
     const fetches = symbolList.map(async (symbol) => {
-      const match = /^O:([A-Z]+)\d+C\d+$/.exec(symbol)
+      const cached = cache.get(symbol);
+      if (cached) {
+        console.log(`Cache hit for ${symbol}`);
+        return cached;
+      }
+
+      const match = /^O:([A-Z]+)\d+C\d+$/.exec(symbol);
       if (!match) {
-        console.warn('❌ Simbolo non valido:', symbol)
+        console.warn('❌ Simbolo non valido:', symbol);
         return null;
       }
-      const ticker = match[1]
+      const ticker = match[1];
       const url = `https://api.polygon.io/v3/snapshot/options/${ticker}/${symbol}?apiKey=${POLYGON_API_KEY}`;
       const res = await fetch(url);
       if (!res.ok) {
@@ -32,12 +48,14 @@ export async function GET(req: Request) {
         console.error(`Risposta non valida per ${symbol}:`, json);
         return null;
       }
-      return {
+      const data: CacheData = {
         symbol,
         bid: json.results.last_quote?.bid ?? json.results.last_trade?.price ?? 0,
         ask: json.results.last_quote?.ask ?? json.results.last_trade?.price ?? 0,
         last_trade_price: json.results.last_trade?.price ?? 0
       };
+      cache.set(symbol, data);
+      return data;
     });
 
     const results = await Promise.all(fetches);
