@@ -239,8 +239,8 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
           {icon}{deltaPct.toFixed(2)}%
         </div>
         <div className="p-1 bg-[rgba(70,120,240,0.8)] font-bold">Prezzo Call attuale</div>
-        <div className="p-1 bg-[rgba(70,120,240,0.8)] transition-all duration-300">
-          <span className="px-2 py-1 rounded border border-zinc-800">{(currentBidToShow ?? 0).toFixed(2)} / {(currentAskToShow ?? 0).toFixed(2)}</span>
+        <div className="p-1 bg-[rgba(70,120,240,0.8)] transition-all duration-300 border border-zinc-800 rounded">
+          {(currentBidToShow ?? 0).toFixed(2)} / {(currentAskToShow ?? 0).toFixed(2)}
         </div>
       </div>
       <div className="mb-1 font-semibold bg-gray-800 text-orange-500 text-center rounded py-0.5">Future</div>
