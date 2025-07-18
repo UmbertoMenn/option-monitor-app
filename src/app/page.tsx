@@ -240,7 +240,7 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
         </div>
         <div className="p-1 bg-[rgba(70,120,240,0.8)] font-bold">Prezzo Call attuale</div>
         <div className="p-1 bg-[rgba(70,120,240,0.8)] transition-all duration-300">
-          <span className="px-2 py-1 rounded border border-red-400">{(currentBidToShow ?? 0).toFixed(2)} / {(currentAskToShow ?? 0).toFixed(2)}</span>
+          <span className="px-2 py-1 rounded border border-black-400">{(currentBidToShow ?? 0).toFixed(2)} / {(currentAskToShow ?? 0).toFixed(2)}</span>
         </div>
       </div>
       <div className="mb-1 font-semibold bg-gray-800 text-orange-500 text-center rounded py-0.5">Future</div>
@@ -258,7 +258,7 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
               {isFattibile(opt, item) && (
                 <span className={isFattibile(opt, item) ? "text-green-400" : "text-transparent"} title={isFattibile(opt, item) ? "Fattibile: strike ≥ spot + 4%, prezzo ≥ prezzo call attuale" : ""}>🟢</span>)}
               <span title={opt.expiry}>
-                <span className="bg-zinc-800 px-2 py-1 rounded border border-red-400">{opt.label}</span> <span className="bg-zinc-800 px-2 py-1 rounded border border-red-400 ml-1">{optBid.toFixed(2)} / {optAsk.toFixed(2)}</span>
+                <span className="bg-zinc-800 px-2 py-1 rounded border border-red-400">{opt.label}</span><span className="bg-zinc-800 px-2 py-1 rounded border border-red-400">{optBid.toFixed(2)} / {optAsk.toFixed(2)}</span>
                 {optPriceData && (
                   <span title="Premio aggiuntivo/riduttivo rispetto alla call attuale, diviso il prezzo spot" className={`ml-1 ${deltaColor_opt}`}>
                     {deltaSign}{delta.toFixed(2)}%
@@ -501,7 +501,7 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
               {isFattibile(opt, item) && (
                 <span className={isFattibile(opt, item) ? "text-green-400" : "text-transparent"} title={isFattibile(opt, item) ? "Fattibile: strike ≥ spot + 4%, prezzo ≥ 98% del prezzo call attuale" : ""}>🟢</span>)}
               <span title={opt.expiry}>
-                <span className="bg-zinc-800 px-2 py-1 rounded border border-red-400">{opt.label}</span> <span className="bg-zinc-800 px-2 py-1 rounded border border-red-400 ml-1">{optBid.toFixed(2)} / {optAsk.toFixed(2)}</span>
+                <span className="bg-zinc-800 px-2 py-1 rounded border border-red-400">{opt.label}</span><span className="bg-zinc-800 px-2 py-1 rounded border border-red-400">{optBid.toFixed(2)} / {optAsk.toFixed(2)}</span>
                 {optPriceData && (
                   <span title="Premio aggiuntivo/riduttivo rispetto alla call attuale, diviso il prezzo spot" className={`ml-1 ${deltaColor_opt}`}>
                     {deltaSign}{delta.toFixed(2)}%
