@@ -102,10 +102,10 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
 
   const currentSymbol = getSymbolFromExpiryStrike(item.ticker, item.expiry, item.strike)
   const tickerPrices = prices[item.ticker] || {}
-  const currentData = tickerPrices[currentSymbol] ?? { bid: item.current_bid, ask: item.current_ask, last_trade_price: item.current_last_trade_price }
-  const currentBidToShow = currentData.bid
-  const currentAskToShow = currentData.ask > 0 ? currentData.ask : currentData.last_trade_price
-  console.log(`[${item.ticker}] Current Symbol: ${currentSymbol}, Bid: ${currentBidToShow}, Ask: ${currentAskToShow}, Last: ${currentData.last_trade_price}`);
+  const currentData = tickerPrices[currentSymbol] ?? { bid: item.current_bid ?? 0, ask: item.current_ask ?? 0, last_trade_price: item.current_last_trade_price ?? 0 }
+  const currentBidToShow = currentData.bid ?? 0
+  const currentAskToShow = (currentData.ask ?? 0) > 0 ? (currentData.ask ?? 0) : (currentData.last_trade_price ?? 0)
+  console.log(`[${item.ticker}] Current Symbol: ${currentSymbol}, Bid: ${currentBidToShow}, Ask: ${currentAskToShow}, Last: ${currentData.last_trade_price ?? 0}`);
   const spotData = spots[ticker] || { price: 0, changePercent: 0 };
   const changePercent = spotData.changePercent;
   const changeColor = changePercent >= 0 ? 'text-green-300' : 'text-red-300';
@@ -238,17 +238,17 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
         <div className={`p-1 transition-all duration-300 ${deltaColor} ${highlightClass}`}>
           {icon}{deltaPct.toFixed(2)}%
         </div>
-        <div className="p-1 bg-[rgba(70,120,240,0.8)] font-bold">Current Bid/Ask</div>
+        <div className="p-1 bg-[rgba(70,120,240,0.8)] font-bold">Prezzo Call attuale</div>
         <div className="p-1 bg-[rgba(70,120,240,0.8)] transition-all duration-300">
-          <span className="bg-zinc-800 px-2 py-1 rounded">{currentBidToShow.toFixed(2)} / {currentAskToShow.toFixed(2)}</span>
+          <span className="bg-zinc-800 px-2 py-1 rounded">{(currentBidToShow ?? 0).toFixed(2)} / {(currentAskToShow ?? 0).toFixed(2)}</span>
         </div>
       </div>
       <div className="mb-1 font-semibold bg-gray-800 text-orange-500 text-center rounded py-0.5">Future</div>
       {item.future.map((opt, i) => {
-        const optData = tickerPrices[opt.symbol] ?? { bid: opt.bid, ask: opt.ask, last_trade_price: opt.last_trade_price }
-        const optBid = optData.bid > 0 ? optData.bid : optData.last_trade_price
-        const optAsk = optData.ask
-        const delta = optData && item.spot > 0 ? ((optBid - currentAskToShow) / item.spot) * 100 : 0;
+        const optPriceData = tickerPrices[opt.symbol]
+        const optBid = (optPriceData?.bid ?? opt.bid ?? 0) > 0 ? (optPriceData?.bid ?? opt.bid ?? 0) : (optPriceData?.last_trade_price ?? opt.last_trade_price ?? 0)
+        const optAsk = optPriceData?.ask ?? opt.ask ?? 0
+        const delta = item.spot > 0 ? ((optBid - currentAskToShow) / item.spot) * 100 : 0;
         const deltaColor_opt = delta >= 0 ? 'text-green-400' : 'text-red-400'
         const deltaSign = delta >= 0 ? '+' : ''
 
@@ -256,14 +256,14 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
           <div key={i} className="flex items-center justify-between mb-1">
             <span className="flex items-center gap-1">
               {isFattibile(opt, item) && (
-                <span className={isFattibile(opt, item) ? "text-green-400" : "text-transparent"} title={isFattibile(opt, item) ? "Fattibile: strike ≥ spot + 4%, bid ≥ ask call attuale" : ""}>🟢</span>)}
+                <span className={isFattibile(opt, item) ? "text-green-400" : "text-transparent"} title={isFattibile(opt, item) ? "Fattibile: strike ≥ spot + 4%, prezzo ≥ prezzo call attuale" : ""}>🟢</span>)}
               <span title={opt.expiry}>
                 {opt.label} - <span className="bg-zinc-800 px-2 py-1 rounded">{optBid.toFixed(2)} / {optAsk.toFixed(2)}</span> /
-                {optData.bid > 0 || optData.ask > 0 || optData.last_trade_price > 0 ? (
+                {optPriceData && (
                   <span title="Premio aggiuntivo/riduttivo rispetto alla call attuale, diviso il prezzo spot" className={`ml-1 ${deltaColor_opt}`}>
                     {deltaSign}{delta.toFixed(2)}%
                   </span>
-                ) : null}
+                )}
               </span>
             </span>
             <div className="flex gap-1 items-center">
@@ -488,10 +488,10 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
       })}
       <div className="mb-1 font-semibold bg-gray-800 text-orange-500 text-center rounded py-0.5">Earlier</div>
       {item.earlier.map((opt, i) => {
-        const optData = tickerPrices[opt.symbol] ?? { bid: opt.bid, ask: opt.ask, last_trade_price: opt.last_trade_price }
-        const optBid = optData.bid > 0 ? optData.bid : optData.last_trade_price
-        const optAsk = optData.ask
-        const delta = optData && item.spot > 0 ? ((optBid - currentAskToShow) / item.spot) * 100 : 0;
+        const optPriceData = tickerPrices[opt.symbol]
+        const optBid = (optPriceData?.bid ?? opt.bid ?? 0) > 0 ? (optPriceData?.bid ?? opt.bid ?? 0) : (optPriceData?.last_trade_price ?? opt.last_trade_price ?? 0)
+        const optAsk = optPriceData?.ask ?? opt.ask ?? 0
+        const delta = item.spot > 0 ? ((optBid - currentAskToShow) / item.spot) * 100 : 0;
         const deltaColor_opt = delta >= 0 ? 'text-green-400' : 'text-red-400'
         const deltaSign = delta >= 0 ? '+' : ''
 
@@ -499,14 +499,14 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
           <div key={i} className="flex items-center justify-between mb-1">
             <span className="flex items-center gap-1">
               {isFattibile(opt, item) && (
-                <span className={isFattibile(opt, item) ? "text-green-400" : "text-transparent"} title={isFattibile(opt, item) ? "Fattibile: strike ≥ spot + 4%, bid ≥ 98% dell'ask call attuale" : ""}>🟢</span>)}
+                <span className={isFattibile(opt, item) ? "text-green-400" : "text-transparent"} title={isFattibile(opt, item) ? "Fattibile: strike ≥ spot + 4%, prezzo ≥ 98% del prezzo call attuale" : ""}>🟢</span>)}
               <span title={opt.expiry}>
                 {opt.label} - <span className="bg-zinc-800 px-2 py-1 rounded">{optBid.toFixed(2)} / {optAsk.toFixed(2)}</span> /
-                {optData.bid > 0 || optData.ask > 0 || optData.last_trade_price > 0 ? (
+                {optPriceData && (
                   <span title="Premio aggiuntivo/riduttivo rispetto alla call attuale, diviso il prezzo spot" className={`ml-1 ${deltaColor_opt}`}>
                     {deltaSign}{delta.toFixed(2)}%
                   </span>
-                ) : null}
+                )}
               </span>
             </span>
             <div className="flex gap-1 items-center">
@@ -1341,9 +1341,9 @@ export default function Page(): JSX.Element {
       const delta = ((item.strike - item.spot) / item.spot) * 100;
       const tickerPrices = prices[item.ticker] || {};
       const currentSymbol = getSymbolFromExpiryStrike(item.ticker, item.expiry, item.strike);
-      const currentAsk = tickerPrices[currentSymbol]?.ask ?? item.current_ask;
-      const currentLast = tickerPrices[currentSymbol]?.last_trade_price ?? item.current_last_trade_price;
-      const currentPrice = currentAsk > 0 ? currentAsk : (currentLast > 0 ? currentLast : 0);
+      const ask = tickerPrices[currentSymbol]?.ask ?? item.current_ask ?? 0;
+      const last_trade_price = tickerPrices[currentSymbol]?.last_trade_price ?? item.current_last_trade_price ?? 0;
+      const currentPrice = ask > 0 ? ask : (last_trade_price > 0 ? last_trade_price : 0);
       const [currYear, currMonth] = item.expiry.split('-');
       const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC'];
       const currMonthIndex = Number(currMonth) - 1;
@@ -1356,11 +1356,11 @@ export default function Page(): JSX.Element {
       for (const level of levels) {
         const f1 = item.future[0] || { label: 'N/A', bid: 0, last_trade_price: 0, symbol: '' };
         const f2 = item.future[1] || { label: 'N/A', bid: 0, last_trade_price: 0, symbol: '' };
-        const f1Bid = tickerPrices[f1.symbol]?.bid ?? f1.bid;
-        const f1Last = tickerPrices[f1.symbol]?.last_trade_price ?? f1.last_trade_price;
+        const f1Bid = tickerPrices[f1.symbol]?.bid ?? f1.bid ?? 0;
+        const f1Last = tickerPrices[f1.symbol]?.last_trade_price ?? f1.last_trade_price ?? 0;
         const f1Price = f1Bid > 0 ? f1Bid : f1Last;
-        const f2Bid = tickerPrices[f2.symbol]?.bid ?? f2.bid;
-        const f2Last = tickerPrices[f2.symbol]?.last_trade_price ?? f2.last_trade_price;
+        const f2Bid = tickerPrices[f2.symbol]?.bid ?? f2.bid ?? 0;
+        const f2Last = tickerPrices[f2.symbol]?.last_trade_price ?? f2.last_trade_price ?? 0;
         const f2Price = f2Bid > 0 ? f2Bid : f2Last;
         // Add check: only send if all relevant prices are non-zero
         if (currentPrice > 0 && f1Price > 0 && f2Price > 0 && delta < level && !sentAlerts.current[item.ticker][level]) {
@@ -1377,11 +1377,11 @@ export default function Page(): JSX.Element {
       const hasFattibileEarlier = item.earlier.some(opt => isFattibile(opt, item));
       const e1 = item.earlier[0] || { label: 'N/A', bid: 0, last_trade_price: 0, symbol: '' };
       const e2 = item.earlier[1] || { label: 'N/A', bid: 0, last_trade_price: 0, symbol: '' };
-      const e1Bid = tickerPrices[e1.symbol]?.bid ?? e1.bid;
-      const e1Last = tickerPrices[e1.symbol]?.last_trade_price ?? e1.last_trade_price;
+      const e1Bid = tickerPrices[e1.symbol]?.bid ?? e1.bid ?? 0;
+      const e1Last = tickerPrices[e1.symbol]?.last_trade_price ?? e1.last_trade_price ?? 0;
       const e1Price = e1Bid > 0 ? e1Bid : e1Last;
-      const e2Bid = tickerPrices[e2.symbol]?.bid ?? e2.bid;
-      const e2Last = tickerPrices[e2.symbol]?.last_trade_price ?? e2.last_trade_price;
+      const e2Bid = tickerPrices[e2.symbol]?.bid ?? e2.bid ?? 0;
+      const e2Last = tickerPrices[e2.symbol]?.last_trade_price ?? e2.last_trade_price ?? 0;
       const e2Price = e2Bid > 0 ? e2Bid : e2Last;
       // Add similar check for earlier alert
       if (currentPrice > 0 && e1Price > 0 && e2Price > 0 && hasFattibileEarlier && !sentAlerts.current[item.ticker]['fattibile_high']) {
@@ -1401,7 +1401,7 @@ export default function Page(): JSX.Element {
       if (!item) return item; // Safeguard per item undefined
       const currentSymbol = getSymbolFromExpiryStrike(item.ticker, item.expiry, item.strike);
       const tickerPrices = prices[item.ticker] || {};
-      const currentData = tickerPrices[currentSymbol] ?? { bid: item.current_bid, ask: item.current_ask, last_trade_price: item.current_last_trade_price };
+      const currentData = tickerPrices[currentSymbol] ?? { bid: item.current_bid ?? 0, ask: item.current_ask ?? 0, last_trade_price: item.current_last_trade_price ?? 0 };
       return {
         ...item,
         current_bid: currentData.bid,
@@ -1415,16 +1415,15 @@ export default function Page(): JSX.Element {
   const isFattibile = (opt: OptionEntry, item: OptionData) => {
     const tickerPrices = prices[item.ticker] || {}
     const optPriceData = tickerPrices[opt.symbol]
-    if (!optPriceData) return false
-    const optBid = optPriceData.bid ?? opt.bid
-    const optLast = optPriceData.last_trade_price ?? opt.last_trade_price
+    const optBid = optPriceData?.bid ?? opt.bid ?? 0
+    const optLast = optPriceData?.last_trade_price ?? opt.last_trade_price ?? 0
     const liveOptPrice = optBid > 0 ? optBid : optLast
     if (liveOptPrice <= 0) return false
 
     const currentSymbol = getSymbolFromExpiryStrike(item.ticker, item.expiry, item.strike)
-    const currentData = tickerPrices[currentSymbol] ?? { ask: item.current_ask, last_trade_price: item.current_last_trade_price }
-    const currentAsk = currentData.ask
-    const currentLast = currentData.last_trade_price
+    const currentData = tickerPrices[currentSymbol] ?? { ask: item.current_ask ?? 0, last_trade_price: item.current_last_trade_price ?? 0 }
+    const currentAsk = currentData.ask ?? 0
+    const currentLast = currentData.last_trade_price ?? 0
     const liveCurrentPrice = currentAsk > 0 ? currentAsk : currentLast
     if (liveCurrentPrice <= 0) return false
 
