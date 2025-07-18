@@ -253,7 +253,7 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
         const deltaSign = delta >= 0 ? '+' : ''
 
         return (
-          <div key={i} className="flex items-center justify-between mb-1">
+          <div key={i} className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-1 gap-1 sm:gap-0">
             <span className="flex items-center gap-1">
               <span title={opt.expiry}>
                 <span className="bg-zinc-800 px-2 py-1 rounded border border-red-400">{opt.label}</span><span className="bg-zinc-800 px-2 py-1 rounded border border-red-400">{optBid.toFixed(2)} / {optAsk.toFixed(2)}</span>
@@ -496,7 +496,7 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
         const deltaSign = delta >= 0 ? '+' : ''
 
         return (
-          <div key={i} className="flex items-center justify-between mb-1">
+          <div key={i} className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-1 gap-1 sm:gap-0">
             <span className="flex items-center gap-1">
               <span title={opt.expiry}>
                 <span className="bg-zinc-800 px-2 py-1 rounded border border-red-400">{opt.label}</span><span className="bg-zinc-800 px-2 py-1 rounded border border-red-400">{optBid.toFixed(2)} / {optAsk.toFixed(2)}</span>
@@ -1333,70 +1333,6 @@ export default function Page(): JSX.Element {
   useEffect(() => {
     setData((prev: OptionData[]) => prev.map(item => ({ ...item, spot: (spots[item.ticker]?.price > 0 ? spots[item.ticker].price : item.spot) })));
   }, [spots]);
-
-  useEffect(() => {
-    data.forEach(item => {
-      if (!alertsEnabled[item.ticker]) return;
-      if (item.spot <= 0) return;
-      const spotData = spots[item.ticker] || { price: 0, changePercent: 0 };
-      const changePercent = spotData.changePercent;
-      const changeSign = changePercent >= 0 ? '+' : '';
-      const delta = ((item.strike - item.spot) / item.spot) * 100;
-      const tickerPrices = prices[item.ticker] || {};
-      const currentSymbol = getSymbolFromExpiryStrike(item.ticker, item.expiry, item.strike);
-      const ask = tickerPrices[currentSymbol]?.ask ?? item.current_ask ?? 0;
-      const last_trade_price = tickerPrices[currentSymbol]?.last_trade_price ?? item.current_last_trade_price ?? 0;
-      const currentPrice = ask > 0 ? ask : (last_trade_price > 0 ? last_trade_price : 0);
-      const [currYear, currMonth] = item.expiry.split('-');
-      const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC'];
-      const currMonthIndex = Number(currMonth) - 1;
-      const currMonthName = monthNames[currMonthIndex];
-      const currentLabel = `${currMonthName} ${currYear.slice(2)} C${item.strike}`;
-      const levels = [4, 3, 2, 1];
-      if (!sentAlerts.current[item.ticker]) sentAlerts.current[item.ticker] = {};
-
-      // Alert per low delta (mantieni invariato)
-      for (const level of levels) {
-        const f1 = item.future[0] || { label: 'N/A', bid: 0, last_trade_price: 0, symbol: '' };
-        const f2 = item.future[1] || { label: 'N/A', bid: 0, last_trade_price: 0, symbol: '' };
-        const f1Bid = tickerPrices[f1.symbol]?.bid ?? f1.bid ?? 0;
-        const f1Last = tickerPrices[f1.symbol]?.last_trade_price ?? f1.last_trade_price ?? 0;
-        const f1Price = f1Bid > 0 ? f1Bid : f1Last;
-        const f2Bid = tickerPrices[f2.symbol]?.bid ?? f2.bid ?? 0;
-        const f2Last = tickerPrices[f2.symbol]?.last_trade_price ?? f2.last_trade_price ?? 0;
-        const f2Price = f2Bid > 0 ? f2Bid : f2Last;
-        // Add check: only send if all relevant prices are non-zero
-        if (currentPrice > 0 && f1Price > 0 && f2Price > 0 && delta < level && !sentAlerts.current[item.ticker][level]) {
-          sentAlerts.current[item.ticker][level] = true;
-          const f1Label = f1.label.replace(/C(\d+)/, '$1 CALL');
-          const f2Label = f2.label.replace(/C(\d+)/, '$1 CALL');
-          const currLabelFormatted = currentLabel.replace(/C(\d+)/, '$1 CALL');
-          const alertMessage = `🔴 ${item.ticker} – DELTA: ${delta.toFixed(2)}% – Rollare\n\nSpot: ${item.spot}\nDelta Spot: ${item.spot} (${changeSign}${changePercent.toFixed(2)}%)\nStrike: ${item.strike}\nCurrent Call: ${currLabelFormatted} - ${currentPrice.toFixed(2)}\n\n#Future 1: ${f1Label} - ${f1Price.toFixed(2)}\n#Future 2: ${f2Label} - ${f2Price.toFixed(2)}`;
-          sendTelegramMessage(alertMessage);
-        }
-      }
-
-      // Nuovo: Alert per earlier fattibile (sostituisce high delta)
-      const hasFattibileEarlier = item.earlier.some(opt => isFattibile(opt, item));
-      const e1 = item.earlier[0] || { label: 'N/A', bid: 0, last_trade_price: 0, symbol: '' };
-      const e2 = item.earlier[1] || { label: 'N/A', bid: 0, last_trade_price: 0, symbol: '' };
-      const e1Bid = tickerPrices[e1.symbol]?.bid ?? e1.bid ?? 0;
-      const e1Last = tickerPrices[e1.symbol]?.last_trade_price ?? e1.last_trade_price ?? 0;
-      const e1Price = e1Bid > 0 ? e1Bid : e1Last;
-      const e2Bid = tickerPrices[e2.symbol]?.bid ?? e2.bid ?? 0;
-      const e2Last = tickerPrices[e2.symbol]?.last_trade_price ?? e2.last_trade_price ?? 0;
-      const e2Price = e2Bid > 0 ? e2Bid : e2Last;
-      // Add similar check for earlier alert
-      if (currentPrice > 0 && e1Price > 0 && e2Price > 0 && hasFattibileEarlier && !sentAlerts.current[item.ticker]['fattibile_high']) {
-        sentAlerts.current[item.ticker]['fattibile_high'] = true;
-        const e1Label = e1.label.replace(/C(\d+)/, '$1 CALL');
-        const e2Label = e2.label.replace(/C(\d+)/, '$1 CALL');
-        const currLabelFormatted = currentLabel.replace(/C(\d+)/, '$1 CALL');
-        const alertMessage = `🟢 ${item.ticker} – DELTA: ${delta.toFixed(2)}% (Earlier fattibile disponibile)\n\nSpot: ${item.spot}\nDelta Spot: ${item.spot} (${changeSign}${changePercent.toFixed(2)}%)\nCurrent Call: ${currLabelFormatted} - ${currentPrice.toFixed(2)}\n\n#Earlier 1: ${e1Label} - ${e1Price.toFixed(2)}\n#Earlier 2: ${e2Label} - ${e2Price.toFixed(2)}`;
-        sendTelegramMessage(alertMessage);
-      }
-    });
-  }, [data, prices, spots, alertsEnabled]);
 
   useEffect(() => {
     if (Object.keys(prices).length === 0) return;  // Evita aggiornamenti prematuri se prices è vuoto
