@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState, useRef, useCallback } from 'react'
+import React, { useEffect, useState, useRef, useCallback, Fragment } from 'react'
 import { sendTelegramMessage } from './telegram';
 
 function formatStrike(strike: number): string {
@@ -49,9 +49,12 @@ function getThirdFriday(year: number, monthIndex: number): string {
   return `${year}-${String(monthIndex + 1).padStart(2, '0')}-15`
 }
 
-const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRoll, selected, setSelected, showDropdowns, setShowDropdowns, alertsEnabled, setAlertsEnabled, sentAlerts, chain, updateCurrentCall, handleRollaClick, shiftExpiryByMonth, getSymbolFromExpiryStrike, getThirdFriday, data, setData, setChain, spots }: {
+type PricesType = Record<string, Record<string, { bid: number; ask: number; last_trade_price: number; symbol: string }>>;
+
+const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, setPendingRoll, selected, setSelected, showDropdowns, setShowDropdowns, alertsEnabled, setAlertsEnabled, sentAlerts, chain, updateCurrentCall, handleRollaClick, shiftExpiryByMonth, getSymbolFromExpiryStrike, getThirdFriday, data, setData, setChain, spots }: {
   item: OptionData,
-  prices: Record<string, Record<string, { bid: number; ask: number; last_trade_price: number; symbol: string }>>,
+  prices: PricesType,
+  setPrices: React.Dispatch<React.SetStateAction<PricesType>>,
   isFattibile: (opt: OptionEntry, item: OptionData) => boolean,
   setPendingRoll: React.Dispatch<React.SetStateAction<{ ticker: string, opt: OptionEntry } | null>>,
   selected: { [ticker: string]: { year: string, month: string, strike: number | null } },
@@ -111,7 +114,7 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
         <div className="flex items-center gap-2">
           <button
             onClick={() => {
-              setAlertsEnabled(prev => {
+              setAlertsEnabled((prev: { [ticker: string]: boolean }) => {
                 const next = { ...prev, [ticker]: !prev[ticker] };
                 fetch('/api/alerts', {
                   method: 'POST',
@@ -144,7 +147,7 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
             {alertsEnabled[ticker] ? '🔔' : '🔕'}
           </button>
           <button
-            onClick={() => setShowDropdowns(prev => ({ ...prev, [ticker]: !showDropdown }))}
+            onClick={() => setShowDropdowns((prev: { [ticker: string]: boolean }) => ({ ...prev, [ticker]: !showDropdown }))}
             className="bg-white/10 hover:bg-white/20 text-white text-xs font-medium px-2 py-1 rounded"
           >
             🔄 UPDATE CURRENT CALL
@@ -157,7 +160,7 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
                 const res = await fetch(`/api/chain?ticker=${ticker}`);
                 if (res.ok) {
                   const json = await res.json();
-                  setChain(prev => ({ ...prev, [ticker]: json }));
+                  setChain((prev: Record<string, Record<string, Record<string, number[]>>>) => ({ ...prev, [ticker]: json }));
                   console.log(`Reloaded for ${ticker}: years - ${Object.keys(json).join(', ')}`);
                 } else {
                   console.error(`Reload error for ${ticker}: ${res.status}`);
@@ -176,7 +179,7 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
         <div className="grid grid-cols-3 gap-2 mb-2">
           <select
             value={sel.year}
-            onChange={e => setSelected(prev => ({ ...prev, [ticker]: { ...sel, year: e.target.value, month: '', strike: null } }))}
+            onChange={e => setSelected((prev: { [ticker: string]: { year: string, month: string, strike: number | null } }) => ({ ...prev, [ticker]: { ...sel, year: e.target.value, month: '', strike: null } }))}
             className="bg-zinc-800 text-white p-1"
           >
             <option value="">Anno</option>
@@ -189,7 +192,7 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
           )}
           <select
             value={sel.month}
-            onChange={e => setSelected(prev => ({ ...prev, [ticker]: { ...sel, month: e.target.value, strike: null } }))}
+            onChange={e => setSelected((prev: { [ticker: string]: { year: string, month: string, strike: number | null } }) => ({ ...prev, [ticker]: { ...sel, month: e.target.value, strike: null } }))}
             className="bg-zinc-800 text-white p-1"
             disabled={!sel.year}
           >
@@ -198,7 +201,7 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
           </select>
           <select
             value={sel.strike ?? ''}
-            onChange={e => setSelected(prev => ({ ...prev, [ticker]: { ...sel, strike: Number(e.target.value) } }))}
+            onChange={e => setSelected((prev: { [ticker: string]: { year: string, month: string, strike: number | null } }) => ({ ...prev, [ticker]: { ...sel, strike: Number(e.target.value) } }))}
             className="bg-zinc-800 text-white p-1"
             disabled={!sel.month}
           >
@@ -240,6 +243,7 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
         const bid = tickerPrices[opt.symbol]?.bid ?? 0
         const last_trade_price_opt = tickerPrices[opt.symbol]?.last_trade_price ?? 0
         const optPrice = bid > 0 ? bid : last_trade_price_opt
+        const displayPrice = optPrice > 0 ? optPrice : opt.price; // Aggiunto fallback a opt.price
         const delta = optPriceData && item.spot > 0 ? ((optPrice - priceToShow) / item.spot) * 100 : 0;
         const deltaColor_opt = delta >= 0 ? 'text-green-400' : 'text-red-400'
         const deltaSign = delta >= 0 ? '+' : ''
@@ -250,7 +254,7 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
               {isFattibile(opt, item) && (
                 <span className={isFattibile(opt, item) ? "text-green-400" : "text-transparent"} title={isFattibile(opt, item) ? "Fattibile: strike ≥ spot + 4%, prezzo ≥ prezzo call attuale" : ""}>🟢</span>)}
               <span title={opt.expiry}>
-                {opt.label} - {optPrice.toFixed(2)} /
+                {opt.label} - {displayPrice.toFixed(2)} /
                 {optPriceData && (
                   <span title="Premio aggiuntivo/riduttivo rispetto alla call attuale, diviso il prezzo spot" className={`ml-1 ${deltaColor_opt}`}>
                     {deltaSign}{delta.toFixed(2)}%
@@ -269,7 +273,7 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
               <button
                 title="Strike Up"
                 className="bg-green-700 hover:bg-green-800 text-white text-xs px-1 rounded"
-                onClick={() => {
+                onClick={async () => { // Rendi async
                   const [year, month] = opt.expiry.split('-')
                   const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
                   const monthIndex = Number(month) - 1
@@ -277,11 +281,25 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
                   const nextStrike = chainStrikes.find((s: number) => s > opt.strike)
                   if (!nextStrike) return
 
+                  // Pre-fetch prezzo per nuovo simbolo
+                  const newSymbol = getSymbolFromExpiryStrike(item.ticker, opt.expiry, nextStrike)
+                  const res = await fetch(`/api/full-prices?symbols=${newSymbol}`)
+                  let newData = { bid: 0, ask: 0, last_trade_price: 0 }
+                  if (res.ok) {
+                    const json = await res.json()
+                    newData = json[newSymbol] || { bid: 0, ask: 0, last_trade_price: 0 }
+                    setPrices((prev: PricesType) => ({
+                      ...prev,
+                      [item.ticker]: { ...prev[item.ticker], [newSymbol]: { ...newData, symbol: newSymbol } }
+                    }))
+                  }
+
                   const updatedOpt = {
                     ...opt,
                     strike: nextStrike,
                     label: `${monthNames[monthIndex]} ${year.slice(2)} C${nextStrike}`,
-                    symbol: getSymbolFromExpiryStrike(item.ticker, opt.expiry, nextStrike)
+                    symbol: newSymbol,
+                    price: newData.bid > 0 ? newData.bid : (newData.last_trade_price > 0 ? newData.last_trade_price : 0) // Imposta fallback price
                   }
 
                   const updatedData = data.map((d, idx) => {
@@ -308,7 +326,7 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
               <button
                 title="Strike Down"
                 className="bg-red-700 hover:bg-red-800 text-white text-xs px-1 rounded"
-                onClick={() => {
+                onClick={async () => { // Rendi async
                   const [year, month] = opt.expiry.split('-')
                   const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
                   const monthIndex = Number(month) - 1
@@ -316,11 +334,25 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
                   const prevStrike = [...chainStrikes].reverse().find((s: number) => s < opt.strike)
                   if (!prevStrike) return
 
+                  // Pre-fetch
+                  const newSymbol = getSymbolFromExpiryStrike(item.ticker, opt.expiry, prevStrike)
+                  const res = await fetch(`/api/full-prices?symbols=${newSymbol}`)
+                  let newData = { bid: 0, ask: 0, last_trade_price: 0 }
+                  if (res.ok) {
+                    const json = await res.json()
+                    newData = json[newSymbol] || { bid: 0, ask: 0, last_trade_price: 0 }
+                    setPrices((prev: PricesType) => ({
+                      ...prev,
+                      [item.ticker]: { ...prev[item.ticker], [newSymbol]: { ...newData, symbol: newSymbol } }
+                    }))
+                  }
+
                   const updatedOpt = {
                     ...opt,
                     strike: prevStrike,
                     label: `${monthNames[monthIndex]} ${year.slice(2)} C${prevStrike}`,
-                    symbol: getSymbolFromExpiryStrike(item.ticker, opt.expiry, prevStrike)
+                    symbol: newSymbol,
+                    price: newData.bid > 0 ? newData.bid : (newData.last_trade_price > 0 ? newData.last_trade_price : 0)
                   }
 
                   const updatedData = data.map((d, idx) => {
@@ -347,14 +379,28 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
               <button
                 title="Month Back"
                 className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded"
-                onClick={() => {
+                onClick={async () => { // Rendi async
                   const shift = shiftExpiryByMonth(item.ticker, opt, 'prev', 'earlier')
                   if (!shift) return
+
+                  const newSymbol = getSymbolFromExpiryStrike(item.ticker, shift.expiry, shift.strike)
+                  const res = await fetch(`/api/full-prices?symbols=${newSymbol}`)
+                  let newPrice = 0
+                  if (res.ok) {
+                    const json = await res.json()
+                    const newData = json[newSymbol] || { bid: 0, ask: 0, last_trade_price: 0 }
+                    newPrice = newData.bid > 0 ? newData.bid : (newData.last_trade_price > 0 ? newData.last_trade_price : 0)
+                    setPrices((prev: PricesType) => ({
+                      ...prev,
+                      [item.ticker]: { ...prev[item.ticker], [newSymbol]: { ...newData, symbol: newSymbol } }
+                    }))
+                  }
 
                   const updatedOpt = {
                     ...opt,
                     ...shift,
-                    symbol: getSymbolFromExpiryStrike(item.ticker, shift.expiry, shift.strike)
+                    symbol: newSymbol,
+                    price: newPrice // Override price con valore fetchato
                   }
 
                   const updatedData = data.map((d, idx) => {
@@ -381,14 +427,28 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
               <button
                 title="Month Forward"
                 className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded"
-                onClick={() => {
+                onClick={async () => { // Rendi async
                   const shift = shiftExpiryByMonth(item.ticker, opt, 'next', 'future')
                   if (!shift) return
+
+                  const newSymbol = getSymbolFromExpiryStrike(item.ticker, shift.expiry, shift.strike)
+                  const res = await fetch(`/api/full-prices?symbols=${newSymbol}`)
+                  let newPrice = 0
+                  if (res.ok) {
+                    const json = await res.json()
+                    const newData = json[newSymbol] || { bid: 0, ask: 0, last_trade_price: 0 }
+                    newPrice = newData.bid > 0 ? newData.bid : (newData.last_trade_price > 0 ? newData.last_trade_price : 0)
+                    setPrices((prev: PricesType) => ({
+                      ...prev,
+                      [item.ticker]: { ...prev[item.ticker], [newSymbol]: { ...newData, symbol: newSymbol } }
+                    }))
+                  }
 
                   const updatedOpt = {
                     ...opt,
                     ...shift,
-                    symbol: getSymbolFromExpiryStrike(item.ticker, shift.expiry, shift.strike)
+                    symbol: newSymbol,
+                    price: newPrice
                   }
 
                   const updatedData = data.map((d, idx) => {
@@ -422,6 +482,7 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
         const bid = tickerPrices[opt.symbol]?.bid ?? 0
         const last_trade_price_opt = tickerPrices[opt.symbol]?.last_trade_price ?? 0
         const optPrice = bid > 0 ? bid : last_trade_price_opt
+        const displayPrice = optPrice > 0 ? optPrice : opt.price; // Aggiunto fallback
         const delta = optPriceData && item.spot > 0 ? ((optPrice - priceToShow) / item.spot) * 100 : 0;
         const deltaColor_opt = delta >= 0 ? 'text-green-400' : 'text-red-400'
         const deltaSign = delta >= 0 ? '+' : ''
@@ -432,7 +493,7 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
               {isFattibile(opt, item) && (
                 <span className={isFattibile(opt, item) ? "text-green-400" : "text-transparent"} title={isFattibile(opt, item) ? "Fattibile: strike ≥ spot + 4%, prezzo ≥ 98% del prezzo call attuale" : ""}>🟢</span>)}
               <span title={opt.expiry}>
-                {opt.label} - {optPrice.toFixed(2)} /
+                {opt.label} - {displayPrice.toFixed(2)} /
                 {optPriceData && (
                   <span title="Premio aggiuntivo/riduttivo rispetto alla call attuale, diviso il prezzo spot" className={`ml-1 ${deltaColor_opt}`}>
                     {deltaSign}{delta.toFixed(2)}%
@@ -451,7 +512,7 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
               <button
                 title="Strike Up"
                 className="bg-green-700 hover:bg-green-800 text-white text-xs px-1 rounded"
-                onClick={() => {
+                onClick={async () => {
                   const [year, month] = opt.expiry.split('-')
                   const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
                   const monthIndex = Number(month) - 1
@@ -459,11 +520,24 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
                   const nextStrike = chainStrikes.find((s: number) => s > opt.strike)
                   if (!nextStrike) return
 
+                  const newSymbol = getSymbolFromExpiryStrike(item.ticker, opt.expiry, nextStrike)
+                  const res = await fetch(`/api/full-prices?symbols=${newSymbol}`)
+                  let newData = { bid: 0, ask: 0, last_trade_price: 0 }
+                  if (res.ok) {
+                    const json = await res.json()
+                    newData = json[newSymbol] || { bid: 0, ask: 0, last_trade_price: 0 }
+                    setPrices((prev: PricesType) => ({
+                      ...prev,
+                      [item.ticker]: { ...prev[item.ticker], [newSymbol]: { ...newData, symbol: newSymbol } }
+                    }))
+                  }
+
                   const updatedOpt = {
                     ...opt,
                     strike: nextStrike,
                     label: `${monthNames[monthIndex]} ${year.slice(2)} C${nextStrike}`,
-                    symbol: getSymbolFromExpiryStrike(item.ticker, opt.expiry, nextStrike)
+                    symbol: newSymbol,
+                    price: newData.bid > 0 ? newData.bid : (newData.last_trade_price > 0 ? newData.last_trade_price : 0)
                   }
 
                   const updatedData = data.map((d, idx) => {
@@ -480,7 +554,7 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
               <button
                 title="Strike Down"
                 className="bg-red-700 hover:bg-red-800 text-white text-xs px-1 rounded"
-                onClick={() => {
+                onClick={async () => {
                   const [year, month] = opt.expiry.split('-')
                   const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
                   const monthIndex = Number(month) - 1
@@ -488,11 +562,24 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
                   const prevStrike = [...chainStrikes].reverse().find((s: number) => s < opt.strike)
                   if (!prevStrike) return
 
+                  const newSymbol = getSymbolFromExpiryStrike(item.ticker, opt.expiry, prevStrike)
+                  const res = await fetch(`/api/full-prices?symbols=${newSymbol}`)
+                  let newData = { bid: 0, ask: 0, last_trade_price: 0 }
+                  if (res.ok) {
+                    const json = await res.json()
+                    newData = json[newSymbol] || { bid: 0, ask: 0, last_trade_price: 0 }
+                    setPrices((prev: PricesType) => ({
+                      ...prev,
+                      [item.ticker]: { ...prev[item.ticker], [newSymbol]: { ...newData, symbol: newSymbol } }
+                    }))
+                  }
+
                   const updatedOpt = {
                     ...opt,
                     strike: prevStrike,
                     label: `${monthNames[monthIndex]} ${year.slice(2)} C${prevStrike}`,
-                    symbol: getSymbolFromExpiryStrike(item.ticker, opt.expiry, prevStrike)
+                    symbol: newSymbol,
+                    price: newData.bid > 0 ? newData.bid : (newData.last_trade_price > 0 ? newData.last_trade_price : 0)
                   }
 
                   const updatedData = data.map((d, idx) => {
@@ -509,14 +596,28 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
               <button
                 title="Month Back"
                 className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded"
-                onClick={() => {
+                onClick={async () => {
                   const shift = shiftExpiryByMonth(item.ticker, opt, 'prev', 'earlier')
                   if (!shift) return
+
+                  const newSymbol = getSymbolFromExpiryStrike(item.ticker, shift.expiry, shift.strike)
+                  const res = await fetch(`/api/full-prices?symbols=${newSymbol}`)
+                  let newPrice = 0
+                  if (res.ok) {
+                    const json = await res.json()
+                    const newData = json[newSymbol] || { bid: 0, ask: 0, last_trade_price: 0 }
+                    newPrice = newData.bid > 0 ? newData.bid : (newData.last_trade_price > 0 ? newData.last_trade_price : 0)
+                    setPrices((prev: PricesType) => ({
+                      ...prev,
+                      [item.ticker]: { ...prev[item.ticker], [newSymbol]: { ...newData, symbol: newSymbol } }
+                    }))
+                  }
 
                   const updatedOpt = {
                     ...opt,
                     ...shift,
-                    symbol: getSymbolFromExpiryStrike(item.ticker, shift.expiry, shift.strike)
+                    symbol: newSymbol,
+                    price: newPrice
                   }
 
                   const updatedData = data.map((d, idx) => {
@@ -533,14 +634,28 @@ const MemoizedTickerCard = React.memo(({ item, prices, isFattibile, setPendingRo
               <button
                 title="Month Forward"
                 className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded"
-                onClick={() => {
+                onClick={async () => {
                   const shift = shiftExpiryByMonth(item.ticker, opt, 'next', 'future')
                   if (!shift) return
+
+                  const newSymbol = getSymbolFromExpiryStrike(item.ticker, shift.expiry, shift.strike)
+                  const res = await fetch(`/api/full-prices?symbols=${newSymbol}`)
+                  let newPrice = 0
+                  if (res.ok) {
+                    const json = await res.json()
+                    const newData = json[newSymbol] || { bid: 0, ask: 0, last_trade_price: 0 }
+                    newPrice = newData.bid > 0 ? newData.bid : (newData.last_trade_price > 0 ? newData.last_trade_price : 0)
+                    setPrices((prev: PricesType) => ({
+                      ...prev,
+                      [item.ticker]: { ...prev[item.ticker], [newSymbol]: { ...newData, symbol: newSymbol } }
+                    }))
+                  }
 
                   const updatedOpt = {
                     ...opt,
                     ...shift,
-                    symbol: getSymbolFromExpiryStrike(item.ticker, shift.expiry, shift.strike)
+                    symbol: newSymbol,
+                    price: newPrice
                   }
 
                   const updatedData = data.map((d, idx) => {
@@ -569,7 +684,7 @@ export default function Page(): JSX.Element {
   const [newTicker, setNewTicker] = useState('');
   const [data, setData] = useState<OptionData[]>([])
   const [chain, setChain] = useState<Record<string, Record<string, Record<string, number[]>>>>({})
-  const [prices, setPrices] = useState<Record<string, Record<string, { bid: number; ask: number; last_trade_price: number; symbol: string }>>>({})
+  const [prices, setPrices] = useState<PricesType>({})
   const [spots, setSpots] = useState<Record<string, { price: number; changePercent: number }>>({});
   const [selected, setSelected] = useState<{ [ticker: string]: { year: string, month: string, strike: number | null } }>({})
   const [showDropdowns, setShowDropdowns] = useState<{ [ticker: string]: boolean }>({})
@@ -650,6 +765,7 @@ export default function Page(): JSX.Element {
     try {
       let symbols: string[] = [];
       data.forEach(item => {
+        if (!item) return; // Safeguard per item undefined
         const currentSymbol = getSymbolFromExpiryStrike(item.ticker, item.expiry, item.strike);
         if (currentSymbol) symbols.push(currentSymbol); // Skip if empty
         item.earlier.forEach(opt => {
@@ -679,7 +795,7 @@ export default function Page(): JSX.Element {
       const json = await res.json();
       console.log('📥 Prices response:', json);
 
-      const grouped: Record<string, Record<string, { bid: number; ask: number; last_trade_price: number; symbol: string }>> = {};
+      const grouped: PricesType = {};
       for (const [symbol, val] of Object.entries(json)) {
         const match = /^O:([A-Z]+)\d+C\d+$/.exec(symbol);
         if (!match) continue;
@@ -915,8 +1031,8 @@ export default function Page(): JSX.Element {
     })
 
     setData(updatedData)
-    setSelected(prev => ({ ...prev, [ticker]: { year: '', month: '', strike: null } }))
-    setShowDropdowns(prev => ({ ...prev, [ticker]: false }))
+    setSelected((prev: { [ticker: string]: { year: string, month: string, strike: number | null } }) => ({ ...prev, [ticker]: { year: '', month: '', strike: null } }))
+    setShowDropdowns((prev: { [ticker: string]: boolean }) => ({ ...prev, [ticker]: false }))
 
     fetch('/api/save-state', {
       method: 'POST',
@@ -1165,7 +1281,7 @@ export default function Page(): JSX.Element {
   }, [data]);
 
   useEffect(() => {
-    setData(prev => prev.map(item => ({ ...item, spot: (spots[item.ticker]?.price > 0 ? spots[item.ticker].price : item.spot) })));
+    setData((prev: OptionData[]) => prev.map(item => ({ ...item, spot: (spots[item.ticker]?.price > 0 ? spots[item.ticker].price : item.spot) })));
   }, [spots]);
 
   useEffect(() => {
@@ -1223,7 +1339,8 @@ export default function Page(): JSX.Element {
 
   useEffect(() => {
     if (Object.keys(prices).length === 0) return;  // Evita aggiornamenti prematuri se prices è vuoto
-    setData(prevData => prevData.map(item => {
+    setData((prevData: OptionData[]) => prevData.map(item => {
+      if (!item) return item; // Safeguard
       const currentSymbol = getSymbolFromExpiryStrike(item.ticker, item.expiry, item.strike);
       const tickerPrices = prices[item.ticker] || {};
       const ask = tickerPrices[currentSymbol]?.ask ?? 0;
@@ -1261,7 +1378,7 @@ export default function Page(): JSX.Element {
   }
 
   return (
-    <>
+    <Fragment>
       {pendingRoll && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
           <div className="bg-zinc-900 border border-zinc-700 text-white rounded-lg p-4 shadow-xl w-full max-w-xs">
@@ -1308,7 +1425,7 @@ export default function Page(): JSX.Element {
                   <div className="font-bold text-lg">⚠️ Errore caricamento CALL per {ticker}</div>
                   <div>La call corrente salvata su Supabase non è più disponibile o ha dati errati.</div>
                   <button
-                    onClick={() => setShowDropdowns(prev => ({ ...prev, [ticker]: true }))}
+                    onClick={() => setShowDropdowns((prev: { [ticker: string]: boolean }) => ({ ...prev, [ticker]: true }))}
                     className="bg-yellow-500 hover:bg-yellow-600 text-black font-bold py-1 px-2 rounded w-fit"
                   >
                     📂 Seleziona nuova call
@@ -1317,7 +1434,7 @@ export default function Page(): JSX.Element {
                     <div className="grid grid-cols-3 gap-2">
                       <select
                         value={sel.year}
-                        onChange={e => setSelected(prev => ({ ...prev, [ticker]: { ...sel, year: e.target.value, month: '', strike: null } }))}
+                        onChange={e => setSelected((prev: { [ticker: string]: { year: string, month: string, strike: number | null } }) => ({ ...prev, [ticker]: { ...sel, year: e.target.value, month: '', strike: null } }))}
                         className="bg-zinc-800 text-white p-1"
                       >
                         <option value="">Anno</option>
@@ -1330,7 +1447,7 @@ export default function Page(): JSX.Element {
                       )}
                       <select
                         value={sel.month}
-                        onChange={e => setSelected(prev => ({ ...prev, [ticker]: { ...sel, month: e.target.value, strike: null } }))}
+                        onChange={e => setSelected((prev: { [ticker: string]: { year: string, month: string, strike: number | null } }) => ({ ...prev, [ticker]: { ...sel, month: e.target.value, strike: null } }))}
                         className="bg-zinc-800 text-white p-1"
                         disabled={!sel.year}
                       >
@@ -1339,7 +1456,7 @@ export default function Page(): JSX.Element {
                       </select>
                       <select
                         value={sel.strike ?? ''}
-                        onChange={e => setSelected(prev => ({ ...prev, [ticker]: { ...sel, strike: Number(e.target.value) } }))}
+                        onChange={e => setSelected((prev: { [ticker: string]: { year: string, month: string, strike: number | null } }) => ({ ...prev, [ticker]: { ...sel, strike: Number(e.target.value) } }))}
                         className="bg-zinc-800 text-white p-1"
                         disabled={!sel.month}
                       >
@@ -1365,6 +1482,7 @@ export default function Page(): JSX.Element {
                 key={index}
                 item={item}
                 prices={prices}
+                setPrices={setPrices}
                 isFattibile={isFattibile}
                 setPendingRoll={setPendingRoll}
                 selected={selected}
@@ -1387,7 +1505,8 @@ export default function Page(): JSX.Element {
               />
             )
           })}
-        </div>      </div>
-    </>
+        </div>
+      </div>
+    </Fragment>
   )
 }
