@@ -1265,11 +1265,13 @@ export default function Page(): JSX.Element {
     }
   };
 
+  /*
   useEffect(() => {
     if (data.length > 0) {
       fetchPrices()
     }
   }, [data]);
+*/
 
   useEffect(() => {
 
