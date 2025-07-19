@@ -30,18 +30,13 @@ export async function GET() {
     }
     const alertsEnabled: { [ticker: string]: boolean } = alertsData.reduce((acc: { [ticker: string]: boolean }, { ticker, enabled }: { ticker: string; enabled: boolean }) => ({ ...acc, [ticker]: enabled }), {});
 
-    // Fetch spots (chiama endpoint interno - usa absolute URL for server-side)
+    // Fetch spots (chiama endpoint interno - usa absolute URL for server-side, senza headers inutili)
     const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000';
     const tickersStr = optionsData.map((item: OptionData) => item.ticker).join(',');
-    const spotsRes = await fetch(`${baseUrl}/api/spots?tickers=${tickersStr}`, {
-        cache: 'no-store',
-        headers: {
-            'Authorization': `Bearer ${process.env.POLYGON_API_KEY}`, 
-            'Content-Type': 'application/json'  // Opzionale, ma utile
-        }
-    });
-     if (!spotsRes.ok) {
-        console.error('Errore fetch spots:', spotsRes.statusText);
+    const spotsRes = await fetch(`${baseUrl}/api/spots?tickers=${tickersStr}`, { cache: 'no-store' });
+    if (!spotsRes.ok) {
+        const errorText = await spotsRes.text();
+        console.error('Dettagli errore fetch spots:', errorText);
         return new Response(JSON.stringify({ error: 'Failed to fetch spots' }), { status: 500 });
     }
     const spots: SpotsData = await spotsRes.json();
@@ -56,10 +51,11 @@ export async function GET() {
     });
     symbols = [...new Set(symbols.filter(s => s))]; // Unique e non vuoti
 
-    // Fetch prices (chiama endpoint interno)
+    // Fetch prices (chiama endpoint interno, assumendo non richieda headers specifici)
     const pricesRes = await fetch(`${baseUrl}/api/full-prices?symbols=${symbols.join(',')}`, { cache: 'no-store' });
     if (!pricesRes.ok) {
-        console.error('Errore fetch prices:', pricesRes.statusText);
+        const errorText = await pricesRes.text();
+        console.error('Dettagli errore fetch prices:', errorText);
         return new Response(JSON.stringify({ error: 'Failed to fetch prices' }), { status: 500 });
     }
     const allPrices = await pricesRes.json();
