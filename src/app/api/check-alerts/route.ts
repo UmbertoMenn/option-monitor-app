@@ -36,7 +36,7 @@ export async function GET() {
     const spotsRes = await fetch(`${baseUrl}/api/spots?tickers=${tickersStr}`, {
         cache: 'no-store',
         headers: {
-            'Authorization': `Bearer ${process.env.SUPABASE_ANON_KEY}`,  // Se usa Supabase; adatta se è Polygon o altro
+            'Authorization': `Bearer ${process.env.POLYGON_API_KEY}`, 
             'Content-Type': 'application/json'  // Opzionale, ma utile
         }
     });
