@@ -33,8 +33,14 @@ export async function GET() {
     // Fetch spots (chiama endpoint interno - usa absolute URL for server-side)
     const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000';
     const tickersStr = optionsData.map((item: OptionData) => item.ticker).join(',');
-    const spotsRes = await fetch(`${baseUrl}/api/spots?tickers=${tickersStr}`, { cache: 'no-store' });
-    if (!spotsRes.ok) {
+    const spotsRes = await fetch(`${baseUrl}/api/spots?tickers=${tickersStr}`, {
+        cache: 'no-store',
+        headers: {
+            'Authorization': `Bearer ${process.env.SUPABASE_ANON_KEY}`,  // Se usa Supabase; adatta se è Polygon o altro
+            'Content-Type': 'application/json'  // Opzionale, ma utile
+        }
+    });
+     if (!spotsRes.ok) {
         console.error('Errore fetch spots:', spotsRes.statusText);
         return new Response(JSON.stringify({ error: 'Failed to fetch spots' }), { status: 500 });
     }
