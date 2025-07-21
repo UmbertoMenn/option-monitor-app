@@ -28,11 +28,12 @@ export async function POST(req: Request) {
         }
         const nextExpiry = normalizeExpiry(`${year}-${String(month + 1).padStart(2, '0')}`);
 
-        // Insert base in 'options' (unifica da 'positions')
+        // Insert base in 'options' con valori non null espliciti
         const { error: optionsError } = await supabase.from('options').insert([
             { 
                 ticker, 
-                strike: 100, 
+                spot: 0,  // Valore default non null
+                strike: 100,  // Valore default non null
                 expiry: nextExpiry, 
                 current_bid: 0,
                 current_ask: 0,
@@ -41,11 +42,17 @@ export async function POST(req: Request) {
                 future: []
             }
         ]);
-        if (optionsError) throw optionsError;
+        if (optionsError) {
+            console.error('Errore insert options:', optionsError.message);
+            throw optionsError;
+        }
 
-        // Insert/Upsert in tickers (evita duplicati, mantieni se necessario)
+        // Insert/Upsert in tickers (evita duplicati)
         const { error: tickError } = await supabase.from('tickers').upsert([{ ticker }], { onConflict: 'ticker' });
-        if (tickError) throw tickError;
+        if (tickError) {
+            console.error('Errore upsert tickers:', tickError.message);
+            throw tickError;
+        }
 
         return NextResponse.json({ success: true });
     } catch (err: any) {
