@@ -1,8 +1,8 @@
-import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@supabase/supabase-js';
+import { NextResponse } from 'next/server';
 import { normalizeExpiry } from '../../../utils/functions'  // Assumi esista, dal tuo codice
 
-const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!)
+const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!);
 
 export async function POST(req: Request) {
     let ticker: string | undefined;
@@ -28,13 +28,22 @@ export async function POST(req: Request) {
         }
         const nextExpiry = normalizeExpiry(`${year}-${String(month + 1).padStart(2, '0')}`);
 
-        // Insert position
-        const { error: posError } = await supabase.from('positions').insert([
-            { ticker, strike: 100, expiry: nextExpiry, currentCallPrice: 0 }
+        // Insert base in 'options' (unifica da 'positions')
+        const { error: optionsError } = await supabase.from('options').insert([
+            { 
+                ticker, 
+                strike: 100, 
+                expiry: nextExpiry, 
+                current_bid: 0,
+                current_ask: 0,
+                current_last_trade_price: 0,
+                earlier: [],
+                future: []
+            }
         ]);
-        if (posError) throw posError;
+        if (optionsError) throw optionsError;
 
-        // Insert/Upsert in tickers (evita duplicati)
+        // Insert/Upsert in tickers (evita duplicati, mantieni se necessario)
         const { error: tickError } = await supabase.from('tickers').upsert([{ ticker }], { onConflict: 'ticker' });
         if (tickError) throw tickError;
 

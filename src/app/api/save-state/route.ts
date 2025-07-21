@@ -5,7 +5,7 @@ const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_AN
 
 export async function POST(req: Request) {
   const { ticker, future, earlier } = await req.json();
-  const { error } = await supabase.from('option_states').upsert({ ticker, state: { future, earlier } });
+  const { error } = await supabase.from('options').update({ earlier, future }).eq('ticker', ticker);
   if (error) return NextResponse.json({ success: false }, { status: 500 });
   return NextResponse.json({ success: true });
 }

@@ -33,7 +33,7 @@ function normalizeExpiry(expiry: string): string {
 export async function POST(req: Request) {
   try {
     const body = await req.json()
-    const { ticker, strike, expiry, currentCallPrice } = body
+    const { ticker, strike, expiry, current_bid, current_ask, current_last_trade_price } = body
 
     const normalizedExpiry = normalizeExpiry(expiry)
 
@@ -48,25 +48,29 @@ export async function POST(req: Request) {
       ticker,
       strike,
       normalizedExpiry,
-      currentCallPrice,
+      current_bid,
+      current_ask,
+      current_last_trade_price,
     })
 
-    const { error } = await supabase.from('positions').insert([
+    const { error } = await supabase.from('options').upsert([
       {
         ticker,
         strike,
         expiry: normalizedExpiry,
-        currentCallPrice,
+        current_bid,
+        current_ask,
+        current_last_trade_price,
         created_at: new Date().toISOString()
       }
-    ])
+    ], { onConflict: 'ticker' })
 
     if (error) {
-      console.error('❌ Errore Supabase INSERT:', error.message)
+      console.error('❌ Errore Supabase UPSERT:', error.message)
       return NextResponse.json({ success: false }, { status: 500 })
     }
 
-    console.log('✅ Nuova riga inserita su Supabase')
+    console.log('✅ Riga aggiornata su Supabase')
     return NextResponse.json({ success: true })
   } catch (err: any) {
     console.error('❌ Errore route update-call:', err.message)
