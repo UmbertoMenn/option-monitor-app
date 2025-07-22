@@ -14,12 +14,89 @@ interface SentAlerts {
     [ticker: string]: { [level: string]: boolean };
 }
 
+async function updateOptionsData(optionsData: OptionData[]) {
+    const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000';
+
+    // Fetch spots aggiornati
+    const tickersStr = optionsData.map(item => item.ticker).join(',');
+    const spotsRes = await fetch(`${baseUrl}/api/spots?tickers=${tickersStr}`, { cache: 'no-store' });
+    if (!spotsRes.ok) {
+        const errorText = await spotsRes.text();
+        console.error('Errore update spots:', errorText);
+        return; // Procedi senza update se fallisce, o throw error se critico
+    }
+    const spots: SpotsData = await spotsRes.json();
+
+    // Raccolta symbols per prices (current, earlier, future)
+    let symbols: string[] = [];
+    optionsData.forEach(item => {
+        const currentSymbol = getSymbolFromExpiryStrike(item.ticker, item.expiry, item.strike);
+        if (currentSymbol) symbols.push(currentSymbol);
+        item.earlier.forEach(opt => opt.symbol && symbols.push(opt.symbol));
+        item.future.forEach(opt => opt.symbol && symbols.push(opt.symbol));
+    });
+    symbols = [...new Set(symbols.filter(s => s))];
+
+    const pricesRes = await fetch(`${baseUrl}/api/full-prices?symbols=${symbols.join(',')}`, { cache: 'no-store' });
+    if (!pricesRes.ok) {
+        const errorText = await pricesRes.text();
+        console.error('Errore update prices:', errorText);
+        return;
+    }
+    const allPrices = await pricesRes.json();
+
+    // Group prices
+    const prices: PricesData = {};
+    for (const [symbol, val] of Object.entries(allPrices)) {
+        const match = /^O:([A-Z]+)\d+C\d+$/.exec(symbol);
+        if (!match) continue;
+        const ticker = match[1];
+        if (!prices[ticker]) prices[ticker] = {};
+        prices[ticker][symbol] = {
+            bid: (val as any).bid ?? 0,
+            ask: (val as any).ask ?? 0,
+            last_trade_price: (val as any).last_trade_price ?? 0,
+        };
+    }
+
+    // Update ciascun item in 'options'
+    for (const item of optionsData) {
+        const ticker = item.ticker;
+        const spotData = spots[ticker] || { price: 0, changePercent: 0 };
+        const currentSymbol = getSymbolFromExpiryStrike(ticker, item.expiry, item.strike);
+        const currentData = prices[ticker]?.[currentSymbol] ?? { bid: 0, ask: 0, last_trade_price: 0 };
+
+        const { error } = await supabase.from('options').update({
+            spot: spotData.price,
+            current_bid: currentData.bid,
+            current_ask: currentData.ask,
+            current_last_trade_price: currentData.last_trade_price
+        }).eq('ticker', ticker);
+
+        if (error) console.error('Errore update options per ticker:', ticker, error);
+
+        // Opzionale: Update earlier/future prices if needed (loop su array e update bid/ask/last)
+        // Per semplicità, assumi che earlier/future non cambino struttura; se necessario, ri-calcola come nel client
+    }
+}
+
 export async function GET() {
     // Fetch dati options da Supabase
     const { data: optionsData, error: optionsError } = await supabase.from('options').select('*');
     if (optionsError) {
         console.error('Errore fetch options:', optionsError);
         return new Response(JSON.stringify({ error: 'Failed to fetch options' }), { status: 500 });
+    }
+
+    if (optionsData.length > 0) {
+        await updateOptionsData(optionsData); // Aggiorna dati prima di alert
+    }
+
+    // Ricarica optionsData aggiornati
+    const { data: updatedOptionsData, error: reloadError } = await supabase.from('options').select('*');
+    if (reloadError) {
+        console.error('Errore reload options:', reloadError);
+        return new Response(JSON.stringify({ error: 'Failed to reload options' }), { status: 500 });
     }
 
     // Fetch alertsEnabled da Supabase (assumi tabella 'alerts' con ticker e enabled)
@@ -32,7 +109,7 @@ export async function GET() {
 
     // Fetch spots (chiama endpoint interno - usa absolute URL for server-side, senza headers inutili)
     const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000';
-    const tickersStr = optionsData.map((item: OptionData) => item.ticker).join(',');
+    const tickersStr = updatedOptionsData.map((item: OptionData) => item.ticker).join(',');
     const spotsRes = await fetch(`${baseUrl}/api/spots?tickers=${tickersStr}`, { cache: 'no-store' });
     if (!spotsRes.ok) {
         const errorText = await spotsRes.text();
@@ -43,7 +120,7 @@ export async function GET() {
 
     // Raccolta tutti i symbols per prices
     let symbols: string[] = [];
-    optionsData.forEach((item: OptionData) => {
+    updatedOptionsData.forEach((item: OptionData) => {
         const currentSymbol = getSymbolFromExpiryStrike(item.ticker, item.expiry, item.strike);
         if (currentSymbol) symbols.push(currentSymbol);
         item.earlier.forEach(opt => opt.symbol && symbols.push(opt.symbol));
@@ -87,7 +164,7 @@ export async function GET() {
     }, {});
 
     // Logica alert
-    for (const item of optionsData as OptionData[]) {
+    for (const item of updatedOptionsData) {
         if (!alertsEnabled[item.ticker]) continue;
         if (item.spot <= 0) continue;
         const spotData = spots[item.ticker] || { price: 0, changePercent: 0 };
