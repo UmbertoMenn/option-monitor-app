@@ -14,27 +14,42 @@ interface SentAlerts {
     [ticker: string]: { [level: string]: boolean };
 }
 
-async function updateOptionsData(optionsData: OptionData[]) {
-    const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000'; // Ripristinato per URL assoluti
+function getThirdFriday(year: number, monthIndex: number): string {
+  let count = 0;
+  for (let day = 1; day <= 31; day++) {
+    const date = new Date(year, monthIndex, day);
+    if (date.getMonth() !== monthIndex) break;
+    if (date.getDay() === 5) {
+      count++;
+      if (count === 3) {
+        const yyyy = date.getFullYear();
+        const mm = String(date.getMonth() + 1).padStart(2, '0');
+        const dd = String(date.getDate()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}`;
+      }
+    }
+  }
+  return `${year}-${String(monthIndex + 1).padStart(2, '0')}-15`;
+}
 
-    // Fetch spots aggiornati
+async function updateOptionsData(optionsData: OptionData[]) {
+    const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000';
+
     const tickersStr = optionsData.map(item => item.ticker).join(',');
-    if (!tickersStr) { // Controllo per tickers vuoti
+    if (!tickersStr) {
         console.log('[DEBUG-SPOTS-SKIP] Nessun ticker disponibile; salto fetch spots.');
         return;
     }
     const spotsUrl = `${baseUrl}/api/spots?tickers=${tickersStr}`;
-    console.log(`[DEBUG-SPOTS-URL-UPDATED] ${spotsUrl}`);
+    console.log(`[DEBUG-SPOTS-URL] ${spotsUrl}`);
     const spotsRes = await fetch(spotsUrl, { cache: 'no-store' });
-    console.log(`[DEBUG-SPOTS-STATUS] ${spotsRes.status}`);
     if (!spotsRes.ok) {
         const errorText = await spotsRes.text();
         console.error('Errore update spots:', errorText);
-        return; // Procedi senza update se fallisce, o throw error se critico
+        return;
     }
     const spots: SpotsData = await spotsRes.json();
 
-    // Raccolta symbols per prices (current, earlier, future)
     let symbols: string[] = [];
     optionsData.forEach(item => {
         const currentSymbol = getSymbolFromExpiryStrike(item.ticker, item.expiry, item.strike);
@@ -43,15 +58,14 @@ async function updateOptionsData(optionsData: OptionData[]) {
         item.future.forEach(opt => opt.symbol && symbols.push(opt.symbol));
     });
     symbols = [...new Set(symbols.filter(s => s))];
-    if (symbols.length === 0) { // Controllo per symbols vuoti
+    if (symbols.length === 0) {
         console.log('[DEBUG-PRICES-SKIP] Nessun simbolo disponibile; salto fetch prices.');
         return;
     }
 
     const pricesUrl = `${baseUrl}/api/full-prices?symbols=${symbols.join(',')}`;
-    console.log(`[DEBUG-PRICES-URL-UPDATED] ${pricesUrl}`);
+    console.log(`[DEBUG-PRICES-URL] ${pricesUrl}`);
     const pricesRes = await fetch(pricesUrl, { cache: 'no-store' });
-    console.log(`[DEBUG-PRICES-STATUS] ${pricesRes.status}`);
     if (!pricesRes.ok) {
         const errorText = await pricesRes.text();
         console.error('Errore update prices:', errorText);
@@ -59,38 +73,66 @@ async function updateOptionsData(optionsData: OptionData[]) {
     }
     const allPrices = await pricesRes.json();
 
-    // Group prices
-    const prices: PricesData = {};
+    const pricesGrouped: PricesData = {};
     for (const [symbol, val] of Object.entries(allPrices)) {
         const match = /^O:([A-Z]+)\d+C\d+$/.exec(symbol);
         if (!match) continue;
         const ticker = match[1];
-        if (!prices[ticker]) prices[ticker] = {};
-        prices[ticker][symbol] = {
+        if (!pricesGrouped[ticker]) pricesGrouped[ticker] = {};
+        pricesGrouped[ticker][symbol] = {
             bid: (val as any).bid ?? 0,
             ask: (val as any).ask ?? 0,
             last_trade_price: (val as any).last_trade_price ?? 0,
         };
     }
 
-    // Update ciascun item in 'options'
     for (const item of optionsData) {
         const ticker = item.ticker;
         const spotData = spots[ticker] || { price: 0, changePercent: 0 };
         const currentSymbol = getSymbolFromExpiryStrike(ticker, item.expiry, item.strike);
-        const currentData = prices[ticker]?.[currentSymbol] ?? { bid: 0, ask: 0, last_trade_price: 0 };
+        const currentData = pricesGrouped[ticker]?.[currentSymbol] ?? { bid: 0, ask: 0, last_trade_price: 0 };
+
+        let newExpiry = item.expiry; // Default: mantieni attuale
+        const delta = ((item.strike - spotData.price) / spotData.price) * 100;
+        const hasFattibileEarlier = item.earlier.some((opt: OptionEntry) => isFattibile(opt, item, pricesGrouped));
+
+        if (delta < 4 || hasFattibileEarlier) {
+            console.log(`[DEBUG-EXPIRY-SHIFT] Ticker: ${ticker}, Delta: ${delta.toFixed(2)}, Fattibile earlier: ${hasFattibileEarlier} - Shift scadenza.`);
+            const [year, month] = item.expiry.split('-').map(Number);
+            let newMonth = month;
+            let newYear = year;
+            newMonth += 1; // Shift al mese successivo
+            if (newMonth > 12) {
+                newMonth = 1;
+                newYear += 1;
+            }
+            newExpiry = getThirdFriday(newYear, newMonth - 1); // Calcola terzo venerdì
+            console.log(`[DEBUG-EXPIRY-NEW] Ticker: ${ticker}, Nuova expiry: ${newExpiry}`);
+        } else {
+            console.log(`[DEBUG-EXPIRY-NO-SHIFT] Ticker: ${ticker}, Delta: ${delta.toFixed(2)} - Nessun shift necessario.`);
+        }
 
         const { error } = await supabase.from('options').update({
             spot: spotData.price,
             current_bid: currentData.bid,
             current_ask: currentData.ask,
-            current_last_trade_price: currentData.last_trade_price
+            current_last_trade_price: currentData.last_trade_price,
+            expiry: newExpiry // Aggiunto update expiry
         }).eq('ticker', ticker);
 
         if (error) console.error('Errore update options per ticker:', ticker, error);
+        else console.log('[DEBUG-UPDATE-OPTIONS-SUCCESS] Aggiornato options per', ticker);
 
-        // Opzionale: Update earlier/future prices if needed (loop su array e update bid/ask/last)
-        // Per semplicità, assumi che earlier/future non cambino struttura; se necessario, ri-calcola come nel client
+        // Aggiunta sincronizzazione con 'option_states'
+        const { error: statesError } = await supabase.from('option_states').update({
+            spot: spotData.price,
+            current_bid: currentData.bid,
+            current_ask: currentData.ask,
+            current_last_trade_price: currentData.last_trade_price,
+            expiry: newExpiry
+        }).eq('ticker', ticker);
+        if (statesError) console.warn('[DEBUG-UPDATE-STATES-WARN] Errore update option_states:', statesError);
+        else console.log('[DEBUG-UPDATE-STATES-SUCCESS] Sincronizzato option_states per', ticker);
     }
 }
 
@@ -105,7 +147,7 @@ export async function GET() {
     if (optionsData.length > 0) {
         await updateOptionsData(optionsData); // Aggiorna dati prima di alert
     } else {
-        console.log('[DEBUG-OPTIONS-EMPTY] Nessun dato in options; salto update.');
+        console.log('[OPTIONS-EMPTY] Nessun dato in options; salto update.');
     }
 
     // Ricarica optionsData aggiornati
@@ -123,11 +165,11 @@ export async function GET() {
     }
     const alertsEnabled: { [ticker: string]: boolean } = alertsData.reduce((acc: { [ticker: string]: boolean }, { ticker, enabled }: { ticker: string; enabled: boolean }) => ({ ...acc, [ticker]: enabled }), {});
 
-    // Fetch spots (chiama endpoint interno con baseUrl)
-    const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000'; // Ripristinato qui per coerenza
+    // Fetch spots (chiama endpoint interno - usa absolute URL for server-side, senza headers inutili)
+    const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000';
     const tickersStr = updatedOptionsData.map((item: OptionData) => item.ticker).join(',');
     if (!tickersStr) {
-        console.log('[DEBUG-SPOTS-SKIP-GET] Nessun ticker disponibile in GET; salto fetch spots.');
+        console.log('[SPOTS-SKIP-GET] Nessun ticker disponibile in GET; salto fetch spots.');
         return new Response(JSON.stringify({ success: true, message: 'Nessun dato da processare' }), { status: 200 });
     }
     const spotsUrl = `${baseUrl}/api/spots?tickers=${tickersStr}`;
@@ -149,7 +191,7 @@ export async function GET() {
     });
     symbols = [...new Set(symbols.filter(s => s))]; // Unique e non vuoti
 
-    // Fetch prices
+    // Fetch prices (chiama endpoint interno, assumendo non richieda headers specifici)
     const pricesUrl = `${baseUrl}/api/full-prices?symbols=${symbols.join(',')}`;
     const pricesRes = await fetch(pricesUrl, { cache: 'no-store' });
     if (!pricesRes.ok) {

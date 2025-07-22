@@ -1,3 +1,4 @@
+
 cd C:\Users\Umberto/option-monitor-app
 
 git add .
@@ -5,3 +6,4 @@ git add .
 git commit -m "fix: colori"
 
 git push origin main
+
