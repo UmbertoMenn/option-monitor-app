@@ -15,22 +15,20 @@ interface SentAlerts {
 }
 
 async function updateOptionsData(optionsData: OptionData[]) {
-    const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000';
-    console.log(`[DEBUG-START] Timestamp: ${new Date().toISOString()} | Tickers processati: ${optionsData.map(item => item.ticker).join(', ')}`);
-
+    // Fetch spots aggiornati
     const tickersStr = optionsData.map(item => item.ticker).join(',');
-    const spotsUrl = `${baseUrl}/api/spots?tickers=${tickersStr}`;
-    console.log(`[DEBUG-SPOTS-URL] ${spotsUrl}`);
+    const spotsUrl = `/api/spots?tickers=${tickersStr}`;
+    console.log(`[DEBUG-SPOTS-URL-UPDATED] ${spotsUrl}`);
     const spotsRes = await fetch(spotsUrl, { cache: 'no-store' });
     console.log(`[DEBUG-SPOTS-STATUS] ${spotsRes.status}`);
     if (!spotsRes.ok) {
         const errorText = await spotsRes.text();
-        console.error(`[DEBUG-SPOTS-ERROR] ${errorText}`);
-        return;
+        console.error('Errore update spots:', errorText);
+        return; // Procedi senza update se fallisce, o throw error se critico
     }
     const spots: SpotsData = await spotsRes.json();
-    console.log(`[DEBUG-SPOTS-DATA] ${JSON.stringify(spots)}`);
 
+    // Raccolta symbols per prices (current, earlier, future)
     let symbols: string[] = [];
     optionsData.forEach(item => {
         const currentSymbol = getSymbolFromExpiryStrike(item.ticker, item.expiry, item.strike);
@@ -39,29 +37,38 @@ async function updateOptionsData(optionsData: OptionData[]) {
         item.future.forEach(opt => opt.symbol && symbols.push(opt.symbol));
     });
     symbols = [...new Set(symbols.filter(s => s))];
-    console.log(`[DEBUG-SYMBOLS] ${symbols.join(',')}`);
 
-    const pricesUrl = `${baseUrl}/api/full-prices?symbols=${symbols.join(',')}`;
-    console.log(`[DEBUG-PRICES-URL] ${pricesUrl}`);
+    const pricesUrl = `/api/full-prices?symbols=${symbols.join(',')}`;
+    console.log(`[DEBUG-PRICES-URL-UPDATED] ${pricesUrl}`);
     const pricesRes = await fetch(pricesUrl, { cache: 'no-store' });
     console.log(`[DEBUG-PRICES-STATUS] ${pricesRes.status}`);
     if (!pricesRes.ok) {
         const errorText = await pricesRes.text();
-        console.error(`[DEBUG-PRICES-ERROR] ${errorText}`);
+        console.error('Errore update prices:', errorText);
         return;
     }
     const allPrices = await pricesRes.json();
-    console.log(`[DEBUG-PRICES-DATA] ${JSON.stringify(allPrices)}`);
 
+    // Group prices
     const prices: PricesData = {};
-    // ... (mantieni il codice esistente per grouping prices)
+    for (const [symbol, val] of Object.entries(allPrices)) {
+        const match = /^O:([A-Z]+)\d+C\d+$/.exec(symbol);
+        if (!match) continue;
+        const ticker = match[1];
+        if (!prices[ticker]) prices[ticker] = {};
+        prices[ticker][symbol] = {
+            bid: (val as any).bid ?? 0,
+            ask: (val as any).ask ?? 0,
+            last_trade_price: (val as any).last_trade_price ?? 0,
+        };
+    }
 
+    // Update ciascun item in 'options'
     for (const item of optionsData) {
         const ticker = item.ticker;
         const spotData = spots[ticker] || { price: 0, changePercent: 0 };
         const currentSymbol = getSymbolFromExpiryStrike(ticker, item.expiry, item.strike);
         const currentData = prices[ticker]?.[currentSymbol] ?? { bid: 0, ask: 0, last_trade_price: 0 };
-        console.log(`[DEBUG-UPDATE-PRE] Ticker: ${ticker} | New Spot: ${spotData.price} | Bid: ${currentData.bid} | Ask: ${currentData.ask}`);
 
         const { error } = await supabase.from('options').update({
             spot: spotData.price,
@@ -70,13 +77,11 @@ async function updateOptionsData(optionsData: OptionData[]) {
             current_last_trade_price: currentData.last_trade_price
         }).eq('ticker', ticker);
 
-        if (error) {
-            console.error(`[DEBUG-UPDATE-ERROR] Ticker: ${ticker} | Error: ${JSON.stringify(error)}`);
-        } else {
-            console.log(`[DEBUG-UPDATE-SUCCESS] Ticker: ${ticker} | Updated successfully`);
-        }
+        if (error) console.error('Errore update options per ticker:', ticker, error);
+
+        // Opzionale: Update earlier/future prices if needed (loop su array e update bid/ask/last)
+        // Per semplicità, assumi che earlier/future non cambino struttura; se necessario, ri-calcola come nel client
     }
-    console.log('[DEBUG-END]');
 }
 
 export async function GET() {
@@ -107,9 +112,9 @@ export async function GET() {
     const alertsEnabled: { [ticker: string]: boolean } = alertsData.reduce((acc: { [ticker: string]: boolean }, { ticker, enabled }: { ticker: string; enabled: boolean }) => ({ ...acc, [ticker]: enabled }), {});
 
     // Fetch spots (chiama endpoint interno - usa absolute URL for server-side, senza headers inutili)
-    const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000';
     const tickersStr = updatedOptionsData.map((item: OptionData) => item.ticker).join(',');
-    const spotsRes = await fetch(`${baseUrl}/api/spots?tickers=${tickersStr}`, { cache: 'no-store' });
+    const spotsUrl = `/api/spots?tickers=${tickersStr}`;  // Aggiornato a relativo
+    const spotsRes = await fetch(spotsUrl, { cache: 'no-store' });
     if (!spotsRes.ok) {
         const errorText = await spotsRes.text();
         console.error('Dettagli errore fetch spots:', errorText);
@@ -128,7 +133,8 @@ export async function GET() {
     symbols = [...new Set(symbols.filter(s => s))]; // Unique e non vuoti
 
     // Fetch prices (chiama endpoint interno, assumendo non richieda headers specifici)
-    const pricesRes = await fetch(`${baseUrl}/api/full-prices?symbols=${symbols.join(',')}`, { cache: 'no-store' });
+    const pricesUrl = `/api/full-prices?symbols=${symbols.join(',')}`;  // Aggiornato a relativo
+    const pricesRes = await fetch(pricesUrl, { cache: 'no-store' });
     if (!pricesRes.ok) {
         const errorText = await pricesRes.text();
         console.error('Dettagli errore fetch prices:', errorText);
