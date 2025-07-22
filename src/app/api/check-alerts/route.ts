@@ -92,22 +92,52 @@ async function updateOptionsData(optionsData: OptionData[]) {
         const currentSymbol = getSymbolFromExpiryStrike(ticker, item.expiry, item.strike);
         const currentData = pricesGrouped[ticker]?.[currentSymbol] ?? { bid: 0, ask: 0, last_trade_price: 0 };
 
-        let newExpiry = item.expiry; // Default: mantieni attuale
+        let newExpiry = item.expiry;
+        let newEarlier = item.earlier;
+        let newFuture = item.future;
         const delta = ((item.strike - spotData.price) / spotData.price) * 100;
         const hasFattibileEarlier = item.earlier.some((opt: OptionEntry) => isFattibile(opt, item, pricesGrouped));
 
         if (delta < 4 || hasFattibileEarlier) {
             console.log(`[DEBUG-EXPIRY-SHIFT] Ticker: ${ticker}, Delta: ${delta.toFixed(2)}, Fattibile earlier: ${hasFattibileEarlier} - Shift scadenza.`);
             const [year, month] = item.expiry.split('-').map(Number);
-            let newMonth = month;
+            let newMonth = month + 1;
             let newYear = year;
-            newMonth += 1; // Shift al mese successivo
             if (newMonth > 12) {
                 newMonth = 1;
                 newYear += 1;
             }
-            newExpiry = getThirdFriday(newYear, newMonth - 1); // Calcola terzo venerdì
+            newExpiry = getThirdFriday(newYear, newMonth - 1);
             console.log(`[DEBUG-EXPIRY-NEW] Ticker: ${ticker}, Nuova expiry: ${newExpiry}`);
+
+            // Ricalcolo earlier (mese precedente alla nuova expiry)
+            const earlierMonthIndex = newMonth - 2; // Precedente
+            const earlierYear = newMonth - 1 < 1 ? newYear - 1 : newYear;
+            const earlierExpiry = getThirdFriday(earlierYear, (earlierMonthIndex + 12) % 12);
+            newEarlier = [{
+                label: `Earlier recalculated`,
+                bid: 0,
+                ask: 0,
+                last_trade_price: 0,
+                strike: item.strike - 5, // Esempio shift strike
+                expiry: earlierExpiry,
+                symbol: getSymbolFromExpiryStrike(ticker, earlierExpiry, item.strike - 5)
+            }];
+
+            // Ricalcolo future (mese successivo alla nuova expiry)
+            const futureMonthIndex = newMonth; // Successivo
+            const futureYear = newMonth + 1 > 12 ? newYear + 1 : newYear;
+            const futureExpiry = getThirdFriday(futureYear, (futureMonthIndex % 12));
+            newFuture = [{
+                label: `Future recalculated`,
+                bid: 0,
+                ask: 0,
+                last_trade_price: 0,
+                strike: item.strike + 5, // Esempio shift strike
+                expiry: futureExpiry,
+                symbol: getSymbolFromExpiryStrike(ticker, futureExpiry, item.strike + 5)
+            }];
+            console.log(`[DEBUG-EARLIER-FUTURE-NEW] Ticker: ${ticker}, New Earlier: ${JSON.stringify(newEarlier)}, New Future: ${JSON.stringify(newFuture)}`);
         } else {
             console.log(`[DEBUG-EXPIRY-NO-SHIFT] Ticker: ${ticker}, Delta: ${delta.toFixed(2)} - Nessun shift necessario.`);
         }
@@ -117,22 +147,12 @@ async function updateOptionsData(optionsData: OptionData[]) {
             current_bid: currentData.bid,
             current_ask: currentData.ask,
             current_last_trade_price: currentData.last_trade_price,
-            expiry: newExpiry // Aggiunto update expiry
+            expiry: newExpiry,
+            earlier: newEarlier,
+            future: newFuture
         }).eq('ticker', ticker);
 
         if (error) console.error('Errore update options per ticker:', ticker, error);
-        else console.log('[DEBUG-UPDATE-OPTIONS-SUCCESS] Aggiornato options per', ticker);
-
-        // Aggiunta sincronizzazione con 'option_states'
-        const { error: statesError } = await supabase.from('option_states').update({
-            spot: spotData.price,
-            current_bid: currentData.bid,
-            current_ask: currentData.ask,
-            current_last_trade_price: currentData.last_trade_price,
-            expiry: newExpiry
-        }).eq('ticker', ticker);
-        if (statesError) console.warn('[DEBUG-UPDATE-STATES-WARN] Errore update option_states:', statesError);
-        else console.log('[DEBUG-UPDATE-STATES-SUCCESS] Sincronizzato option_states per', ticker);
     }
 }
 
@@ -146,8 +166,6 @@ export async function GET() {
 
     if (optionsData.length > 0) {
         await updateOptionsData(optionsData); // Aggiorna dati prima di alert
-    } else {
-        console.log('[OPTIONS-EMPTY] Nessun dato in options; salto update.');
     }
 
     // Ricarica optionsData aggiornati
@@ -168,12 +186,7 @@ export async function GET() {
     // Fetch spots (chiama endpoint interno - usa absolute URL for server-side, senza headers inutili)
     const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000';
     const tickersStr = updatedOptionsData.map((item: OptionData) => item.ticker).join(',');
-    if (!tickersStr) {
-        console.log('[SPOTS-SKIP-GET] Nessun ticker disponibile in GET; salto fetch spots.');
-        return new Response(JSON.stringify({ success: true, message: 'Nessun dato da processare' }), { status: 200 });
-    }
-    const spotsUrl = `${baseUrl}/api/spots?tickers=${tickersStr}`;
-    const spotsRes = await fetch(spotsUrl, { cache: 'no-store' });
+    const spotsRes = await fetch(`${baseUrl}/api/spots?tickers=${tickersStr}`, { cache: 'no-store' });
     if (!spotsRes.ok) {
         const errorText = await spotsRes.text();
         console.error('Dettagli errore fetch spots:', errorText);
@@ -192,8 +205,7 @@ export async function GET() {
     symbols = [...new Set(symbols.filter(s => s))]; // Unique e non vuoti
 
     // Fetch prices (chiama endpoint interno, assumendo non richieda headers specifici)
-    const pricesUrl = `${baseUrl}/api/full-prices?symbols=${symbols.join(',')}`;
-    const pricesRes = await fetch(pricesUrl, { cache: 'no-store' });
+    const pricesRes = await fetch(`${baseUrl}/api/full-prices?symbols=${symbols.join(',')}`, { cache: 'no-store' });
     if (!pricesRes.ok) {
         const errorText = await pricesRes.text();
         console.error('Dettagli errore fetch prices:', errorText);
@@ -260,7 +272,6 @@ export async function GET() {
             const f2Price = f2Bid > 0 ? f2Bid : f2Last;
             if (currentPrice > 0 && f1Price > 0 && f2Price > 0 && delta < level && !sentAlerts[item.ticker][level]) {
                 sentAlerts[item.ticker][level] = true;
-                // Upsert in Supabase
                 await supabase.from('alerts_sent').upsert([{ ticker: item.ticker, level: level.toString(), sent: true }]);
                 const f1Label = f1.label.replace(/C(\d+)/, '$1 CALL');
                 const f2Label = f2.label.replace(/C(\d+)/, '$1 CALL');
@@ -270,7 +281,6 @@ export async function GET() {
             }
         }
 
-        // Alert per earlier fattibile
         const hasFattibileEarlier = item.earlier.some((opt: OptionEntry) => isFattibile(opt, item, prices));
         const e1 = item.earlier[0] || { label: 'N/A', bid: 0, last_trade_price: 0, symbol: '', ask: 0, strike: 0, expiry: '' };
         const e2 = item.earlier[1] || { label: 'N/A', bid: 0, last_trade_price: 0, symbol: '', ask: 0, strike: 0, expiry: '' };
@@ -282,7 +292,6 @@ export async function GET() {
         const e2Price = e2Bid > 0 ? e2Bid : e2Last;
         if (currentPrice > 0 && e1Price > 0 && e2Price > 0 && hasFattibileEarlier && !sentAlerts[item.ticker]['fattibile_high']) {
             sentAlerts[item.ticker]['fattibile_high'] = true;
-            // Upsert in Supabase
             await supabase.from('alerts_sent').upsert([{ ticker: item.ticker, level: 'fattibile_high', sent: true }]);
             const e1Label = e1.label.replace(/C(\d+)/, '$1 CALL');
             const e2Label = e2.label.replace(/C(\d+)/, '$1 CALL');
