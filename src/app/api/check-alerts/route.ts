@@ -15,9 +15,15 @@ interface SentAlerts {
 }
 
 async function updateOptionsData(optionsData: OptionData[]) {
+    const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000'; // Ripristinato per URL assoluti
+
     // Fetch spots aggiornati
     const tickersStr = optionsData.map(item => item.ticker).join(',');
-    const spotsUrl = `/api/spots?tickers=${tickersStr}`;
+    if (!tickersStr) { // Controllo per tickers vuoti
+        console.log('[DEBUG-SPOTS-SKIP] Nessun ticker disponibile; salto fetch spots.');
+        return;
+    }
+    const spotsUrl = `${baseUrl}/api/spots?tickers=${tickersStr}`;
     console.log(`[DEBUG-SPOTS-URL-UPDATED] ${spotsUrl}`);
     const spotsRes = await fetch(spotsUrl, { cache: 'no-store' });
     console.log(`[DEBUG-SPOTS-STATUS] ${spotsRes.status}`);
@@ -37,8 +43,12 @@ async function updateOptionsData(optionsData: OptionData[]) {
         item.future.forEach(opt => opt.symbol && symbols.push(opt.symbol));
     });
     symbols = [...new Set(symbols.filter(s => s))];
+    if (symbols.length === 0) { // Controllo per symbols vuoti
+        console.log('[DEBUG-PRICES-SKIP] Nessun simbolo disponibile; salto fetch prices.');
+        return;
+    }
 
-    const pricesUrl = `/api/full-prices?symbols=${symbols.join(',')}`;
+    const pricesUrl = `${baseUrl}/api/full-prices?symbols=${symbols.join(',')}`;
     console.log(`[DEBUG-PRICES-URL-UPDATED] ${pricesUrl}`);
     const pricesRes = await fetch(pricesUrl, { cache: 'no-store' });
     console.log(`[DEBUG-PRICES-STATUS] ${pricesRes.status}`);
@@ -94,6 +104,8 @@ export async function GET() {
 
     if (optionsData.length > 0) {
         await updateOptionsData(optionsData); // Aggiorna dati prima di alert
+    } else {
+        console.log('[DEBUG-OPTIONS-EMPTY] Nessun dato in options; salto update.');
     }
 
     // Ricarica optionsData aggiornati
@@ -111,9 +123,14 @@ export async function GET() {
     }
     const alertsEnabled: { [ticker: string]: boolean } = alertsData.reduce((acc: { [ticker: string]: boolean }, { ticker, enabled }: { ticker: string; enabled: boolean }) => ({ ...acc, [ticker]: enabled }), {});
 
-    // Fetch spots (chiama endpoint interno - usa absolute URL for server-side, senza headers inutili)
+    // Fetch spots (chiama endpoint interno con baseUrl)
+    const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000'; // Ripristinato qui per coerenza
     const tickersStr = updatedOptionsData.map((item: OptionData) => item.ticker).join(',');
-    const spotsUrl = `/api/spots?tickers=${tickersStr}`;  // Aggiornato a relativo
+    if (!tickersStr) {
+        console.log('[DEBUG-SPOTS-SKIP-GET] Nessun ticker disponibile in GET; salto fetch spots.');
+        return new Response(JSON.stringify({ success: true, message: 'Nessun dato da processare' }), { status: 200 });
+    }
+    const spotsUrl = `${baseUrl}/api/spots?tickers=${tickersStr}`;
     const spotsRes = await fetch(spotsUrl, { cache: 'no-store' });
     if (!spotsRes.ok) {
         const errorText = await spotsRes.text();
@@ -132,8 +149,8 @@ export async function GET() {
     });
     symbols = [...new Set(symbols.filter(s => s))]; // Unique e non vuoti
 
-    // Fetch prices (chiama endpoint interno, assumendo non richieda headers specifici)
-    const pricesUrl = `/api/full-prices?symbols=${symbols.join(',')}`;  // Aggiornato a relativo
+    // Fetch prices
+    const pricesUrl = `${baseUrl}/api/full-prices?symbols=${symbols.join(',')}`;
     const pricesRes = await fetch(pricesUrl, { cache: 'no-store' });
     if (!pricesRes.ok) {
         const errorText = await pricesRes.text();
