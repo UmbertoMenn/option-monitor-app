@@ -49,17 +49,17 @@ async function fetchContracts(ticker: string): Promise<any[]> {
   return contracts
 }
 
-async function fetchSpot(ticker: string): Promise<{ price: number; changePercent: number }> {
+async function fetchSpot(ticker: string): Promise<{ price: number; change_percent: number }> {
   try {
     const res: Response = await fetch(`https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/tickers/${ticker}?apiKey=${POLYGON_API_KEY}`);
-    if (!res.ok) return { price: 0, changePercent: 0 };
+    if (!res.ok) return { price: 0, change_percent: 0 };
     const json: any = await res.json();
     const price = json?.ticker?.lastTrade?.p || json?.ticker?.day?.c || json?.ticker?.prevDay?.c || 0;
-    const changePercent = json?.ticker?.todaysChangePerc || 0;
-    return { price, changePercent };
+    const change_percent = json?.ticker?.todaysChangePerc || 0;
+    return { price, change_percent };
   } catch (err) {
     console.error(`Fallback spot error for ${ticker}:`, err);
-    return { price: 0, changePercent: 0 };
+    return { price: 0, change_percent: 0 };
   }
 }
 
@@ -245,10 +245,10 @@ export async function GET() {
       })
     }
 
-    // Nuovo: Calcola changePercents async prima di upsert
-    const changePercents = await Promise.all(output.map(async (o) => {
+    // Nuovo: Calcola change_percents async prima di upsert
+    const change_percents = await Promise.all(output.map(async (o) => {
       const spotData = await fetchSpot(o.ticker);
-      return spotData.changePercent || 0;
+      return spotData.change_percent || 0;
     }));
 
     // Salva persistente per alert
@@ -256,7 +256,7 @@ export async function GET() {
       output.map((o, index) => ({
         ticker: o.ticker,
         spot: o.spot,
-        changePercent: changePercents[index],
+        change_percent: change_percents[index],
         strike: o.strike,
         expiry: o.expiry,
         current_bid: o.current_bid,
@@ -264,7 +264,7 @@ export async function GET() {
         current_last_trade_price: o.current_last_trade_price,
         earlier: o.earlier,
         future: o.future,
-        updated_at: new Date().toISOString()
+        created_at: new Date().toISOString()
       })),
       { onConflict: 'ticker' }
     );

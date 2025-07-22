@@ -7,7 +7,7 @@ const supabaseKey = process.env.SUPABASE_ANON_KEY as string;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 interface SpotsData {
-    [ticker: string]: { price: number; changePercent: number };
+    [ticker: string]: { price: number; change_percent: number };
 }
 
 interface SentAlerts {
@@ -88,7 +88,7 @@ async function updateOptionsData(optionsData: OptionData[]) {
 
     for (const item of optionsData) {
         const ticker = item.ticker;
-        const spotData = spots[ticker] || { price: 0, changePercent: 0 };
+        const spotData = spots[ticker] || { price: 0, change_percent: 0 };
         const currentSymbol = getSymbolFromExpiryStrike(ticker, item.expiry, item.strike);
         const currentData = pricesGrouped[ticker]?.[currentSymbol] ?? { bid: 0, ask: 0, last_trade_price: 0 };
 
@@ -156,14 +156,14 @@ async function updateOptionsData(optionsData: OptionData[]) {
 
         const { error } = await supabase.from('options').update({
             spot: spotData.price,
-            changePercent: spotData.changePercent,  // Nuovo: Salva per alert persistenti
+            change_percent: spotData.change_percent,  // Nuovo: Salva per alert persistenti
             current_bid: currentData.bid,
             current_ask: currentData.ask,
             current_last_trade_price: currentData.last_trade_price,
             expiry: newExpiry,
             earlier: newEarlier,
             future: newFuture,
-            updated_at: new Date().toISOString()  // Nuovo: Traccia update
+            created_at: new Date().toISOString()  // Nuovo: Traccia update
         }).eq('ticker', ticker);
 
         if (error) console.error('Errore update options per ticker:', ticker, error);
@@ -259,9 +259,9 @@ export async function GET() {
             try {
                 if (!alertsEnabled[item.ticker]) continue;
                 if (item.spot <= 0) continue;
-                const spotData = spots[item.ticker] || { price: 0, changePercent: 0 };
-                const changePercent = spotData.changePercent;
-                const changeSign = changePercent >= 0 ? '+' : '';
+                const spotData = spots[item.ticker] || { price: 0, change_percent: 0 };
+                const change_percent = spotData.change_percent;
+                const changeSign = change_percent >= 0 ? '+' : '';
                 const delta = ((item.strike - item.spot) / item.spot) * 100;
                 const tickerPrices = prices[item.ticker] || {};
                 const currentSymbol = getSymbolFromExpiryStrike(item.ticker, item.expiry, item.strike);
@@ -292,7 +292,7 @@ export async function GET() {
                         const f1Label = f1.label.replace(/C(\d+)/, '$1 CALL');
                         const f2Label = f2.label.replace(/C(\d+)/, '$1 CALL');
                         const currLabelFormatted = currentLabel.replace(/C(\d+)/, '$1 CALL');
-                        const alertMessage = `🔴 ${item.ticker} – DELTA: ${delta.toFixed(2)}% – Rollare\n\nSpot: ${item.spot}\nDelta Spot: ${item.spot} (${changeSign}${changePercent.toFixed(2)}%)\nStrike: ${item.strike}\nCurrent Call: ${currLabelFormatted} - ${currentPrice.toFixed(2)}\n\n#Future 1: ${f1Label} - ${f1Price.toFixed(2)}\n#Future 2: ${f2Label} - ${f2Price.toFixed(2)}`;
+                        const alertMessage = `🔴 ${item.ticker} – DELTA: ${delta.toFixed(2)}% – Rollare\n\nSpot: ${item.spot}\nDelta Spot: ${item.spot} (${changeSign}${change_percent.toFixed(2)}%)\nStrike: ${item.strike}\nCurrent Call: ${currLabelFormatted} - ${currentPrice.toFixed(2)}\n\n#Future 1: ${f1Label} - ${f1Price.toFixed(2)}\n#Future 2: ${f2Label} - ${f2Price.toFixed(2)}`;
                         sendTelegramMessage(alertMessage);
                     }
                 }
@@ -312,7 +312,7 @@ export async function GET() {
                     const e1Label = e1.label.replace(/C(\d+)/, '$1 CALL');
                     const e2Label = e2.label.replace(/C(\d+)/, '$1 CALL');
                     const currLabelFormatted = currentLabel.replace(/C(\d+)/, '$1 CALL');
-                    const alertMessage = `🟢 ${item.ticker} – DELTA: ${delta.toFixed(2)}% (Earlier fattibile disponibile)\n\nSpot: ${item.spot}\nDelta Spot: ${item.spot} (${changeSign}${changePercent.toFixed(2)}%)\nCurrent Call: ${currLabelFormatted} - ${currentPrice.toFixed(2)}\n\n#Earlier 1: ${e1Label} - ${e1Price.toFixed(2)}\n#Earlier 2: ${e2Label} - ${e2Price.toFixed(2)}`;
+                    const alertMessage = `🟢 ${item.ticker} – DELTA: ${delta.toFixed(2)}% (Earlier fattibile disponibile)\n\nSpot: ${item.spot}\nDelta Spot: ${item.spot} (${changeSign}${change_percent.toFixed(2)}%)\nCurrent Call: ${currLabelFormatted} - ${currentPrice.toFixed(2)}\n\n#Earlier 1: ${e1Label} - ${e1Price.toFixed(2)}\n#Earlier 2: ${e2Label} - ${e2Price.toFixed(2)}`;
                     sendTelegramMessage(alertMessage);
                 }
             } catch (alertErr) {

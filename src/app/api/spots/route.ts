@@ -29,14 +29,14 @@ export async function GET(req: Request) {
     const json = await res.json();
     console.log(`[SPOTS-DEBUG-DATA] ${JSON.stringify(json)}`); // Log dati grezzi per verifica
 
-    const spots: Record<string, { price: number; changePercent: number }> = {};
+    const spots: Record<string, { price: number; change_percent: number }> = {};
     json.tickers?.forEach((result: any) => {
       const price = result.lastTrade?.p || result.day?.c || result.prevDay?.c || 0;
-      const changePercent = result.todaysChangePerc || 0;
-      spots[result.ticker] = { price, changePercent };
+      const change_percent = result.todaysChangePerc || 0;
+      spots[result.ticker] = { price, change_percent };
     });
     tickers.split(',').forEach(t => {
-      if (!(t in spots)) spots[t] = { price: 0, changePercent: 0 };
+      if (!(t in spots)) spots[t] = { price: 0, change_percent: 0 };
     });
 
     console.log(`[SPOTS-DEBUG-END] Risposta elaborata: ${JSON.stringify(spots)}`);

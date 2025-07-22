@@ -19,7 +19,7 @@ export async function POST(req: Request) {
     const { error: optionsError } = await supabase.from('options').update({ 
       earlier, 
       future,
-      updated_at: new Date().toISOString()  // Traccia update
+      created_at: new Date().toISOString()  // Traccia update
     }).eq('ticker', ticker);
     if (optionsError) {
       console.error('[DEBUG-SAVE-ERROR-OPTIONS]', optionsError);

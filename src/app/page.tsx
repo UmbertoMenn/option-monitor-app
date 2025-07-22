@@ -77,7 +77,7 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
   data: OptionData[],
   setData: React.Dispatch<React.SetStateAction<OptionData[]>>,
   setChain: React.Dispatch<React.SetStateAction<Record<string, Record<string, Record<string, number[]>>>>>,
-  spots: Record<string, { price: number; changePercent: number }>
+  spots: Record<string, { price: number; change_percent: number }>
 }) => {
   const deltaPct = item.spot > 0 ? ((item.strike - item.spot) / item.spot) * 100 : 0;
   const deltaColor = deltaPct < 4 ? 'font-bold text-red-400' : 'font-bold text-green-400';
@@ -106,10 +106,10 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
   const currentBidToShow = currentData.bid ?? 0
   const currentAskToShow = (currentData.ask ?? 0) > 0 ? (currentData.ask ?? 0) : (currentData.last_trade_price ?? 0)
   console.log(`[${item.ticker}] Current Symbol: ${currentSymbol}, Bid: ${currentBidToShow}, Ask: ${currentAskToShow}, Last: ${currentData.last_trade_price ?? 0}`);
-  const spotData = spots[ticker] || { price: 0, changePercent: 0 };
-  const changePercent = spotData.changePercent;
-  const changeColor = changePercent >= 0 ? 'text-green-300' : 'text-red-300';
-  const changeSign = changePercent >= 0 ? '+' : '';
+  const spotData = spots[ticker] || { price: 0, change_percent: 0 };
+  const change_percent = spotData.change_percent;
+  const changeColor = change_percent >= 0 ? 'text-green-300' : 'text-red-300';
+  const changeSign = change_percent >= 0 ? '+' : '';
 
   return (
     <div className="bg-zinc-900 border border-red-500 shadow-md rounded-lg p-3">
@@ -227,7 +227,7 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
         <div className="p-1 bg-[rgba(70,120,240,0.8)] transition-all duration-300">
           {item.spot.toFixed(2)}
           <span className={`ml-2 ${changeColor}`}>
-            ({changeSign}{changePercent.toFixed(2)}%)
+            ({changeSign}{change_percent.toFixed(2)}%)
           </span>
         </div>
         <div className="p-1 bg-[rgba(70,120,240,0.8)] font-bold">Strike</div>
@@ -699,7 +699,7 @@ export default function Page(): JSX.Element {
   const [data, setData] = useState<OptionData[]>([])
   const [chain, setChain] = useState<Record<string, Record<string, Record<string, number[]>>>>({})
   const [prices, setPrices] = useState<PricesType>({})
-  const [spots, setSpots] = useState<Record<string, { price: number; changePercent: number }>>({});
+  const [spots, setSpots] = useState<Record<string, { price: number; change_percent: number }>>({});
   const [selected, setSelected] = useState<{ [ticker: string]: { year: string, month: string, strike: number | null } }>({})
   const [showDropdowns, setShowDropdowns] = useState<{ [ticker: string]: boolean }>({})
   const sentAlerts = useRef<{ [ticker: string]: { [level: string]: boolean } }>({});

@@ -19,20 +19,20 @@ export const handler = async () => {
     const spotsRes = await fetch(`https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/tickers?tickers=${tickersStr}&apiKey=${polygonApiKey}`);
     if (!spotsRes.ok) throw new Error(`Errore Polygon: ${await spotsRes.text()}`);
     const spotsData = await spotsRes.json();
-    const spots: { [ticker: string]: { price: number; changePercent: number } } = {};
+    const spots: { [ticker: string]: { price: number; change_percent: number } } = {};
     spotsData.tickers?.forEach((result: any) => {
       const price = result.lastTrade?.p || result.day?.c || result.prevDay?.c || 0;
-      const changePercent = result.todaysChangePerc || 0;
-      spots[result.ticker] = { price, changePercent };
+      const change_percent = result.todaysChangePerc || 0;
+      spots[result.ticker] = { price, change_percent };
     });
 
     // Aggiorna Supabase con nuovi spot
     for (const ticker of tickers) {
-      const spotData = spots[ticker] || { price: 0, changePercent: 0 };
+      const spotData = spots[ticker] || { price: 0, change_percent: 0 };
       const { error } = await supabase.from('options').update({
         spot: spotData.price,
-        changePercent: spotData.changePercent,
-        updated_at: new Date().toISOString()  // Nuovo: Traccia update
+        change_percent: spotData.change_percent,
+        created_at: new Date().toISOString()  // Nuovo: Traccia update
       }).eq('ticker', ticker);
       if (error) console.error(`Errore update ${ticker}:`, error);
     }
