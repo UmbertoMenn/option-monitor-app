@@ -6,29 +6,26 @@ const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_AN
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    let ticker = body?.ticker?.toUpperCase(); // Normalizza in uppercase per consistenza
+    let ticker = body?.ticker?.toUpperCase();
 
-    if (!ticker || typeof ticker !== 'string') {
-      return NextResponse.json({ success: false, error: 'Ticker non valido o mancante' }, { status: 400 });
-    }
-
-    // Validazione ticker: solo lettere uppercase, 1-5 caratteri (tipico per OPRA tickers come NVDA, AMZN)
-    if (!/^[A-Z]{1,5}$/.test(ticker)) {
-      return NextResponse.json({ success: false, error: 'Ticker non valido: deve essere 1-5 lettere maiuscole (es. NVDA, AMZN)' }, { status: 400 });
+    if (!ticker || typeof ticker !== 'string' || !/^[A-Z]{1,5}$/.test(ticker)) {
+      return NextResponse.json({ success: false, error: 'Ticker non valido' }, { status: 400 });
     }
 
     // Remove from 'tickers'
-    const { error: tickersError } = await supabase.from('tickers').delete().eq('ticker', ticker);
-    if (tickersError) throw tickersError;
+    await supabase.from('tickers').delete().eq('ticker', ticker);
 
-    // Remove positions for that ticker
-    const { error: positionsError } = await supabase.from('positions').delete().eq('ticker', ticker);
-    if (positionsError) throw positionsError;
+    // Remove from 'options'
+    await supabase.from('options').delete().eq('ticker', ticker);
 
-    console.log(`Ticker '${ticker}' rimosso con successo da tickers e positions`);
+    // Cleanup alerts
+    await supabase.from('alerts').delete().eq('ticker', ticker);
+    await supabase.from('alerts_sent').delete().eq('ticker', ticker);
+
+    console.log(`Ticker '${ticker}' rimosso con successo`);
     return NextResponse.json({ success: true });
   } catch (err: any) {
-    console.error('Errore remove-ticker:', { message: err.message, stack: err.stack });
-    return NextResponse.json({ success: false, error: 'Errore interno del server' }, { status: 500 });
+    console.error('Errore remove-ticker:', err.message);
+    return NextResponse.json({ success: false, error: 'Errore interno' }, { status: 500 });
   }
 }

@@ -1326,7 +1326,7 @@ export default function Page(): JSX.Element {
     if (data.length === 0) return
     const interval = setInterval(() => {
       fetchPrices()
-    }, 500)
+    }, 5000)
     return () => clearInterval(interval)
   }, [data]);
 

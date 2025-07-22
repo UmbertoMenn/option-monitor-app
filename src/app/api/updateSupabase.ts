@@ -31,14 +31,15 @@ export const handler = async () => {
       const spotData = spots[ticker] || { price: 0, changePercent: 0 };
       const { error } = await supabase.from('options').update({
         spot: spotData.price,
-        changePercent: spotData.changePercent
+        changePercent: spotData.changePercent,
+        updated_at: new Date().toISOString()  // Nuovo: Traccia update
       }).eq('ticker', ticker);
       if (error) console.error(`Errore update ${ticker}:`, error);
     }
 
     return { statusCode: 200, body: JSON.stringify({ message: 'Supabase updated successfully' }) };
   } catch (error) {
-    const err = error as Error;  // Cast to Error to access message safely
+    const err = error as Error;  
     console.error('Errore in Lambda:', err);
     return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
   }

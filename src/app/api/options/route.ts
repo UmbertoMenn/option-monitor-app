@@ -49,15 +49,17 @@ async function fetchContracts(ticker: string): Promise<any[]> {
   return contracts
 }
 
-async function fetchSpot(ticker: string): Promise<number> {
+async function fetchSpot(ticker: string): Promise<{ price: number; changePercent: number }> {
   try {
-    const res: Response = await fetch(`https://api.polygon.io/v2/aggs/ticker/${ticker}/prev?apiKey=${POLYGON_API_KEY}`);
-    if (!res.ok) return 0;
+    const res: Response = await fetch(`https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/tickers/${ticker}?apiKey=${POLYGON_API_KEY}`);
+    if (!res.ok) return { price: 0, changePercent: 0 };
     const json: any = await res.json();
-    return json?.results?.[0]?.c || 0;
+    const price = json?.ticker?.lastTrade?.p || json?.ticker?.day?.c || json?.ticker?.prevDay?.c || 0;
+    const changePercent = json?.ticker?.todaysChangePerc || 0;
+    return { price, changePercent };
   } catch (err) {
     console.error(`Fallback spot error for ${ticker}:`, err);
-    return 0;
+    return { price: 0, changePercent: 0 };
   }
 }
 
@@ -120,14 +122,14 @@ export async function GET() {
 
     for (const ticker of tickers) {
       const { data: rows, error } = await supabase
-        .from('positions')
+        .from('options')  
         .select('*')
         .eq('ticker', ticker)
         .order('id', { ascending: false })
         .limit(1)
 
       if (error || !rows || rows.length === 0) {
-        console.warn(`No position for ${ticker}, skipping`)
+        console.warn(`No data for ${ticker}, skipping`)
         continue
       }
 
@@ -160,7 +162,7 @@ export async function GET() {
         continue
       }
 
-      const spot = await fetchSpot(ticker)
+      const spotData = await fetchSpot(ticker)
       const currentPrices = await fetchSnapshot(current.ticker) ?? { bid: 0, ask: 0, last_trade_price: 0 };
       const expiriesMap = buildExpiriesMap(contracts)
       const monthlyExpiries = Object.keys(expiriesMap).sort()
@@ -173,12 +175,10 @@ export async function GET() {
         let selectedStrike: number | undefined
 
         if (higher) {
-          // Preferisci > strikeRef, poi esatto, poi max disponibile
           selectedStrike = strikes.find((s: number) => s > strikeRef) ||
             strikes.find((s: number) => s === strikeRef) ||
             strikes[strikes.length - 1]
         } else {
-          // Preferisci < strikeRef (dal max descending), poi esatto, poi min disponibile
           selectedStrike = [...strikes].reverse().find((s: number) => s < strikeRef) ||
             strikes.find((s: number) => s === strikeRef) ||
             strikes[0]
@@ -206,7 +206,6 @@ export async function GET() {
       let earlier1: OptionEntry | null = null
       let earlier2: OptionEntry | null = null
 
-      // Per future: cerca la prima scadenza successiva con fallback
       for (let i = curIdx + 1; i < monthlyExpiries.length; i++) {
         const f1 = await findOption(monthlyExpiries[i], CURRENT_STRIKE, true)
         if (f1) { future1 = f1; break }
@@ -219,7 +218,6 @@ export async function GET() {
         }
       }
 
-      // Per earlier: cerca la prima scadenza precedente con fallback
       for (let i = curIdx - 1; i >= 0; i--) {
         const e1 = await findOption(monthlyExpiries[i], CURRENT_STRIKE, false)
         if (e1) { earlier1 = e1; break }
@@ -234,7 +232,7 @@ export async function GET() {
 
       output.push({
         ticker,
-        spot,
+        spot: spotData.price,
         strike: CURRENT_STRIKE,
         expiry: CURRENT_EXPIRY,
         current_bid: currentPrices.bid,
@@ -246,18 +244,32 @@ export async function GET() {
         earlier2 || { label: 'OPZIONE INESISTENTE', strike: 0, bid: 0, ask: 0, last_trade_price: 0, expiry: '', symbol: '' }]
       })
     }
-    for (const item of output) {
-      const { data: stateData, error: stateError } = await supabase
-        .from('option_states')
-        .select('state')
-        .eq('ticker', item.ticker)
-        .single();
 
-      if (!stateError && stateData) {
-        item.future = stateData.state.future || item.future;
-        item.earlier = stateData.state.earlier || item.earlier;
-      }
-    }
+    // Nuovo: Calcola changePercents async prima di upsert
+    const changePercents = await Promise.all(output.map(async (o) => {
+      const spotData = await fetchSpot(o.ticker);
+      return spotData.changePercent || 0;
+    }));
+
+    // Salva persistente per alert
+    const { error: upsertError } = await supabase.from('options').upsert(
+      output.map((o, index) => ({
+        ticker: o.ticker,
+        spot: o.spot,
+        changePercent: changePercents[index],
+        strike: o.strike,
+        expiry: o.expiry,
+        current_bid: o.current_bid,
+        current_ask: o.current_ask,
+        current_last_trade_price: o.current_last_trade_price,
+        earlier: o.earlier,
+        future: o.future,
+        updated_at: new Date().toISOString()
+      })),
+      { onConflict: 'ticker' }
+    );
+    if (upsertError) console.error('❌ Errore upsert /api/options:', upsertError.message);
+
     return NextResponse.json(output)
   } catch (err: any) {
     console.error('❌ Errore /api/options:', err.message)
