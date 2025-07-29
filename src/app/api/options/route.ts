@@ -121,19 +121,17 @@ export async function GET() {
     const output: OptionData[] = []
 
     for (const ticker of tickers) {
-      const { data: rows, error } = await supabase
+      const { data: saved, error } = await supabase
         .from('options')  
         .select('*')
         .eq('ticker', ticker)
-        .order('id', { ascending: false })
-        .limit(1)
+        .single();  // Usa .single() invece di order/limit, poiché singleton per ticker
 
-      if (error || !rows || rows.length === 0) {
+      if (error || !saved) {
         console.warn(`No data for ${ticker}, skipping`)
         continue
       }
 
-      const saved = rows[0]
       const CURRENT_EXPIRY = normalizeExpiry(saved.expiry)
       const CURRENT_STRIKE = saved.strike
 
