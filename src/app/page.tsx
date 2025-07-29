@@ -890,7 +890,7 @@ export default function Page(): JSX.Element {
 
       if (!targetStrike) continue
 
-      const expiry = getThirdFriday(year, monthIdx)
+      const expiry = getThirdFriday(year, monthIdx + 1)
       const symbol = getSymbolFromExpiryStrike(ticker, expiry, targetStrike)
       const optPrices = prices[ticker]?.[symbol] ?? { bid: 0, ask: 0, last_trade_price: 0 }
 
@@ -917,7 +917,7 @@ export default function Page(): JSX.Element {
     const monthIndex = monthNames.indexOf(sel.month)
     if (monthIndex === -1) return
 
-    const expiryDate = getThirdFriday(Number(sel.year), monthIndex)
+    const expiryDate = getThirdFriday(Number(sel.year), monthIndex + 1)
 
     const updatedData = data.map(item => {
       if (item.ticker !== ticker) return item
@@ -959,7 +959,7 @@ export default function Page(): JSX.Element {
           fStrikeList.find((s: number) => s === strikeRef) ||
           fStrikeList[fStrikeList.length - 1]
         if (fStrike) {
-          const expiry = getThirdFriday(year, monthIdx)
+          const expiry = getThirdFriday(year, monthIdx + 1)
           const symbol = getSymbolFromExpiryStrike(item.ticker, expiry, fStrike)
           if (symbol && symbol.trim() !== '') {
             const optPrices = prices[item.ticker]?.[symbol] ?? { bid: 0, ask: 0, last_trade_price: 0 }
@@ -1005,7 +1005,7 @@ export default function Page(): JSX.Element {
           eStrikeList.find((s: number) => s === strikeRef) ||
           eStrikeList[0]
         if (eStrike1) {
-          const expiry = getThirdFriday(year, monthIdx)
+          const expiry = getThirdFriday(year, monthIdx + 1)
           const symbol = getSymbolFromExpiryStrike(item.ticker, expiry, eStrike1)
           if (symbol && symbol.trim() !== '') {
             const optPrices = prices[item.ticker]?.[symbol] ?? { bid: 0, ask: 0, last_trade_price: 0 }
@@ -1025,7 +1025,7 @@ export default function Page(): JSX.Element {
           eStrikeList.find((s: number) => s === strikeRef) ||
           eStrikeList[0]
         if (eStrike2 && eStrike2 !== eStrike1) {
-          const expiry = getThirdFriday(year, monthIdx)
+          const expiry = getThirdFriday(year, monthIdx + 1)
           const symbol = getSymbolFromExpiryStrike(item.ticker, expiry, eStrike2)
           if (symbol && symbol.trim() !== '') {
             const optPrices = prices[item.ticker]?.[symbol] ?? { bid: 0, ask: 0, last_trade_price: 0 }
@@ -1102,7 +1102,7 @@ export default function Page(): JSX.Element {
     const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
     const selectedMonth = monthNames[selectedMonthIndex]
     const selectedStrike = opt.strike
-    const expiryDate = getThirdFriday(Number(selectedYear), selectedMonthIndex)
+    const expiryDate = getThirdFriday(Number(selectedYear), selectedMonthIndex + 1)
 
     const updatedData = data.map(item => {
       if (item.ticker !== ticker) return item
@@ -1144,7 +1144,7 @@ export default function Page(): JSX.Element {
           fStrikeList.find((s: number) => s === strikeRef) ||
           fStrikeList[fStrikeList.length - 1]
         if (fStrike) {
-          const expiry = getThirdFriday(year, monthIdx)
+          const expiry = getThirdFriday(year, monthIdx + 1)
           const symbol = getSymbolFromExpiryStrike(item.ticker, expiry, fStrike)
           if (symbol && symbol.trim() !== '') {
             const optPrices = prices[item.ticker]?.[symbol] ?? { bid: 0, ask: 0, last_trade_price: 0 }
@@ -1190,7 +1190,7 @@ export default function Page(): JSX.Element {
           eStrikeList.find((s: number) => s === strikeRef) ||
           eStrikeList[0]
         if (eStrike1) {
-          const expiry = getThirdFriday(year, monthIdx)
+          const expiry = getThirdFriday(year, monthIdx + 1)
           const symbol = getSymbolFromExpiryStrike(item.ticker, expiry, eStrike1)
           if (symbol && symbol.trim() !== '') {
             const optPrices = prices[item.ticker]?.[symbol] ?? { bid: 0, ask: 0, last_trade_price: 0 }
@@ -1210,7 +1210,7 @@ export default function Page(): JSX.Element {
           eStrikeList.find((s: number) => s === strikeRef) ||
           eStrikeList[0]
         if (eStrike2 && eStrike2 !== eStrike1) {
-          const expiry = getThirdFriday(year, monthIdx)
+          const expiry = getThirdFriday(year, monthIdx + 1)
           const symbol = getSymbolFromExpiryStrike(item.ticker, expiry, eStrike2)
           if (symbol && symbol.trim() !== '') {
             const optPrices = prices[item.ticker]?.[symbol] ?? { bid: 0, ask: 0, last_trade_price: 0 }
