@@ -847,7 +847,7 @@ export default function Page(): JSX.Element {
     const tickerChain = chain[ticker] || {}
     const [yearStr, monthStr] = opt.expiry.split('-')
     let year = Number(yearStr)
-    let monthIdx = Number(monthStr) - 1
+    let monthIdx = Number(monthStr)  // 1-based
     const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
     let attempts = 0
     const maxAttempts = 60
@@ -856,19 +856,19 @@ export default function Page(): JSX.Element {
       attempts++
       if (direction === 'next') {
         monthIdx++
-        if (monthIdx > 11) {
-          monthIdx = 0
+        if (monthIdx > 12) {
+          monthIdx = 1
           year++
         }
       } else {
         monthIdx--
-        if (monthIdx < 0) {
-          monthIdx = 11
+        if (monthIdx < 1) {
+          monthIdx = 12
           year--
         }
       }
 
-      const monthName = monthNames[monthIdx]
+      const monthName = monthNames[monthIdx - 1]  // -1 per 0-based
       const yearKey = year.toString()
       if (!tickerChain[yearKey] || !tickerChain[yearKey][monthName]) continue
 
@@ -890,7 +890,7 @@ export default function Page(): JSX.Element {
 
       if (!targetStrike) continue
 
-      const expiry = getThirdFriday(year, monthIdx + 1)
+      const expiry = getThirdFriday(year, monthIdx)
       const symbol = getSymbolFromExpiryStrike(ticker, expiry, targetStrike)
       const optPrices = prices[ticker]?.[symbol] ?? { bid: 0, ask: 0, last_trade_price: 0 }
 
@@ -1098,11 +1098,11 @@ export default function Page(): JSX.Element {
   const handleRollaClick = useCallback(async (ticker: string, opt: OptionEntry) => {
     const [yearStr, monthStr] = opt.expiry.split('-')
     const selectedYear = yearStr
-    const selectedMonthIndex = Number(monthStr) - 1
+    const selectedMonthIndex = Number(monthStr)  // 1-based
     const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
-    const selectedMonth = monthNames[selectedMonthIndex]
+    const selectedMonth = monthNames[selectedMonthIndex - 1]  // Converti per label
     const selectedStrike = opt.strike
-    const expiryDate = getThirdFriday(Number(selectedYear), selectedMonthIndex + 1)
+    const expiryDate = getThirdFriday(Number(selectedYear), selectedMonthIndex)
 
     const updatedData = data.map(item => {
       if (item.ticker !== ticker) return item
@@ -1117,7 +1117,7 @@ export default function Page(): JSX.Element {
 
       const tickerChain = chain[item.ticker] || {}
 
-      let monthIdx = selectedMonthIndex
+      let monthIdx = selectedMonthIndex - 1  // 0-based per monthNames
       let year = Number(selectedYear)
       let strikeRef = selectedStrike
       const allFutureMonths: { monthIdx: number, year: number }[] = []
@@ -1164,7 +1164,7 @@ export default function Page(): JSX.Element {
         }
       }
 
-      monthIdx = selectedMonthIndex
+      monthIdx = selectedMonthIndex - 1  // 0-based
       year = Number(selectedYear)
       strikeRef = selectedStrike
       const allEarlierMonths: { monthIdx: number, year: number }[] = []
