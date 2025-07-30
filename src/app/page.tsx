@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useState, useRef, useCallback, Fragment } from 'react'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'; // Aggiunto import esplicito per SupabaseClient
 import { sendTelegramMessage } from './telegram';
 
 function formatStrike(strike: number): string {
@@ -55,7 +56,7 @@ function getThirdFriday(year: number, monthIndex: number): string {
 
 type PricesType = Record<string, Record<string, { bid: number; ask: number; last_trade_price: number; symbol: string }>>;
 
-const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, setPendingRoll, selected, setSelected, showDropdowns, setShowDropdowns, alertsEnabled, setAlertsEnabled, sentAlerts, chain, updateCurrentCall, handleRollaClick, shiftExpiryByMonth, getSymbolFromExpiryStrike, getThirdFriday, data, setData, setChain, spots }: {
+const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, setPendingRoll, selected, setSelected, showDropdowns, setShowDropdowns, alertsEnabled, setAlertsEnabled, sentAlerts, chain, updateCurrentCall, handleRollaClick, shiftExpiryByMonth, getSymbolFromExpiryStrike, getThirdFriday, data, setData, setChain, spots, supabaseClient }: {
   item: OptionData,
   prices: PricesType,
   setPrices: React.Dispatch<React.SetStateAction<PricesType>>,
@@ -77,7 +78,8 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
   data: OptionData[],
   setData: React.Dispatch<React.SetStateAction<OptionData[]>>,
   setChain: React.Dispatch<React.SetStateAction<Record<string, Record<string, Record<string, number[]>>>>>,
-  spots: Record<string, { price: number; change_percent: number }>
+  spots: Record<string, { price: number; change_percent: number }>,
+  supabaseClient: SupabaseClient<any, "public", any> // Fix: Tipo esplicito per matching
 }) => {
   const deltaPct = item.spot > 0 ? ((item.strike - item.spot) / item.spot) * 100 : 0;
   const deltaColor = deltaPct < 4 ? 'font-bold text-red-400' : 'font-bold text-green-400';
@@ -141,6 +143,21 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
                 } else {
                   sentAlerts.current[ticker] = {}
                   //sendTelegramMessage(`🔕 ALERT DISATTIVATI – Ticker: ${item.ticker}`)
+                }
+                // Inserisci questo blocco al suo posto
+                if (!next[ticker]) {
+                  // Pulisci client-side se off
+                  const deleteAlerts = async () => {
+                    const { error } = await supabaseClient
+                      .from('alert_sent')
+                      .delete()
+                      .eq('ticker', ticker);
+
+                    if (error) {
+                      console.error('Errore delete alert_sent:', error);
+                    }
+                  };
+                  deleteAlerts(); // Esegui la funzione asincrona
                 }
                 return next
               })
@@ -705,6 +722,15 @@ export default function Page(): JSX.Element {
   const sentAlerts = useRef<{ [ticker: string]: { [level: string]: boolean } }>({});
   const [alertsEnabled, setAlertsEnabled] = useState<{ [ticker: string]: boolean }>({})
   const [pendingRoll, setPendingRoll] = useState<{ ticker: string, opt: OptionEntry } | null>(null)
+  const supabaseClient = useRef(createClient<any, "public", any>(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)).current; // Fix: Generics espliciti
+
+  useEffect(() => {
+    const channel = supabaseClient.channel('options').on('postgres_changes', { event: '*', schema: 'public', table: 'options' }, () => {
+      fetchData();  // Refresh data on any change
+    }).subscribe();
+
+    return () => { channel.unsubscribe(); };
+  }, []);
 
   const fetchTickers = async () => {
     try {
@@ -1107,6 +1133,8 @@ export default function Page(): JSX.Element {
     if (!confirmJson.success) {
       console.error('Errore salvataggio su Supabase per', ticker)
     }
+    // Pulisci alert-sent su update call (già in API, ma ridondante client)
+    await supabaseClient.from('alert_sent').delete().eq('ticker', ticker);
   }, [selected, data, prices, chain, getSymbolFromExpiryStrike, getThirdFriday, setData, setSelected, setShowDropdowns]);
 
   const handleRollaClick = useCallback(async (ticker: string, opt: OptionEntry) => {
@@ -1304,6 +1332,8 @@ export default function Page(): JSX.Element {
     if (!confirmJson.success) {
       console.error('Errore salvataggio su Supabase per', ticker)
     }
+    // Pulisci alert-sent su update call (già in API, ma ridondante client)
+    await supabaseClient.from('alert_sent').delete().eq('ticker', ticker);
   }, [data, prices, chain, getSymbolFromExpiryStrike, getThirdFriday, setData]);
 
   useEffect(() => {
@@ -1357,6 +1387,46 @@ export default function Page(): JSX.Element {
     }, 5000)
     return () => clearInterval(interval)
   }, [data]);
+
+  useEffect(() => {
+    if (data.length === 0) return;
+    const alertInterval = setInterval(async () => {
+      // Fetch sentAlerts from Supabase
+      const result = await supabaseClient.from('alert_sent').select('*');
+      const sentData = result.data; // Estrai data
+      const sentAlertsLocal = (sentData || []).reduce((acc, row) => { // Fix: Default a [] se null
+        if (!acc[row.ticker]) acc[row.ticker] = {};
+        acc[row.ticker][row.level] = true;
+        return acc;
+      }, {});
+
+      for (const item of data) {
+        if (!alertsEnabled[item.ticker]) continue;
+        const delta = ((item.strike - item.spot) / item.spot) * 100;
+        const levels = [4, 3, 2, 1];
+        if (!sentAlertsLocal[item.ticker]) sentAlertsLocal[item.ticker] = {};
+
+        // Low delta alert
+        for (const level of levels) {
+          if (delta < level && !sentAlertsLocal[item.ticker][level.toString()]) {
+            const alertMessage = `🔴 ${item.ticker} – DELTA: ${delta.toFixed(2)}% – Rollare`;  // Adatta messaggio
+            sendTelegramMessage(alertMessage);
+            await supabaseClient.from('alert_sent').insert([{ ticker: item.ticker, level: level.toString() }]);
+          }
+        }
+
+        // Fattibile earlier alert
+        const hasFattibile = item.earlier.some(opt => isFattibile(opt, item));
+        if (hasFattibile && !sentAlertsLocal[item.ticker]['fattibile_high']) {
+          const alertMessage = `🟢 ${item.ticker} – Earlier fattibile disponibile`;
+          sendTelegramMessage(alertMessage);
+          await supabaseClient.from('alert_sent').insert([{ ticker: item.ticker, level: 'fattibile_high' }]);
+        }
+      }
+    }, 60000);  // Ogni 60s
+
+    return () => clearInterval(alertInterval);
+  }, [data, alertsEnabled, prices]);  // Dipendenze per re-check
 
   useEffect(() => {
     setData((prev: OptionData[]) => prev.map(item => ({ ...item, spot: (spots[item.ticker]?.price > 0 ? spots[item.ticker].price : item.spot) })));
@@ -1526,6 +1596,7 @@ export default function Page(): JSX.Element {
                 setData={setData}
                 setChain={setChain}
                 spots={spots}
+                supabaseClient={supabaseClient}
               />
             )
           })}

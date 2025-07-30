@@ -20,7 +20,7 @@ export async function POST(req: Request) {
 
     // Cleanup alerts
     await supabase.from('alerts').delete().eq('ticker', ticker);
-    await supabase.from('alerts_sent').delete().eq('ticker', ticker);
+    await supabase.from('alert_sent').delete().eq('ticker', ticker);  // Rinominato alert-sent
 
     console.log(`Ticker '${ticker}' rimosso con successo`);
     return NextResponse.json({ success: true });
