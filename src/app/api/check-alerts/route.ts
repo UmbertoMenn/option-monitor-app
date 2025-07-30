@@ -170,7 +170,7 @@ export async function GET() {
             };
         }
 
-        const { data: sentData, error: sentError } = await supabase.from('alert_sent').select('*');
+        const { data: sentData, error: sentError } = await supabase.from('alerts_sent').select('*');
         if (sentError) {
             console.error('Errore fetch sentAlerts:', sentError);
             return new Response(JSON.stringify({ error: 'Failed to fetch sent alerts' }), { status: 500 });
@@ -211,7 +211,7 @@ export async function GET() {
                 const f2Last = tickerPrices[f2.symbol]?.last_trade_price ?? f2.last_trade_price ?? 0;
                 const f2Price = f2Bid > 0 ? f2Bid : f2Last;
                 if (currentPrice > 0 && f1Price > 0 && f2Price > 0 && delta < level && !sentAlerts[item.ticker][level]) {
-                    const { error } = await supabase.from('alert_sent').insert([{ ticker: item.ticker, level: level.toString() }]);
+                    const { error } = await supabase.from('alerts_sent').insert([{ ticker: item.ticker, level: level.toString() }]);
                     if (error) console.error('Errore insert alert-sent:', error);
                     else sentAlerts[item.ticker][level] = true;
                     const f1Label = f1.label.replace(/C(\d+)/, '$1 CALL');
@@ -232,7 +232,7 @@ export async function GET() {
             const e2Last = tickerPrices[e2.symbol]?.last_trade_price ?? e2.last_trade_price ?? 0;
             const e2Price = e2Bid > 0 ? e2Bid : e2Last;
             if (currentPrice > 0 && e1Price > 0 && e2Price > 0 && hasFattibileEarlier && !sentAlerts[item.ticker]['fattibile_high']) {
-                const { error } = await supabase.from('alert_sent').insert([{ ticker: item.ticker, level: 'fattibile_high' }]);
+                const { error } = await supabase.from('alerts_sent').insert([{ ticker: item.ticker, level: 'fattibile_high' }]);
                 if (error) console.error('Errore insert alert-sent:', error);
                 else sentAlerts[item.ticker]['fattibile_high'] = true;
                 const e1Label = e1.label.replace(/C(\d+)/, '$1 CALL');

@@ -149,12 +149,12 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
                   // Pulisci client-side se off
                   const deleteAlerts = async () => {
                     const { error } = await supabaseClient
-                      .from('alert_sent')
+                      .from('alerts_sent')
                       .delete()
                       .eq('ticker', ticker);
 
                     if (error) {
-                      console.error('Errore delete alert_sent:', error);
+                      console.error('Errore delete alerts_sent:', error);
                     }
                   };
                   deleteAlerts(); // Esegui la funzione asincrona
@@ -1134,7 +1134,7 @@ export default function Page(): JSX.Element {
       console.error('Errore salvataggio su Supabase per', ticker)
     }
     // Pulisci alert-sent su update call (già in API, ma ridondante client)
-    await supabaseClient.from('alert_sent').delete().eq('ticker', ticker);
+    await supabaseClient.from('alerts_sent').delete().eq('ticker', ticker);
   }, [selected, data, prices, chain, getSymbolFromExpiryStrike, getThirdFriday, setData, setSelected, setShowDropdowns]);
 
   const handleRollaClick = useCallback(async (ticker: string, opt: OptionEntry) => {
@@ -1333,7 +1333,7 @@ export default function Page(): JSX.Element {
       console.error('Errore salvataggio su Supabase per', ticker)
     }
     // Pulisci alert-sent su update call (già in API, ma ridondante client)
-    await supabaseClient.from('alert_sent').delete().eq('ticker', ticker);
+    await supabaseClient.from('alerts_sent').delete().eq('ticker', ticker);
   }, [data, prices, chain, getSymbolFromExpiryStrike, getThirdFriday, setData]);
 
   useEffect(() => {
@@ -1392,7 +1392,7 @@ export default function Page(): JSX.Element {
     if (data.length === 0) return;
     const alertInterval = setInterval(async () => {
       // Fetch sentAlerts from Supabase
-      const result = await supabaseClient.from('alert_sent').select('*');
+      const result = await supabaseClient.from('alerts_sent').select('*');
       const sentData = result.data; // Estrai data
       const sentAlertsLocal = (sentData || []).reduce((acc, row) => { // Fix: Default a [] se null
         if (!acc[row.ticker]) acc[row.ticker] = {};
@@ -1411,7 +1411,7 @@ export default function Page(): JSX.Element {
           if (delta < level && !sentAlertsLocal[item.ticker][level.toString()]) {
             const alertMessage = `🔴 ${item.ticker} – DELTA: ${delta.toFixed(2)}% – Rollare`;  // Adatta messaggio
             sendTelegramMessage(alertMessage);
-            await supabaseClient.from('alert_sent').insert([{ ticker: item.ticker, level: level.toString() }]);
+            await supabaseClient.from('alerts_sent').insert([{ ticker: item.ticker, level: level.toString() }]);
           }
         }
 
@@ -1420,7 +1420,7 @@ export default function Page(): JSX.Element {
         if (hasFattibile && !sentAlertsLocal[item.ticker]['fattibile_high']) {
           const alertMessage = `🟢 ${item.ticker} – Earlier fattibile disponibile`;
           sendTelegramMessage(alertMessage);
-          await supabaseClient.from('alert_sent').insert([{ ticker: item.ticker, level: 'fattibile_high' }]);
+          await supabaseClient.from('alerts_sent').insert([{ ticker: item.ticker, level: 'fattibile_high' }]);
         }
       }
     }, 60000);  // Ogni 60s

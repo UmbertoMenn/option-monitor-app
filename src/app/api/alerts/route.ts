@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
   if (error) return NextResponse.json({ error }, { status: 500 });
   if (!enabled) {
     // Pulisci alert-sent su disable
-    const { error: deleteErr } = await supabase.from('alert_sent').delete().eq('ticker', ticker);
+    const { error: deleteErr } = await supabase.from('alerts_sent').delete().eq('ticker', ticker);
     if (deleteErr) console.error('Errore pulizia alert-sent su toggle off:', deleteErr);
   }
   return NextResponse.json({ success: true });
