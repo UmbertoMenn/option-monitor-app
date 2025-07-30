@@ -38,8 +38,8 @@ interface OptionData {
 function getThirdFriday(year: number, monthIndex: number): string {
   let count = 0
   for (let day = 1; day <= 31; day++) {
-    const date = new Date(year, monthIndex, day)
-    if (date.getMonth() !== monthIndex) break
+    const date = new Date(year, monthIndex - 1, day)  // -1 per mese 0-11
+    if (date.getMonth() !== monthIndex - 1) break
     if (date.getDay() === 5) {
       count++
       if (count === 3) {
@@ -50,7 +50,7 @@ function getThirdFriday(year: number, monthIndex: number): string {
       }
     }
   }
-  return `${year}-${String(monthIndex + 1).padStart(2, '0')}-15`
+  return `${year}-${String(monthIndex).padStart(2, '0')}-15`  // Senza +1, poiché monthIndex è già 1-12
 }
 
 type PricesType = Record<string, Record<string, { bid: number; ask: number; last_trade_price: number; symbol: string }>>;
@@ -1073,9 +1073,23 @@ export default function Page(): JSX.Element {
 
     const currentSymbol = getSymbolFromExpiryStrike(ticker, expiryDate, sel.strike!)
     const currentPrices = prices[ticker]?.[currentSymbol] ?? { bid: 0, ask: 0, last_trade_price: 0 }
-    const current_bid = currentPrices.bid
-    const current_ask = currentPrices.ask
-    const current_last_trade_price = currentPrices.last_trade_price
+    let current_bid = currentPrices.bid
+    let current_ask = currentPrices.ask
+    let current_last_trade_price = currentPrices.last_trade_price
+
+    const newSymbol = currentSymbol;
+    const res = await fetch(`/api/full-prices?symbols=${newSymbol}`);
+    if (res.ok) {
+      const json = await res.json();
+      const newData = json[newSymbol] || { bid: 0, ask: 0, last_trade_price: 0 };
+      setPrices((prev: PricesType) => ({
+        ...prev,
+        [ticker]: { ...prev[ticker], [newSymbol]: { ...newData, symbol: newSymbol } }
+      }));
+      current_bid = newData.bid > 0 ? newData.bid : newData.last_trade_price;
+      current_ask = newData.ask > 0 ? newData.ask : newData.last_trade_price;
+      current_last_trade_price = newData.last_trade_price;
+    }
 
     const confirmRes = await fetch('/api/update-call', {
       method: 'POST',
@@ -1256,9 +1270,23 @@ export default function Page(): JSX.Element {
 
     const currentSymbol = getSymbolFromExpiryStrike(ticker, expiryDate, selectedStrike)
     const currentPrices = prices[ticker]?.[currentSymbol] ?? { bid: 0, ask: 0, last_trade_price: 0 }
-    const current_bid = currentPrices.bid
-    const current_ask = currentPrices.ask
-    const current_last_trade_price = currentPrices.last_trade_price
+    let current_bid = currentPrices.bid
+    let current_ask = currentPrices.ask
+    let current_last_trade_price = currentPrices.last_trade_price
+
+    const newSymbol = currentSymbol;
+    const res = await fetch(`/api/full-prices?symbols=${newSymbol}`);
+    if (res.ok) {
+      const json = await res.json();
+      const newData = json[newSymbol] || { bid: 0, ask: 0, last_trade_price: 0 };
+      setPrices((prev: PricesType) => ({
+        ...prev,
+        [ticker]: { ...prev[ticker], [newSymbol]: { ...newData, symbol: newSymbol } }
+      }));
+      current_bid = newData.bid > 0 ? newData.bid : newData.last_trade_price;
+      current_ask = newData.ask > 0 ? newData.ask : newData.last_trade_price;
+      current_last_trade_price = newData.last_trade_price;
+    }
 
     const confirmRes = await fetch('/api/update-call', {
       method: 'POST',
