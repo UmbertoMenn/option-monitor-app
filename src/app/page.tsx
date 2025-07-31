@@ -294,25 +294,45 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
               <button
                 title="Strike Up"
                 className="bg-green-700 hover:bg-green-800 text-white text-xs px-1 rounded"
-                onClick={async () => { // Rendi async
-                  const [year, month] = opt.expiry.split('-')
-                  const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
-                  const monthIndex = Number(month) - 1
-                  const chainStrikes = chain[item.ticker]?.[year]?.[monthNames[monthIndex]] || []
-                  const nextStrike = chainStrikes.find((s: number) => s > opt.strike)
-                  if (!nextStrike) return
+                onClick={async () => {
+                  let expiry = opt.expiry;
+                  let strike = opt.strike;
+                  if (opt.label === 'OPZIONE INESISTENTE' || expiry === '') {
+                    // Fallback: Usa prima scadenza/strike disponibile dal chain
+                    const tickerChain = chain[item.ticker] || {};
+                    const years = Object.keys(tickerChain).sort();
+                    if (years.length === 0) {
+                      alert('Nessuna scadenza disponibile nel chain per questo ticker.');
+                      return;
+                    }
+                    const firstYear = years[0];
+                    const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC'];
+                    const firstMonth = Object.keys(tickerChain[firstYear])[0];
+                    const monthIndex = monthNames.indexOf(firstMonth);
+                    expiry = getThirdFriday(Number(firstYear), monthIndex + 1);
+                    const strikes = tickerChain[firstYear][firstMonth] || [];
+                    if (strikes.length === 0) return;
+                    strike = strikes[0];  // Inizia da strike basso
+                  }
+
+                  const [year, month] = expiry.split('-');
+                  const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC'];
+                  const monthIndex = Number(month) - 1;
+                  const chainStrikes = chain[item.ticker]?.[year]?.[monthNames[monthIndex]] || [];
+                  const nextStrike = chainStrikes.find((s: number) => s > strike);
+                  if (!nextStrike) return;
 
                   // Pre-fetch prezzo per nuovo simbolo
-                  const newSymbol = getSymbolFromExpiryStrike(item.ticker, opt.expiry, nextStrike)
-                  const res = await fetch(`/api/full-prices?symbols=${newSymbol}`)
-                  let newData = { bid: 0, ask: 0, last_trade_price: 0 }
+                  const newSymbol = getSymbolFromExpiryStrike(item.ticker, expiry, nextStrike);
+                  const res = await fetch(`/api/full-prices?symbols=${newSymbol}`);
+                  let newData = { bid: 0, ask: 0, last_trade_price: 0 };
                   if (res.ok) {
-                    const json = await res.json()
-                    newData = json[newSymbol] || { bid: 0, ask: 0, last_trade_price: 0 }
+                    const json = await res.json();
+                    newData = json[newSymbol] || { bid: 0, ask: 0, last_trade_price: 0 };
                     setPrices((prev: PricesType) => ({
                       ...prev,
                       [item.ticker]: { ...prev[item.ticker], [newSymbol]: { ...newData, symbol: newSymbol } }
-                    }))
+                    }));
                   }
 
                   const updatedOpt = {
@@ -322,8 +342,9 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
                     symbol: newSymbol,
                     bid: newData.bid,
                     ask: newData.ask,
-                    last_trade_price: newData.last_trade_price
-                  }
+                    last_trade_price: newData.last_trade_price,
+                    expiry  // Aggiorna expiry nel caso di fallback
+                  };
 
                   const updatedData = data.map((d, idx) => {
                     if (d.ticker !== item.ticker) return d;
@@ -331,7 +352,7 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
                     newFuture[i] = updatedOpt;
                     return { ...d, future: newFuture };
                   });
-                  setData(updatedData)
+                  setData(updatedData);
 
                   fetch('/api/save-state', {
                     method: 'POST',
@@ -346,28 +367,49 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
               >
                 🔼
               </button>
+
               <button
                 title="Strike Down"
                 className="bg-red-700 hover:bg-red-800 text-white text-xs px-1 rounded"
-                onClick={async () => { // Rendi async
-                  const [year, month] = opt.expiry.split('-')
-                  const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
-                  const monthIndex = Number(month) - 1
-                  const chainStrikes = chain[item.ticker]?.[year]?.[monthNames[monthIndex]] || []
-                  const prevStrike = [...chainStrikes].reverse().find((s: number) => s < opt.strike)
-                  if (!prevStrike) return
+                onClick={async () => {
+                  let expiry = opt.expiry;
+                  let strike = opt.strike;
+                  if (opt.label === 'OPZIONE INESISTENTE' || expiry === '') {
+                    // Stesso fallback come sopra
+                    const tickerChain = chain[item.ticker] || {};
+                    const years = Object.keys(tickerChain).sort();
+                    if (years.length === 0) {
+                      alert('Nessuna scadenza disponibile nel chain per questo ticker.');
+                      return;
+                    }
+                    const firstYear = years[0];
+                    const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC'];
+                    const firstMonth = Object.keys(tickerChain[firstYear])[0];
+                    const monthIndex = monthNames.indexOf(firstMonth);
+                    expiry = getThirdFriday(Number(firstYear), monthIndex + 1);
+                    const strikes = tickerChain[firstYear][firstMonth] || [];
+                    if (strikes.length === 0) return;
+                    strike = strikes[strikes.length - 1];  // Per down, inizia da strike alto
+                  }
+
+                  const [year, month] = expiry.split('-');
+                  const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC'];
+                  const monthIndex = Number(month) - 1;
+                  const chainStrikes = chain[item.ticker]?.[year]?.[monthNames[monthIndex]] || [];
+                  const prevStrike = [...chainStrikes].reverse().find((s: number) => s < strike);
+                  if (!prevStrike) return;
 
                   // Pre-fetch
-                  const newSymbol = getSymbolFromExpiryStrike(item.ticker, opt.expiry, prevStrike)
-                  const res = await fetch(`/api/full-prices?symbols=${newSymbol}`)
-                  let newData = { bid: 0, ask: 0, last_trade_price: 0 }
+                  const newSymbol = getSymbolFromExpiryStrike(item.ticker, expiry, prevStrike);
+                  const res = await fetch(`/api/full-prices?symbols=${newSymbol}`);
+                  let newData = { bid: 0, ask: 0, last_trade_price: 0 };
                   if (res.ok) {
-                    const json = await res.json()
-                    newData = json[newSymbol] || { bid: 0, ask: 0, last_trade_price: 0 }
+                    const json = await res.json();
+                    newData = json[newSymbol] || { bid: 0, ask: 0, last_trade_price: 0 };
                     setPrices((prev: PricesType) => ({
                       ...prev,
                       [item.ticker]: { ...prev[item.ticker], [newSymbol]: { ...newData, symbol: newSymbol } }
-                    }))
+                    }));
                   }
 
                   const updatedOpt = {
@@ -377,8 +419,9 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
                     symbol: newSymbol,
                     bid: newData.bid,
                     ask: newData.ask,
-                    last_trade_price: newData.last_trade_price
-                  }
+                    last_trade_price: newData.last_trade_price,
+                    expiry  // Aggiorna expiry nel caso di fallback
+                  };
 
                   const updatedData = data.map((d, idx) => {
                     if (d.ticker !== item.ticker) return d;
@@ -386,7 +429,7 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
                     newFuture[i] = updatedOpt;
                     return { ...d, future: newFuture };
                   });
-                  setData(updatedData)
+                  setData(updatedData);
 
                   fetch('/api/save-state', {
                     method: 'POST',
@@ -534,94 +577,270 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
               >
                 ROLLA
               </button>
-              <button
-                title="Strike Up"
-                className="bg-green-700 hover:bg-green-800 text-white text-xs px-1 rounded"
-                onClick={async () => {
-                  const [year, month] = opt.expiry.split('-')
-                  const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
-                  const monthIndex = Number(month) - 1
-                  const chainStrikes = chain[item.ticker]?.[year]?.[monthNames[monthIndex]] || []
-                  const nextStrike = chainStrikes.find((s: number) => s > opt.strike)
-                  if (!nextStrike) return
+              {item.earlier.map((opt, i) => {
+                const optPriceData = tickerPrices[opt.symbol]
+                const optBid = (optPriceData?.bid ?? opt.bid ?? 0) > 0 ? (optPriceData?.bid ?? opt.bid ?? 0) : (optPriceData?.last_trade_price ?? opt.last_trade_price ?? 0)
+                const optAsk = optPriceData?.ask ?? opt.ask ?? 0
+                const delta = item.spot > 0 ? ((optBid - currentAskToShow) / item.spot) * 100 : 0;
+                const deltaColor_opt = delta >= 0 ? 'text-green-400' : 'text-red-400'
+                const deltaSign = delta >= 0 ? '+' : ''
 
-                  const newSymbol = getSymbolFromExpiryStrike(item.ticker, opt.expiry, nextStrike)
-                  const res = await fetch(`/api/full-prices?symbols=${newSymbol}`)
-                  let newData = { bid: 0, ask: 0, last_trade_price: 0 }
-                  if (res.ok) {
-                    const json = await res.json()
-                    newData = json[newSymbol] || { bid: 0, ask: 0, last_trade_price: 0 }
-                    setPrices((prev: PricesType) => ({
-                      ...prev,
-                      [item.ticker]: { ...prev[item.ticker], [newSymbol]: { ...newData, symbol: newSymbol } }
-                    }))
-                  }
+                return (
+                  <div key={i} className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-1 gap-1 sm:gap-0">
+                    <span className="flex items-center gap-1">
+                      <span title={opt.expiry}>
+                        <span className="bg-zinc-800 px-2 py-1 rounded border border-red-400">{opt.label}</span><span className="bg-zinc-800 px-2 py-1 rounded border border-red-400">{optBid.toFixed(2)} / {optAsk.toFixed(2)}</span>
+                        {optPriceData && (
+                          <span title="Premio aggiuntivo/riduttivo rispetto alla call attuale, diviso il prezzo spot" className={`ml-1 ${deltaColor_opt}`}>
+                            {deltaSign}{delta.toFixed(2)}%
+                          </span>
+                        )}
+                        {isFattibile(opt, item) && (
+                          <span className={isFattibile(opt, item) ? "text-green-400" : "text-transparent"} title={isFattibile(opt, item) ? "Fattibile: strike ≥ spot + 4%, prezzo ≥ prezzo call attuale" : ""}>🟢</span>)}
+                      </span>
+                    </span>
+                    <div className="flex gap-1 items-center">
+                      <button
+                        onClick={() => setPendingRoll({ ticker: item.ticker, opt })}
+                        className="bg-[rgba(70,120,240,0.8)] hover:bg-[rgba(70,120,240,1)] text-white text-xs font-bold px-2 py-0.5 rounded"
+                        title="Aggiorna la call attuale con questa opzione"
+                      >
+                        ROLLA
+                      </button>
+                      <button
+                        title="Strike Up"
+                        className="bg-green-700 hover:bg-green-800 text-white text-xs px-1 rounded"
+                        onClick={async () => {
+                          let expiry = opt.expiry;
+                          let strike = opt.strike;
+                          if (opt.label === 'OPZIONE INESISTENTE' || expiry === '') {
+                            // Fallback: Usa prima scadenza/strike disponibile dal chain
+                            const tickerChain = chain[item.ticker] || {};
+                            const years = Object.keys(tickerChain).sort();
+                            if (years.length === 0) {
+                              alert('Nessuna scadenza disponibile nel chain per questo ticker.');
+                              return;
+                            }
+                            const firstYear = years[0];
+                            const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC'];
+                            const firstMonth = Object.keys(tickerChain[firstYear])[0];
+                            const monthIndex = monthNames.indexOf(firstMonth);
+                            expiry = getThirdFriday(Number(firstYear), monthIndex + 1);
+                            const strikes = tickerChain[firstYear][firstMonth] || [];
+                            if (strikes.length === 0) return;
+                            strike = strikes[0];  // Inizia da strike basso
+                          }
 
-                  const updatedOpt = {
-                    ...opt,
-                    strike: nextStrike,
-                    label: `${monthNames[monthIndex]} ${year.slice(2)} C${nextStrike}`,
-                    symbol: newSymbol,
-                    bid: newData.bid,
-                    ask: newData.ask,
-                    last_trade_price: newData.last_trade_price
-                  }
+                          const [year, month] = expiry.split('-');
+                          const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC'];
+                          const monthIndex = Number(month) - 1;
+                          const chainStrikes = chain[item.ticker]?.[year]?.[monthNames[monthIndex]] || [];
+                          const nextStrike = chainStrikes.find((s: number) => s > strike);
+                          if (!nextStrike) return;
 
-                  const updatedData = data.map((d, idx) => {
-                    if (d.ticker !== item.ticker) return d;
-                    const newEarlier = [...d.earlier];
-                    newEarlier[i] = updatedOpt;
-                    return { ...d, earlier: newEarlier };
-                  });
-                  setData(updatedData)
-                }}
-              >
-                🔼
-              </button>
-              <button
-                title="Strike Down"
-                className="bg-red-700 hover:bg-red-800 text-white text-xs px-1 rounded"
-                onClick={async () => {
-                  const [year, month] = opt.expiry.split('-')
-                  const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
-                  const monthIndex = Number(month) - 1
-                  const chainStrikes = chain[item.ticker]?.[year]?.[monthNames[monthIndex]] || []
-                  const prevStrike = [...chainStrikes].reverse().find((s: number) => s < opt.strike)
-                  if (!prevStrike) return
+                          // Pre-fetch prezzo per nuovo simbolo
+                          const newSymbol = getSymbolFromExpiryStrike(item.ticker, expiry, nextStrike);
+                          const res = await fetch(`/api/full-prices?symbols=${newSymbol}`);
+                          let newData = { bid: 0, ask: 0, last_trade_price: 0 };
+                          if (res.ok) {
+                            const json = await res.json();
+                            newData = json[newSymbol] || { bid: 0, ask: 0, last_trade_price: 0 };
+                            setPrices((prev: PricesType) => ({
+                              ...prev,
+                              [item.ticker]: { ...prev[item.ticker], [newSymbol]: { ...newData, symbol: newSymbol } }
+                            }));
+                          }
 
-                  const newSymbol = getSymbolFromExpiryStrike(item.ticker, opt.expiry, prevStrike)
-                  const res = await fetch(`/api/full-prices?symbols=${newSymbol}`)
-                  let newData = { bid: 0, ask: 0, last_trade_price: 0 }
-                  if (res.ok) {
-                    const json = await res.json()
-                    newData = json[newSymbol] || { bid: 0, ask: 0, last_trade_price: 0 }
-                    setPrices((prev: PricesType) => ({
-                      ...prev,
-                      [item.ticker]: { ...prev[item.ticker], [newSymbol]: { ...newData, symbol: newSymbol } }
-                    }))
-                  }
+                          const updatedOpt = {
+                            ...opt,
+                            strike: nextStrike,
+                            label: `${monthNames[monthIndex]} ${year.slice(2)} C${nextStrike}`,
+                            symbol: newSymbol,
+                            bid: newData.bid,
+                            ask: newData.ask,
+                            last_trade_price: newData.last_trade_price,
+                            expiry  // Aggiorna expiry nel caso di fallback
+                          };
 
-                  const updatedOpt = {
-                    ...opt,
-                    strike: prevStrike,
-                    label: `${monthNames[monthIndex]} ${year.slice(2)} C${prevStrike}`,
-                    symbol: newSymbol,
-                    bid: newData.bid,
-                    ask: newData.ask,
-                    last_trade_price: newData.last_trade_price
-                  }
+                          const updatedData = data.map((d, idx) => {
+                            if (d.ticker !== item.ticker) return d;
+                            const newEarlier = [...d.earlier];
+                            newEarlier[i] = updatedOpt;
+                            return { ...d, earlier: newEarlier };
+                          });
+                          setData(updatedData);
 
-                  const updatedData = data.map((d, idx) => {
-                    if (d.ticker !== item.ticker) return d;
-                    const newEarlier = [...d.earlier];
-                    newEarlier[i] = updatedOpt;
-                    return { ...d, earlier: newEarlier };
-                  });
-                  setData(updatedData)
-                }}
-              >
-                🔽
-              </button>
+                          fetch('/api/save-state', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              ticker: item.ticker,
+                              future: updatedData.find(d => d.ticker === item.ticker)?.future || [],
+                              earlier: updatedData.find(d => d.ticker === item.ticker)?.earlier || []
+                            })
+                          }).catch(err => console.error('Errore salvataggio stato:', err));
+                        }}
+                      >
+                        🔼
+                      </button>
+                      <button
+                        title="Strike Down"
+                        className="bg-red-700 hover:bg-red-800 text-white text-xs px-1 rounded"
+                        onClick={async () => {
+                          let expiry = opt.expiry;
+                          let strike = opt.strike;
+                          if (opt.label === 'OPZIONE INESISTENTE' || expiry === '') {
+                            // Stesso fallback come sopra
+                            const tickerChain = chain[item.ticker] || {};
+                            const years = Object.keys(tickerChain).sort();
+                            if (years.length === 0) {
+                              alert('Nessuna scadenza disponibile nel chain per questo ticker.');
+                              return;
+                            }
+                            const firstYear = years[0];
+                            const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC'];
+                            const firstMonth = Object.keys(tickerChain[firstYear])[0];
+                            const monthIndex = monthNames.indexOf(firstMonth);
+                            expiry = getThirdFriday(Number(firstYear), monthIndex + 1);
+                            const strikes = tickerChain[firstYear][firstMonth] || [];
+                            if (strikes.length === 0) return;
+                            strike = strikes[strikes.length - 1];  // Per down, inizia da strike alto
+                          }
+
+                          const [year, month] = expiry.split('-');
+                          const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC'];
+                          const monthIndex = Number(month) - 1;
+                          const chainStrikes = chain[item.ticker]?.[year]?.[monthNames[monthIndex]] || [];
+                          const prevStrike = [...chainStrikes].reverse().find((s: number) => s < strike);
+                          if (!prevStrike) return;
+
+                          // Pre-fetch
+                          const newSymbol = getSymbolFromExpiryStrike(item.ticker, expiry, prevStrike);
+                          const res = await fetch(`/api/full-prices?symbols=${newSymbol}`);
+                          let newData = { bid: 0, ask: 0, last_trade_price: 0 };
+                          if (res.ok) {
+                            const json = await res.json();
+                            newData = json[newSymbol] || { bid: 0, ask: 0, last_trade_price: 0 };
+                            setPrices((prev: PricesType) => ({
+                              ...prev,
+                              [item.ticker]: { ...prev[item.ticker], [newSymbol]: { ...newData, symbol: newSymbol } }
+                            }));
+                          }
+
+                          const updatedOpt = {
+                            ...opt,
+                            strike: prevStrike,
+                            label: `${monthNames[monthIndex]} ${year.slice(2)} C${prevStrike}`,
+                            symbol: newSymbol,
+                            bid: newData.bid,
+                            ask: newData.ask,
+                            last_trade_price: newData.last_trade_price,
+                            expiry  // Aggiorna expiry nel caso di fallback
+                          };
+
+                          const updatedData = data.map((d, idx) => {
+                            if (d.ticker !== item.ticker) return d;
+                            const newEarlier = [...d.earlier];
+                            newEarlier[i] = updatedOpt;
+                            return { ...d, earlier: newEarlier };
+                          });
+                          setData(updatedData);
+
+                          fetch('/api/save-state', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              ticker: item.ticker,
+                              future: updatedData.find(d => d.ticker === item.ticker)?.future || [],
+                              earlier: updatedData.find(d => d.ticker === item.ticker)?.earlier || []
+                            })
+                          }).catch(err => console.error('Errore salvataggio stato:', err));
+                        }}
+                      >
+                        🔽
+                      </button>
+                      <button
+                        title="Month Back"
+                        className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded"
+                        onClick={async () => {
+                          const shift = shiftExpiryByMonth(item.ticker, opt, 'prev', 'earlier')
+                          if (!shift) return
+
+                          const newSymbol = getSymbolFromExpiryStrike(item.ticker, shift.expiry, shift.strike)
+                          const res = await fetch(`/api/full-prices?symbols=${newSymbol}`)
+                          let newData = { bid: 0, ask: 0, last_trade_price: 0 }
+                          if (res.ok) {
+                            const json = await res.json()
+                            newData = json[newSymbol] || { bid: 0, ask: 0, last_trade_price: 0 }
+                            setPrices((prev: PricesType) => ({
+                              ...prev,
+                              [item.ticker]: { ...prev[item.ticker], [newSymbol]: { ...newData, symbol: newSymbol } }
+                            }))
+                          }
+
+                          const updatedOpt = {
+                            ...opt,
+                            ...shift,
+                            symbol: newSymbol,
+                            bid: newData.bid,
+                            ask: newData.ask,
+                            last_trade_price: newData.last_trade_price
+                          }
+
+                          const updatedData = data.map((d, idx) => {
+                            if (d.ticker !== item.ticker) return d;
+                            const newEarlier = [...d.earlier];
+                            newEarlier[i] = updatedOpt;
+                            return { ...d, earlier: newEarlier };
+                          });
+                          setData(updatedData)
+                        }}
+                      >
+                        ◀️
+                      </button>
+                      <button
+                        title="Month Forward"
+                        className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded"
+                        onClick={async () => {
+                          const shift = shiftExpiryByMonth(item.ticker, opt, 'next', 'future')
+                          if (!shift) return
+
+                          const newSymbol = getSymbolFromExpiryStrike(item.ticker, shift.expiry, shift.strike)
+                          const res = await fetch(`/api/full-prices?symbols=${newSymbol}`)
+                          let newData = { bid: 0, ask: 0, last_trade_price: 0 }
+                          if (res.ok) {
+                            const json = await res.json()
+                            newData = json[newSymbol] || { bid: 0, ask: 0, last_trade_price: 0 }
+                            setPrices((prev: PricesType) => ({
+                              ...prev,
+                              [item.ticker]: { ...prev[item.ticker], [newSymbol]: { ...newData, symbol: newSymbol } }
+                            }))
+                          }
+
+                          const updatedOpt = {
+                            ...opt,
+                            ...shift,
+                            symbol: newSymbol,
+                            bid: newData.bid,
+                            ask: newData.ask,
+                            last_trade_price: newData.last_trade_price
+                          }
+
+                          const updatedData = data.map((d, idx) => {
+                            if (d.ticker !== item.ticker) return d;
+                            const newEarlier = [...d.earlier];
+                            newEarlier[i] = updatedOpt;
+                            return { ...d, earlier: newEarlier };
+                          });
+                          setData(updatedData)
+                        }}
+                      >
+                        ▶️
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
               <button
                 title="Month Back"
                 className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded"
