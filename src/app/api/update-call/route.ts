@@ -71,7 +71,7 @@ export async function POST(req: Request) {
     }
 
     // Pulisci alert-sent su update call
-    const { error: deleteErr } = await supabase.from('alert_sent').delete().eq('ticker', ticker);
+    const { error: deleteErr } = await supabase.from('alerts_sent').delete().eq('ticker', ticker);
     if (deleteErr) console.error('Errore pulizia alert-sent su update-call:', deleteErr);
 
     console.log('✅ Riga aggiornata su Supabase')
