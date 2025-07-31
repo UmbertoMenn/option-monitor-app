@@ -294,6 +294,7 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
               <button
                 title="Strike Up"
                 className="bg-green-700 hover:bg-green-800 text-white text-xs px-1 rounded"
+                disabled={opt.label === 'OPZIONE INESISTENTE'}
                 onClick={async () => { // Rendi async
                   const [year, month] = opt.expiry.split('-')
                   const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
@@ -349,6 +350,7 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
               <button
                 title="Strike Down"
                 className="bg-red-700 hover:bg-red-800 text-white text-xs px-1 rounded"
+                disabled={opt.label === 'OPZIONE INESISTENTE'}
                 onClick={async () => { // Rendi async
                   const [year, month] = opt.expiry.split('-')
                   const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
@@ -404,6 +406,7 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
               <button
                 title="Month Back"
                 className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded"
+                disabled={opt.label === 'OPZIONE INESISTENTE'}
                 onClick={async () => { // Rendi async
                   const shift = shiftExpiryByMonth(item.ticker, opt, 'prev', 'earlier')
                   if (!shift) return
@@ -453,6 +456,7 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
               <button
                 title="Month Forward"
                 className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded"
+                disabled={opt.label === 'OPZIONE INESISTENTE'}
                 onClick={async () => { // Rendi async
                   const shift = shiftExpiryByMonth(item.ticker, opt, 'next', 'future')
                   if (!shift) return
@@ -537,6 +541,7 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
               <button
                 title="Strike Up"
                 className="bg-green-700 hover:bg-green-800 text-white text-xs px-1 rounded"
+                disabled={opt.label === 'OPZIONE INESISTENTE'}
                 onClick={async () => {
                   const [year, month] = opt.expiry.split('-')
                   const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
@@ -581,6 +586,7 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
               <button
                 title="Strike Down"
                 className="bg-red-700 hover:bg-red-800 text-white text-xs px-1 rounded"
+                disabled={opt.label === 'OPZIONE INESISTENTE'}
                 onClick={async () => {
                   const [year, month] = opt.expiry.split('-')
                   const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
@@ -625,6 +631,7 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
               <button
                 title="Month Back"
                 className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded"
+                disabled={opt.label === 'OPZIONE INESISTENTE'}
                 onClick={async () => {
                   const shift = shiftExpiryByMonth(item.ticker, opt, 'prev', 'earlier')
                   if (!shift) return
@@ -664,6 +671,7 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
               <button
                 title="Month Forward"
                 className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded"
+                disabled={opt.label === 'OPZIONE INESISTENTE'}
                 onClick={async () => {
                   const shift = shiftExpiryByMonth(item.ticker, opt, 'next', 'future')
                   if (!shift) return
@@ -870,11 +878,22 @@ export default function Page(): JSX.Element {
   };
 
   const shiftExpiryByMonth = useCallback((ticker: string, opt: OptionEntry, direction: 'next' | 'prev', type: 'future' | 'earlier'): OptionEntry | null => {
+    const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC'];
+    if (opt.label === 'OPZIONE INESISTENTE') {
+      // Fallback: Usa expiry corrente o prima disponibile dal chain
+      const tickerChain = chain[ticker] || {};
+      const years = Object.keys(tickerChain).sort();
+      if (years.length === 0) return null;
+      const firstYear = years[0];
+      const firstMonth = Object.keys(tickerChain[firstYear])[0];
+      const strikes = tickerChain[firstYear][firstMonth] || [];
+      if (strikes.length === 0) return null;
+      opt = { ...opt, expiry: getThirdFriday(Number(firstYear), monthNames.indexOf(firstMonth) + 1), strike: strikes[0] }; // Inizializza dummy con valido
+    }
     const tickerChain = chain[ticker] || {}
     const [yearStr, monthStr] = opt.expiry.split('-')
     let year = Number(yearStr)
     let monthIdx = Number(monthStr)  // 1-based
-    const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
     let attempts = 0
     const maxAttempts = 60
 
