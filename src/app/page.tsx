@@ -294,7 +294,6 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
               <button
                 title="Strike Up"
                 className="bg-green-700 hover:bg-green-800 text-white text-xs px-1 rounded"
-                disabled={opt.label === 'OPZIONE INESISTENTE'}
                 onClick={async () => { // Rendi async
                   const [year, month] = opt.expiry.split('-')
                   const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
@@ -350,7 +349,6 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
               <button
                 title="Strike Down"
                 className="bg-red-700 hover:bg-red-800 text-white text-xs px-1 rounded"
-                disabled={opt.label === 'OPZIONE INESISTENTE'}
                 onClick={async () => { // Rendi async
                   const [year, month] = opt.expiry.split('-')
                   const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
@@ -406,7 +404,6 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
               <button
                 title="Month Back"
                 className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded"
-                disabled={opt.label === 'OPZIONE INESISTENTE'}
                 onClick={async () => { // Rendi async
                   const shift = shiftExpiryByMonth(item.ticker, opt, 'prev', 'earlier')
                   if (!shift) return
@@ -456,7 +453,6 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
               <button
                 title="Month Forward"
                 className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded"
-                disabled={opt.label === 'OPZIONE INESISTENTE'}
                 onClick={async () => { // Rendi async
                   const shift = shiftExpiryByMonth(item.ticker, opt, 'next', 'future')
                   if (!shift) return
@@ -541,7 +537,6 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
               <button
                 title="Strike Up"
                 className="bg-green-700 hover:bg-green-800 text-white text-xs px-1 rounded"
-                disabled={opt.label === 'OPZIONE INESISTENTE'}
                 onClick={async () => {
                   const [year, month] = opt.expiry.split('-')
                   const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
@@ -586,7 +581,6 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
               <button
                 title="Strike Down"
                 className="bg-red-700 hover:bg-red-800 text-white text-xs px-1 rounded"
-                disabled={opt.label === 'OPZIONE INESISTENTE'}
                 onClick={async () => {
                   const [year, month] = opt.expiry.split('-')
                   const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
@@ -631,7 +625,6 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
               <button
                 title="Month Back"
                 className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded"
-                disabled={opt.label === 'OPZIONE INESISTENTE'}
                 onClick={async () => {
                   const shift = shiftExpiryByMonth(item.ticker, opt, 'prev', 'earlier')
                   if (!shift) return
@@ -671,7 +664,6 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
               <button
                 title="Month Forward"
                 className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded"
-                disabled={opt.label === 'OPZIONE INESISTENTE'}
                 onClick={async () => {
                   const shift = shiftExpiryByMonth(item.ticker, opt, 'next', 'future')
                   if (!shift) return
