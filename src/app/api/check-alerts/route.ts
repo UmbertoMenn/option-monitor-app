@@ -2,6 +2,8 @@ import { createClient } from '@supabase/supabase-js';
 import { sendTelegramMessage } from '../../../utils/sendTelegram';
 import { getSymbolFromExpiryStrike, isFattibile, OptionEntry, OptionData, PricesData } from '../../../utils/functions';
 
+export const runtime = 'edge';
+
 const supabaseUrl = process.env.SUPABASE_URL as string;
 const supabaseKey = process.env.SUPABASE_ANON_KEY as string;
 const supabase = createClient(supabaseUrl, supabaseKey);

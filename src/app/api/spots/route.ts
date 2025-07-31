@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 
+export const runtime = 'edge';
+
 const POLYGON_API_KEY = process.env.POLYGON_API_KEY;
 
 export async function GET(req: Request) {
