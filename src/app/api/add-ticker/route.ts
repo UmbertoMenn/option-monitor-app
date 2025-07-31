@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
-import { normalizeExpiry } from '../../../utils/functions'  // Assumi esista, dal tuo codice
+import { normalizeExpiry } from '../../../utils/functions';  // Assumi esista, dal tuo codice
 
 const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!);
 
@@ -11,12 +11,12 @@ export async function POST(req: Request) {
         ticker = body?.ticker?.toUpperCase();
 
         if (!ticker) {
-            return NextResponse.json({ success: false, error: 'Ticker è obbligatorio' }, { status: 400 })
+            return NextResponse.json({ success: false, error: 'Ticker è obbligatorio' }, { status: 400 });
         }
 
         // Validazione ticker: solo lettere uppercase, 1-5 caratteri (tipico per OPRA tickers come NVDA, AMZN)
         if (!/^[A-Z]{1,5}$/.test(ticker)) {
-            return NextResponse.json({ success: false, error: 'Ticker non valido: deve essere 1-5 lettere maiuscole (es. NVDA, AMZN)' }, { status: 400 })
+            return NextResponse.json({ success: false, error: 'Ticker non valido: deve essere 1-5 lettere maiuscole (es. NVDA, AMZN)' }, { status: 400 });
         }
 
         const now = new Date();
@@ -28,8 +28,8 @@ export async function POST(req: Request) {
         }
         const nextExpiry = normalizeExpiry(`${year}-${String(month + 1).padStart(2, '0')}`);
 
-        // Insert base in 'options' con valori non null espliciti
-        const { error: optionsError } = await supabase.from('options').insert([
+        // Upsert in 'options' con valori non null espliciti (sovrascrive se esiste già)
+        const { error: optionsError } = await supabase.from('options').upsert([
             { 
                 ticker, 
                 spot: 0,  // Valore default non null
@@ -41,17 +41,17 @@ export async function POST(req: Request) {
                 earlier: [],
                 future: []
             }
-        ]);
+        ], { onConflict: 'ticker' });
         if (optionsError) {
-            console.error('Errore insert options:', optionsError.message);
-            throw optionsError;
+            console.error('Errore upsert options:', optionsError.message);
+            throw new Error(`Errore upsert options: ${optionsError.message}`);
         }
 
         // Insert/Upsert in tickers (evita duplicati)
         const { error: tickError } = await supabase.from('tickers').upsert([{ ticker }], { onConflict: 'ticker' });
         if (tickError) {
             console.error('Errore upsert tickers:', tickError.message);
-            throw tickError;
+            throw new Error(`Errore upsert tickers: ${tickError.message}`);
         }
 
         return NextResponse.json({ success: true });
