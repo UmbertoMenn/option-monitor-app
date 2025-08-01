@@ -34,13 +34,13 @@ function getThirdFriday(year: number, monthIndex: number): string {
   return `${year}-${String(monthIndex + 1).padStart(2, '0')}-15`;
 }
 
-async function updateOptionsData(optionsData: OptionData[]) {
+async function updateOptionsData(optionsData: OptionData[]): Promise<{ pricesGrouped: PricesData, spots: SpotsData }> {
     const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000';
 
     const tickersStr = optionsData.map(item => item.ticker).join(',');
     if (!tickersStr) {
         console.log('[DEBUG-SPOTS-SKIP] Nessun ticker disponibile; salto fetch spots.');
-        return;
+        return { pricesGrouped: {}, spots: {} };
     }
     const spotsUrl = `${baseUrl}/api/spots?tickers=${tickersStr}`;
     console.log(`[DEBUG-SPOTS-URL] ${spotsUrl}`);
@@ -48,7 +48,7 @@ async function updateOptionsData(optionsData: OptionData[]) {
     if (!spotsRes.ok) {
         const errorText = await spotsRes.text();
         console.error('Errore update spots:', errorText);
-        return;
+        return { pricesGrouped: {}, spots: {} };
     }
     const spots: SpotsData = await spotsRes.json();
 
@@ -62,7 +62,7 @@ async function updateOptionsData(optionsData: OptionData[]) {
     symbols = [...new Set(symbols.filter(s => s))];
     if (symbols.length === 0) {
         console.log('[DEBUG-PRICES-SKIP] Nessun simbolo disponibile; salto fetch prices.');
-        return;
+        return { pricesGrouped: {}, spots };
     }
 
     const pricesUrl = `${baseUrl}/api/full-prices?symbols=${symbols.join(',')}`;
@@ -71,7 +71,7 @@ async function updateOptionsData(optionsData: OptionData[]) {
     if (!pricesRes.ok) {
         const errorText = await pricesRes.text();
         console.error('Errore update prices:', errorText);
-        return;
+        return { pricesGrouped: {}, spots };
     }
     const allPrices = await pricesRes.json();
 
@@ -105,6 +105,8 @@ async function updateOptionsData(optionsData: OptionData[]) {
 
         if (error) console.error('Errore update options per ticker:', ticker, error);
     }
+
+    return { pricesGrouped, spots };  // Restituisci per riutilizzo nei check
 }
 
 export async function GET() {
@@ -115,8 +117,12 @@ export async function GET() {
             return new Response(JSON.stringify({ error: 'Failed to fetch options' }), { status: 500 });
         }
 
+        let pricesGrouped: PricesData = {};
+        let spots: SpotsData = {};
         if (optionsData.length > 0) {
-            await updateOptionsData(optionsData);
+            const updateResult = await updateOptionsData(optionsData);
+            pricesGrouped = updateResult.pricesGrouped;
+            spots = updateResult.spots;
         }
 
         const { data: updatedOptionsData, error: reloadError } = await supabase.from('options').select('*');
@@ -132,46 +138,6 @@ export async function GET() {
         }
         const alertsEnabled: { [ticker: string]: boolean } = alertsData.reduce((acc: { [ticker: string]: boolean }, { ticker, enabled }: { ticker: string; enabled: boolean }) => ({ ...acc, [ticker]: enabled }), {});
 
-        const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000';
-        const tickersStr = updatedOptionsData.map((item: OptionData) => item.ticker).join(',');
-        const spotsRes = await fetch(`${baseUrl}/api/spots?tickers=${tickersStr}`, { cache: 'no-store' });
-        if (!spotsRes.ok) {
-            const errorText = await spotsRes.text();
-            console.error('Dettagli errore fetch spots:', errorText);
-            return new Response(JSON.stringify({ error: 'Failed to fetch spots' }), { status: 500 });
-        }
-        const spots: SpotsData = await spotsRes.json();
-
-        let symbols: string[] = [];
-        updatedOptionsData.forEach((item: OptionData) => {
-            const currentSymbol = getSymbolFromExpiryStrike(item.ticker, item.expiry, item.strike);
-            if (currentSymbol) symbols.push(currentSymbol);
-            item.earlier.forEach(opt => opt.symbol && symbols.push(opt.symbol));
-            item.future.forEach(opt => opt.symbol && symbols.push(opt.symbol));
-        });
-        symbols = [...new Set(symbols.filter(s => s))];
-
-        const pricesRes = await fetch(`${baseUrl}/api/full-prices?symbols=${symbols.join(',')}`, { cache: 'no-store' });
-        if (!pricesRes.ok) {
-            const errorText = await pricesRes.text();
-            console.error('Dettagli errore fetch prices:', errorText);
-            return new Response(JSON.stringify({ error: 'Failed to fetch prices' }), { status: 500 });
-        }
-        const allPrices = await pricesRes.json();
-
-        const prices: PricesData = {};
-        for (const [symbol, val] of Object.entries(allPrices)) {
-            const match = /^O:([A-Z]+)\d+C\d+$/.exec(symbol);
-            if (!match) continue;
-            const ticker = match[1];
-            if (!prices[ticker]) prices[ticker] = {};
-            prices[ticker][symbol] = {
-                bid: (val as any).bid ?? 0,
-                ask: (val as any).ask ?? 0,
-                last_trade_price: (val as any).last_trade_price ?? 0,
-            };
-        }
-
         const { data: sentData, error: sentError } = await supabase.from('alerts_sent').select('*');
         if (sentError) {
             console.error('Errore fetch sentAlerts:', sentError);
@@ -179,21 +145,18 @@ export async function GET() {
         }
         const sentAlerts: SentAlerts = sentData.reduce((acc: SentAlerts, { ticker, level }: { ticker: string; level: string }) => {
             if (!acc[ticker]) acc[ticker] = {};
-            acc[ticker][level] = true;  // Assume sent=true since row exists
+            acc[ticker][level] = true;
             return acc;
         }, {});
 
         for (const item of updatedOptionsData) {
             if (!alertsEnabled[item.ticker]) continue;
             if (item.spot <= 0) continue;
-            const spotData = spots[item.ticker] || { price: 0, change_percent: 0 };
-            const change_percent = spotData.change_percent;
-            const changeSign = change_percent >= 0 ? '+' : '';
             const delta = ((item.strike - item.spot) / item.spot) * 100;
-            const tickerPrices = prices[item.ticker] || {};
-            const currentSymbol = getSymbolFromExpiryStrike(item.ticker, item.expiry, item.strike);
-            const ask = tickerPrices[currentSymbol]?.ask ?? item.current_ask ?? 0;
-            const last_trade_price = tickerPrices[currentSymbol]?.last_trade_price ?? item.current_last_trade_price ?? 0;
+            const change_percent = item.change_percent || 0;
+            const changeSign = change_percent >= 0 ? '+' : '';
+            const ask = item.current_ask || 0;
+            const last_trade_price = item.current_last_trade_price || 0;
             const currentPrice = ask > 0 ? ask : (last_trade_price > 0 ? last_trade_price : 0);
             const [currYear, currMonth] = item.expiry.split('-');
             const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC'];
@@ -206,11 +169,11 @@ export async function GET() {
             for (const level of levels) {
                 const f1 = item.future[0] || { label: 'N/A', bid: 0, last_trade_price: 0, symbol: '', ask: 0, strike: 0, expiry: '' };
                 const f2 = item.future[1] || { label: 'N/A', bid: 0, last_trade_price: 0, symbol: '', ask: 0, strike: 0, expiry: '' };
-                const f1Bid = tickerPrices[f1.symbol]?.bid ?? f1.bid ?? 0;
-                const f1Last = tickerPrices[f1.symbol]?.last_trade_price ?? f1.last_trade_price ?? 0;
+                const f1Bid = pricesGrouped[item.ticker]?.[f1.symbol]?.bid ?? f1.bid ?? 0;  // Usa pricesGrouped se disponibile, fallback su valori salvati
+                const f1Last = pricesGrouped[item.ticker]?.[f1.symbol]?.last_trade_price ?? f1.last_trade_price ?? 0;
                 const f1Price = f1Bid > 0 ? f1Bid : f1Last;
-                const f2Bid = tickerPrices[f2.symbol]?.bid ?? f2.bid ?? 0;
-                const f2Last = tickerPrices[f2.symbol]?.last_trade_price ?? f2.last_trade_price ?? 0;
+                const f2Bid = pricesGrouped[item.ticker]?.[f2.symbol]?.bid ?? f2.bid ?? 0;
+                const f2Last = pricesGrouped[item.ticker]?.[f2.symbol]?.last_trade_price ?? f2.last_trade_price ?? 0;
                 const f2Price = f2Bid > 0 ? f2Bid : f2Last;
                 if (currentPrice > 0 && f1Price > 0 && f2Price > 0 && delta < level && !sentAlerts[item.ticker][level]) {
                     const { error } = await supabase.from('alerts_sent').insert([{ ticker: item.ticker, level: level.toString() }]);
@@ -224,14 +187,14 @@ export async function GET() {
                 }
             }
 
-            const hasFattibileEarlier = item.earlier.some((opt: OptionEntry) => isFattibile(opt, item, prices));
+            const hasFattibileEarlier = item.earlier.some((opt: OptionEntry) => isFattibile(opt, item, pricesGrouped));  // Usa pricesGrouped calcolato in update
             const e1 = item.earlier[0] || { label: 'N/A', bid: 0, last_trade_price: 0, symbol: '', ask: 0, strike: 0, expiry: '' };
             const e2 = item.earlier[1] || { label: 'N/A', bid: 0, last_trade_price: 0, symbol: '', ask: 0, strike: 0, expiry: '' };
-            const e1Bid = tickerPrices[e1.symbol]?.bid ?? e1.bid ?? 0;
-            const e1Last = tickerPrices[e1.symbol]?.last_trade_price ?? e1.last_trade_price ?? 0;
+            const e1Bid = pricesGrouped[item.ticker]?.[e1.symbol]?.bid ?? e1.bid ?? 0;
+            const e1Last = pricesGrouped[item.ticker]?.[e1.symbol]?.last_trade_price ?? e1.last_trade_price ?? 0;
             const e1Price = e1Bid > 0 ? e1Bid : e1Last;
-            const e2Bid = tickerPrices[e2.symbol]?.bid ?? e2.bid ?? 0;
-            const e2Last = tickerPrices[e2.symbol]?.last_trade_price ?? e2.last_trade_price ?? 0;
+            const e2Bid = pricesGrouped[item.ticker]?.[e2.symbol]?.bid ?? e2.bid ?? 0;
+            const e2Last = pricesGrouped[item.ticker]?.[e2.symbol]?.last_trade_price ?? e2.last_trade_price ?? 0;
             const e2Price = e2Bid > 0 ? e2Bid : e2Last;
             if (currentPrice > 0 && e1Price > 0 && e2Price > 0 && hasFattibileEarlier && !sentAlerts[item.ticker]['fattibile_high']) {
                 const { error } = await supabase.from('alerts_sent').insert([{ ticker: item.ticker, level: 'fattibile_high' }]);
