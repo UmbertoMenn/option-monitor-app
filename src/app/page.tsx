@@ -953,17 +953,18 @@ export default function Page(): JSX.Element {
 
       console.log('🎯 Valid symbols requested:', symbols); // Debug for Vercel/console
 
-      const url = `/api/full-prices?symbols=${encodeURIComponent(symbols.join(','))}`;
+      const tickersStr = data.map(item => item.ticker).join(',');  // Estrai tickers per il parametro
+      const url = `/api/data?symbols=${encodeURIComponent(symbols.join(','))}&tickers=${encodeURIComponent(tickersStr)}`;
       const res = await fetch(url);
       if (!res.ok) {
-        console.error(`Error fetching prices: ${res.status} - ${await res.text()}`);
+        console.error(`Error fetching data: ${res.status} - ${await res.text()}`);
         return;
       }
-      const json = await res.json();
-      console.log('📥 Prices response:', json);
+      const { prices: jsonPrices, spots: jsonSpots } = await res.json();  // Estrai prezzi e spots dalla risposta combinata
+      console.log('📥 Data response:', { prices: jsonPrices, spots: jsonSpots });
 
       const grouped: PricesType = {};
-      for (const [symbol, val] of Object.entries(json)) {
+      for (const [symbol, val] of Object.entries(jsonPrices)) {
         const match = /^O:([A-Z]+)\d+C\d+$/.exec(symbol);
         if (!match) continue;
         const ticker = match[1];
@@ -985,14 +986,11 @@ export default function Page(): JSX.Element {
         return `${t}: ${grouped[t]?.[symbol]?.last_trade_price ?? 0}`;
       }).join(', '));
 
-      const tickersStr = data.map(item => item.ticker).join(',');
-      const spotRes = await fetch(`/api/spots?tickers=${tickersStr}`);
-      if (spotRes.ok) {
-        const newSpots = await spotRes.json();
-        setSpots(newSpots);
-      } console.log('✅ Prices updated:', grouped);
+      setSpots(jsonSpots);  // Aggiorna spots direttamente dalla risposta combinata
+
+      console.log('✅ Prices and spots updated:', grouped);
     } catch (err) {
-      console.error('Errore fetch /api/full-prices:', err);
+      console.error('Errore fetch /api/data:', err);
     }
   };
 
