@@ -54,6 +54,50 @@ function getThirdFriday(year: number, monthIndex: number): string {
   return `${year}-${String(monthIndex).padStart(2, '0')}-15`  // Senza +1, poiché monthIndex è già 1-12
 }
 
+// NUOVA VERSIONE DELLA FUNZIONE - Usa questa al posto della precedente
+
+function isMarketOpen(): boolean {
+  try {
+    const now = new Date();
+
+    // Ottiene l'ora e il giorno della settimana specifici per il fuso orario di New York (che gestisce EDT/EST)
+    const options: Intl.DateTimeFormatOptions = {
+      timeZone: 'America/New_York', // Fuso orario di riferimento per i mercati USA
+      weekday: 'long',  // Es. 'Monday'
+      hour: 'numeric',
+      hour12: false,    // Formato 24 ore
+    };
+
+    const formatter = new Intl.DateTimeFormat('en-US', options);
+    const parts = formatter.formatToParts(now);
+
+    let day = '';
+    let hour = -1;
+
+    for (const part of parts) {
+      if (part.type === 'weekday') day = part.value;
+      if (part.type === 'hour') hour = parseInt(part.value, 10);
+    }
+    
+    // Se non riusciamo a leggere l'ora, per sicurezza diciamo che il mercato è chiuso
+    if (day === '' || hour === -1) return false;
+
+    // Controlla se è un giorno feriale
+    const weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+    const isWeekday = weekdays.includes(day);
+    
+    // Controlla se l'ora rientra nel pre-market e nella sessione regolare (4:00 AM - 4:00 PM ET)
+    // hour < 16 significa "fino alle 15:59", coprendo l'intera sessione di trading
+    const isMarketHours = hour >= 4 && hour < 16;
+    
+    return isWeekday && isMarketHours;
+
+  } catch (error) {
+    console.error("Errore nel determinare l'orario di mercato:", error);
+    return false; // In caso di errore, meglio non fare chiamate API
+  }
+}
+
 type PricesType = Record<string, Record<string, { bid: number; ask: number; last_trade_price: number; symbol: string }>>;
 
 const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, setPendingRoll, selected, setSelected, showDropdowns, setShowDropdowns, alertsEnabled, setAlertsEnabled, sentAlerts, chain, updateCurrentCall, handleRollaClick, shiftExpiryByMonth, getSymbolFromExpiryStrike, getThirdFriday, data, setData, setChain, spots, supabaseClient }: {
@@ -953,18 +997,17 @@ export default function Page(): JSX.Element {
 
       console.log('🎯 Valid symbols requested:', symbols); // Debug for Vercel/console
 
-      const tickersStr = data.map(item => item.ticker).join(',');  // Estrai tickers per il parametro
-      const url = `/api/data?symbols=${encodeURIComponent(symbols.join(','))}&tickers=${encodeURIComponent(tickersStr)}`;
+      const url = `/api/full-prices?symbols=${encodeURIComponent(symbols.join(','))}`;
       const res = await fetch(url);
       if (!res.ok) {
-        console.error(`Error fetching data: ${res.status} - ${await res.text()}`);
+        console.error(`Error fetching prices: ${res.status} - ${await res.text()}`);
         return;
       }
-      const { prices: jsonPrices, spots: jsonSpots } = await res.json();  // Estrai prezzi e spots dalla risposta combinata
-      console.log('📥 Data response:', { prices: jsonPrices, spots: jsonSpots });
+      const json = await res.json();
+      console.log('📥 Prices response:', json);
 
       const grouped: PricesType = {};
-      for (const [symbol, val] of Object.entries(jsonPrices)) {
+      for (const [symbol, val] of Object.entries(json)) {
         const match = /^O:([A-Z]+)\d+C\d+$/.exec(symbol);
         if (!match) continue;
         const ticker = match[1];
@@ -986,11 +1029,14 @@ export default function Page(): JSX.Element {
         return `${t}: ${grouped[t]?.[symbol]?.last_trade_price ?? 0}`;
       }).join(', '));
 
-      setSpots(jsonSpots);  // Aggiorna spots direttamente dalla risposta combinata
-
-      console.log('✅ Prices and spots updated:', grouped);
+      const tickersStr = data.map(item => item.ticker).join(',');
+      const spotRes = await fetch(`/api/spots?tickers=${tickersStr}`);
+      if (spotRes.ok) {
+        const newSpots = await spotRes.json();
+        setSpots(newSpots);
+      } console.log('✅ Prices updated:', grouped);
     } catch (err) {
-      console.error('Errore fetch /api/data:', err);
+      console.error('Errore fetch /api/full-prices:', err);
     }
   };
 
@@ -1507,23 +1553,29 @@ export default function Page(): JSX.Element {
     }
   };
 
-  /*
-  useEffect(() => {
-    if (data.length > 0) {
-      fetchPrices()
-    }
-  }, [data]);
-*/
+// DOPO (Il codice corretto)
 
   useEffect(() => {
+    if (data.length === 0) return;
 
-    if (data.length === 0) return
     const interval = setInterval(() => {
-      fetchPrices()
-    }, 5000)
-    return () => clearInterval(interval)
-  }, [data]);
+      // Controlla se il mercato è aperto prima di chiamare l'API
+      if (isMarketOpen()) {
+        console.log('✅ Market is open, fetching prices...');
+        fetchPrices();
+      } else {
+        console.log('❌ Market is closed, skipping price fetch.');
+      }
+    }, 5000); // L'intervallo continua a girare ogni 5 secondi
 
+    // Esegui un fetch immediato al caricamento se il mercato è aperto
+    if (isMarketOpen()) {
+      fetchPrices();
+    }
+
+    return () => clearInterval(interval); // Pulisci l'intervallo quando il componente viene smontato
+  }, [data]);
+  
   useEffect(() => {
     if (data.length === 0) return;
     const alertInterval = setInterval(async () => {

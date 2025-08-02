@@ -39,18 +39,9 @@ async function updateOptionsData(optionsData: OptionData[]): Promise<{ pricesGro
 
     const tickersStr = optionsData.map(item => item.ticker).join(',');
     if (!tickersStr) {
-        console.log('[DEBUG-SPOTS-SKIP] Nessun ticker disponibile; salto fetch spots.');
+        console.log('[DEBUG-DATA-SKIP] Nessun ticker disponibile; salto fetch data.');
         return { pricesGrouped: {}, spots: {} };
     }
-    const spotsUrl = `${baseUrl}/api/spots?tickers=${tickersStr}`;
-    console.log(`[DEBUG-SPOTS-URL] ${spotsUrl}`);
-    const spotsRes = await fetch(spotsUrl, { cache: 'no-store' });
-    if (!spotsRes.ok) {
-        const errorText = await spotsRes.text();
-        console.error('Errore update spots:', errorText);
-        return { pricesGrouped: {}, spots: {} };
-    }
-    const spots: SpotsData = await spotsRes.json();
 
     let symbols: string[] = [];
     optionsData.forEach(item => {
@@ -61,19 +52,19 @@ async function updateOptionsData(optionsData: OptionData[]): Promise<{ pricesGro
     });
     symbols = [...new Set(symbols.filter(s => s))];
     if (symbols.length === 0) {
-        console.log('[DEBUG-PRICES-SKIP] Nessun simbolo disponibile; salto fetch prices.');
-        return { pricesGrouped: {}, spots };
+        console.log('[DEBUG-DATA-SKIP] Nessun simbolo disponibile; salto fetch data.');
+        return { pricesGrouped: {}, spots: {} };
     }
 
-    const pricesUrl = `${baseUrl}/api/full-prices?symbols=${symbols.join(',')}`;
-    console.log(`[DEBUG-PRICES-URL] ${pricesUrl}`);
-    const pricesRes = await fetch(pricesUrl, { cache: 'no-store' });
-    if (!pricesRes.ok) {
-        const errorText = await pricesRes.text();
-        console.error('Errore update prices:', errorText);
-        return { pricesGrouped: {}, spots };
+    const dataUrl = `${baseUrl}/api/data?symbols=${encodeURIComponent(symbols.join(','))}&tickers=${encodeURIComponent(tickersStr)}`;
+    console.log(`[DEBUG-DATA-URL] ${dataUrl}`);
+    const dataRes = await fetch(dataUrl, { cache: 'no-store' });
+    if (!dataRes.ok) {
+        const errorText = await dataRes.text();
+        console.error('Errore fetch data:', errorText);
+        return { pricesGrouped: {}, spots: {} };
     }
-    const allPrices = await pricesRes.json();
+    const { prices: allPrices, spots } = await dataRes.json();
 
     const pricesGrouped: PricesData = {};
     for (const [symbol, val] of Object.entries(allPrices)) {
@@ -110,13 +101,6 @@ async function updateOptionsData(optionsData: OptionData[]): Promise<{ pricesGro
 }
 
 export async function GET() {
-    // Aggiunto: Check orario (13:00-22:00 CEST = 11:00-20:00 UTC)
-    const currentHourUTC = new Date().getUTCHours();
-    if (currentHourUTC < 11 || currentHourUTC > 20) {
-        console.log('Fuori orario (13:00-22:00 CEST): esecuzione cron saltata.');
-        return new Response(JSON.stringify({ success: true, message: 'Fuori orario' }), { status: 200 });
-    }
-
     try {
         const { data: optionsData, error: optionsError } = await supabase.from('options').select('*');
         if (optionsError) {
