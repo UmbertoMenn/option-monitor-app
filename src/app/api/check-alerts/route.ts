@@ -106,10 +106,17 @@ async function updateOptionsData(optionsData: OptionData[]): Promise<{ pricesGro
         if (error) console.error('Errore update options per ticker:', ticker, error);
     }
 
-    return { pricesGrouped, spots };  // Restituisci per riutilizzo nei check
+    return { pricesGrouped, spots };
 }
 
 export async function GET() {
+    // Aggiunto: Check orario (13:00-22:00 CEST = 11:00-20:00 UTC)
+    const currentHourUTC = new Date().getUTCHours();
+    if (currentHourUTC < 11 || currentHourUTC > 20) {
+        console.log('Fuori orario (13:00-22:00 CEST): esecuzione cron saltata.');
+        return new Response(JSON.stringify({ success: true, message: 'Fuori orario' }), { status: 200 });
+    }
+
     try {
         const { data: optionsData, error: optionsError } = await supabase.from('options').select('*');
         if (optionsError) {
@@ -155,9 +162,7 @@ export async function GET() {
             const delta = ((item.strike - item.spot) / item.spot) * 100;
             const change_percent = item.change_percent || 0;
             const changeSign = change_percent >= 0 ? '+' : '';
-            const ask = item.current_ask || 0;
-            const last_trade_price = item.current_last_trade_price || 0;
-            const currentPrice = ask > 0 ? ask : (last_trade_price > 0 ? last_trade_price : 0);
+            const currentPrice = item.current_ask > 0 ? item.current_ask : (item.current_last_trade_price > 0 ? item.current_last_trade_price : 0);
             const [currYear, currMonth] = item.expiry.split('-');
             const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC'];
             const currMonthIndex = Number(currMonth) - 1;
@@ -169,7 +174,7 @@ export async function GET() {
             for (const level of levels) {
                 const f1 = item.future[0] || { label: 'N/A', bid: 0, last_trade_price: 0, symbol: '', ask: 0, strike: 0, expiry: '' };
                 const f2 = item.future[1] || { label: 'N/A', bid: 0, last_trade_price: 0, symbol: '', ask: 0, strike: 0, expiry: '' };
-                const f1Bid = pricesGrouped[item.ticker]?.[f1.symbol]?.bid ?? f1.bid ?? 0;  // Usa pricesGrouped se disponibile, fallback su valori salvati
+                const f1Bid = pricesGrouped[item.ticker]?.[f1.symbol]?.bid ?? f1.bid ?? 0;
                 const f1Last = pricesGrouped[item.ticker]?.[f1.symbol]?.last_trade_price ?? f1.last_trade_price ?? 0;
                 const f1Price = f1Bid > 0 ? f1Bid : f1Last;
                 const f2Bid = pricesGrouped[item.ticker]?.[f2.symbol]?.bid ?? f2.bid ?? 0;
@@ -187,7 +192,7 @@ export async function GET() {
                 }
             }
 
-            const hasFattibileEarlier = item.earlier.some((opt: OptionEntry) => isFattibile(opt, item, pricesGrouped));  // Usa pricesGrouped calcolato in update
+            const hasFattibileEarlier = item.earlier.some((opt: OptionEntry) => isFattibile(opt, item, pricesGrouped));
             const e1 = item.earlier[0] || { label: 'N/A', bid: 0, last_trade_price: 0, symbol: '', ask: 0, strike: 0, expiry: '' };
             const e2 = item.earlier[1] || { label: 'N/A', bid: 0, last_trade_price: 0, symbol: '', ask: 0, strike: 0, expiry: '' };
             const e1Bid = pricesGrouped[item.ticker]?.[e1.symbol]?.bid ?? e1.bid ?? 0;
