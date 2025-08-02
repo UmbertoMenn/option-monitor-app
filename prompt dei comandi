@@ -3,7 +3,7 @@ cd C:\Users\Umberto/option-monitor-app
 
 git add .
 
-git commit -m "fix: utilizzo orario"
+git commit -m "fix: multi user"
 
 git push origin main
 
