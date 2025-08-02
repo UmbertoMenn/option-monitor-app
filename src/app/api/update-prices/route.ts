@@ -146,23 +146,23 @@ async function updatePricesHandler(request: Request) {
 
   try {
     // Raccogli symbols e tickers
-    const { data: allOptions, error: optionsError } = await supabaseClient.from('options').select('ticker, expiry, strike, earlier(symbol), future(symbol)');
+    const { data: allOptions, error: optionsError } = await supabaseClient.from('options').select('*'); // Espandi select per includere tutti i campi necessari (spot, change_percent, etc.)
     if (optionsError) throw optionsError;
 
     const symbols = new Set<string>();
     const tickers = new Set<string>();
-    allOptions.forEach((opt: any) => {
+    allOptions.forEach((opt: OptionData) => {  // Tipo esplicito per opt
       tickers.add(opt.ticker);
       symbols.add(getSymbolFromExpiryStrike(opt.ticker, opt.expiry, opt.strike));
-      opt.earlier.forEach((e: { symbol: string }) => symbols.add(e.symbol));
-      opt.future.forEach((f: { symbol: string }) => symbols.add(f.symbol));
+      opt.earlier.forEach((e: OptionEntry) => symbols.add(e.symbol)); // Tipo per e
+      opt.future.forEach((f: OptionEntry) => symbols.add(f.symbol)); // Tipo per f
     });
 
     // Fetch dati
     const { optionsData, spotsData } = await fetchExternalPrices(Array.from(symbols), Array.from(tickers));
 
     // Upsert in prices_cache
-    for (const [symbol, values] of Object.entries(optionsData)) {
+    for (const [symbol, values] of Object.entries(optionsData) as [string, { bid: number; ask: number; last_trade_price: number }][]) {  // Tipo esplicito per entries
       await supabaseClient.from('prices_cache').upsert({
         key: symbol,
         type: 'option',
@@ -173,7 +173,7 @@ async function updatePricesHandler(request: Request) {
       }, { onConflict: 'key' });
     }
 
-    for (const [ticker, values] of Object.entries(spotsData)) {
+    for (const [ticker, values] of Object.entries(spotsData) as [string, { price: number; change_percent: number }][]) {  // Tipo esplicito per entries
       await supabaseClient.from('prices_cache').upsert({
         key: ticker,
         type: 'spot',
@@ -209,12 +209,12 @@ async function updatePricesHandler(request: Request) {
     // Fetch alerts enabled
     const { data: alertsData, error: alertsError } = await supabaseClient.from('alerts').select('*');
     if (alertsError) throw alertsError;
-    const alertsEnabled: { [ticker: string]: boolean } = alertsData.reduce((acc, { ticker, enabled }) => ({ ...acc, [ticker]: enabled }), {});
+    const alertsEnabled: { [ticker: string]: boolean } = alertsData.reduce((acc, { ticker, enabled }: { ticker: string; enabled: boolean }) => ({ ...acc, [ticker]: enabled }), {});
 
     // Fetch sent alerts
     const { data: sentData, error: sentError } = await supabaseClient.from('alerts_sent').select('*');
     if (sentError) throw sentError;
-    const sentAlerts: SentAlerts = sentData.reduce((acc, { ticker, level }) => {
+    const sentAlerts: SentAlerts = sentData.reduce((acc, { ticker, level }: { ticker: string; level: string }) => {
       if (!acc[ticker]) acc[ticker] = {};
       acc[ticker][level] = true;
       return acc;
@@ -230,8 +230,8 @@ async function updatePricesHandler(request: Request) {
       pricesGrouped[ticker][symbol] = val;
     }
 
-    // Verifica e invia alerts (logica completa da check-alerts)
-    for (const item of updatedOptionsData) {
+    // Verifica e invia alerts (logica completa da check-alerts, con tipi espliciti)
+    for (const item of updatedOptionsData as OptionData[]) {  // Tipo esplicito per item
       if (!alertsEnabled[item.ticker] || item.spot <= 0) continue;
       const delta = ((item.strike - item.spot) / item.spot) * 100;
       const change_percent = item.change_percent || 0;
@@ -245,8 +245,8 @@ async function updatePricesHandler(request: Request) {
       if (!sentAlerts[item.ticker]) sentAlerts[item.ticker] = {};
 
       for (const level of levels) {
-        const f1 = item.future[0] || { label: 'N/A', bid: 0, last_trade_price: 0, symbol: '', ask: 0, strike: 0, expiry: '' };
-        const f2 = item.future[1] || { label: 'N/A', bid: 0, last_trade_price: 0, symbol: '', ask: 0, strike: 0, expiry: '' };
+        const f1: OptionEntry = item.future[0] || { label: 'N/A', bid: 0, last_trade_price: 0, symbol: '', ask: 0, strike: 0, expiry: '' };
+        const f2: OptionEntry = item.future[1] || { label: 'N/A', bid: 0, last_trade_price: 0, symbol: '', ask: 0, strike: 0, expiry: '' };
         const f1Bid = pricesGrouped[item.ticker]?.[f1.symbol]?.bid ?? f1.bid ?? 0;
         const f1Last = pricesGrouped[item.ticker]?.[f1.symbol]?.last_trade_price ?? f1.last_trade_price ?? 0;
         const f1Price = f1Bid > 0 ? f1Bid : f1Last;
@@ -265,9 +265,9 @@ async function updatePricesHandler(request: Request) {
         }
       }
 
-      const hasFattibileEarlier = item.earlier.some((opt) => isFattibile(opt, item, pricesGrouped));
-      const e1 = item.earlier[0] || { label: 'N/A', bid: 0, last_trade_price: 0, symbol: '', ask: 0, strike: 0, expiry: '' };
-      const e2 = item.earlier[1] || { label: 'N/A', bid: 0, last_trade_price: 0, symbol: '', ask: 0, strike: 0, expiry: '' };
+      const hasFattibileEarlier = item.earlier.some((opt: OptionEntry) => isFattibile(opt, item, pricesGrouped)); // Tipo esplicito per opt
+      const e1: OptionEntry = item.earlier[0] || { label: 'N/A', bid: 0, last_trade_price: 0, symbol: '', ask: 0, strike: 0, expiry: '' };
+      const e2: OptionEntry = item.earlier[1] || { label: 'N/A', bid: 0, last_trade_price: 0, symbol: '', ask: 0, strike: 0, expiry: '' };
       const e1Bid = pricesGrouped[item.ticker]?.[e1.symbol]?.bid ?? e1.bid ?? 0;
       const e1Last = pricesGrouped[item.ticker]?.[e1.symbol]?.last_trade_price ?? e1.last_trade_price ?? 0;
       const e1Price = e1Bid > 0 ? e1Bid : e1Last;
