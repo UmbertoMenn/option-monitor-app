@@ -114,7 +114,7 @@ const MemoizedTickerCard = React.memo(({ item, prices, setPrices, isFattibile, s
   setShowDropdowns: React.Dispatch<React.SetStateAction<{ [ticker: string]: boolean }>>,
   alertsEnabled: { [ticker: string]: boolean },
   setAlertsEnabled: React.Dispatch<React.SetStateAction<{ [ticker: string]: boolean }>>,
-  sentAlerts: React.MutableRefObject<{ [ticker: string]: { [level: number]: boolean } }>,
+  sentAlerts: React.MutableRefObject<{ [ticker: string]: { [level: string]: boolean } }>,
   chain: Record<string, Record<string, Record<string, number[]>>>,
   updateCurrentCall: (ticker: string) => Promise<void>,
   handleRollaClick: (ticker: string, opt: OptionEntry) => Promise<void>,
@@ -1542,9 +1542,7 @@ export default function Page(): JSX.Element {
     const checkSession = async () => {
       try {
         const { data: { session } } = await supabaseClient.auth.getSession();
-        if (!session && isMounted) {
-          router.push('/login');
-        } else if (isMounted) {
+        if (isMounted) {
           setUser(session?.user);
         }
       } catch (err) {
@@ -1554,9 +1552,7 @@ export default function Page(): JSX.Element {
     checkSession();
 
     const { data: authListener } = supabaseClient.auth.onAuthStateChange((_event, session) => {
-      if (!session && isMounted) {
-        router.push('/login');
-      } else if (isMounted) {
+      if (isMounted) {
         setUser(session?.user);
       }
     });
@@ -1566,8 +1562,6 @@ export default function Page(): JSX.Element {
       authListener.subscription.unsubscribe();
     };
   }, [router]);
-
-  if (!user) return <div>Caricamento...</div>; // Loader mentre check
 
   useEffect(() => {
     let isMounted = true;
@@ -1582,19 +1576,19 @@ export default function Page(): JSX.Element {
   }, [fetchData]);
 
   useEffect(() => {
+    if (!user) return;
     fetchTickers()
     fetchData()
     fetchAlerts()
-  }, [fetchTickers, fetchData, fetchAlerts]);
+  }, [user, fetchTickers, fetchData, fetchAlerts]);
 
   useEffect(() => {
-    if (tickers.length > 0) {
-      fetchChain();
-    }
-  }, [tickers, fetchChain]);
+    if (!user || tickers.length === 0) return;
+    fetchChain();
+  }, [user, tickers, fetchChain]);
 
   useEffect(() => {
-    if (data.length === 0) return;
+    if (!user || data.length === 0) return;
 
     let isMounted = true;
     const interval = setInterval(() => {
@@ -1616,10 +1610,10 @@ export default function Page(): JSX.Element {
       isMounted = false;
       clearInterval(interval); // Pulisci l'intervallo quando il componente viene smontato
     };
-  }, [data, fetchPrices]);
+  }, [user, data, fetchPrices]);
 
   useEffect(() => {
-    if (data.length === 0) return;
+    if (!user || data.length === 0) return;
     let isMounted = true;
     const alertInterval = setInterval(async () => {
       if (!isMounted) return;
@@ -1661,7 +1655,27 @@ export default function Page(): JSX.Element {
       isMounted = false;
       clearInterval(alertInterval);
     };
-  }, [data, alertsEnabled, prices]);  // Dipendenze per re-check
+  }, [user, data, alertsEnabled, prices]);  // Dipendenze per re-check
+
+  useEffect(() => {
+    if (!user || Object.keys(prices).length === 0) return;
+    setData((prev: OptionData[]) => prev.map(item => {
+      const newSpot = spots[item.ticker]?.price > 0 ? spots[item.ticker]?.price : item.spot;
+      if (!item) return item;
+      const currentSymbol = getSymbolFromExpiryStrike(item.ticker, item.expiry, item.strike);
+      const tickerPrices = prices[item.ticker] || {};
+      const currentData = tickerPrices[currentSymbol] ?? { bid: item.current_bid ?? 0, ask: item.current_ask ?? 0, last_trade_price: item.current_last_trade_price ?? 0 };
+      return {
+        ...item,
+        spot: newSpot,
+        current_bid: currentData.bid,
+        current_ask: currentData.ask,
+        current_last_trade_price: currentData.last_trade_price
+      };
+    }));
+  }, [user, prices, spots, getSymbolFromExpiryStrike]);
+
+  if (!user) return <div>Caricamento...</div>; // Loader mentre check
 
   const isFattibile = (opt: OptionEntry, item: OptionData) => {
     const tickerPrices = prices[item.ticker] || {}
@@ -1723,7 +1737,7 @@ export default function Page(): JSX.Element {
         </button>
 
         <div className="p-2 bg-zinc-900 rounded mb-2">
-          <input value={newTicker} onChange={e => setNewTicker(e.target.value.toUpperCase())} placeholder="Aggiungi ticker (es. AAPL)" className="bg-zinc-800 text-white p-1" />
+          <input value={newTicker} onChange={e => setNewTicker(e.target.value.toUpperCase())} placeholder="Aggiungi ticker (es. AAPL)" className="bg-zinc-800 text-white p-1"/>
           <button onClick={addTicker} className="bg-green-700 text-white px-2 py-1 rounded ml-2">Aggiungi</button>
           <div className="mt-2">
             Tickers attuali: {tickers.map(t => <span key={t} className="mr-2">{t} <button onClick={() => removeTicker(t)} className="text-red-500">X</button></span>)}
