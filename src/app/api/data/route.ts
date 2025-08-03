@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { LRUCache } from 'lru-cache';
+import { supabaseClient } from '../../../lib/supabaseClient'; // Adatta il path, usa client condiviso per auth
 
 export const runtime = 'edge';
 
@@ -16,8 +17,12 @@ const cache = new LRUCache<string, CacheData>({ max: 500, ttl: 1000 * 5 });  // 
 
 export async function GET(req: Request) {
   try {
+    // Controllo autenticazione utente
+    const { data: { user } } = await supabaseClient.auth.getUser();
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
     const { searchParams } = new URL(req.url);
-    const symbols = searchParams.get('symbols')?.split(',') || [];
+    let symbols = searchParams.get('symbols')?.split(',') || [];
     let tickers = searchParams.get('tickers')?.split(',') || [];
 
     console.log('Simboli richiesti:', symbols);
@@ -27,12 +32,33 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Missing symbols or tickers' }, { status: 400 });
     }
 
-    // Se tickers non forniti, derivarli da symbols (es. estrai ticker da O:TICKER...)
+    // Fetch tickers dell'utente per filtro multi-user
+    const { data: userOptions, error: optionsError } = await supabaseClient.from('options').select('ticker').eq('user_id', user.id);
+    if (optionsError) {
+      console.error('Errore fetch user options:', optionsError);
+      return NextResponse.json({ error: 'Error fetching user data' }, { status: 500 });
+    }
+    const userTickers = userOptions.map(o => o.ticker);
+
+    // Filtra tickers ai soli user's
+    tickers = tickers.filter(t => userTickers.includes(t));
+    if (tickers.length === 0) {
+      console.warn('No valid tickers for user');
+      return NextResponse.json({ prices: {}, spots: {} });
+    }
+
+    // Filtra symbols: solo quelli con ticker in userTickers
+    symbols = symbols.filter(symbol => {
+      const match = /^O:([A-Z]+)\d+C\d+$/.exec(symbol);
+      return match && userTickers.includes(match[1]);
+    });
+
+    // Se tickers non forniti, derivarli da symbols (filtrati)
     if (tickers.length === 0) {
       tickers = [...new Set(symbols.map(symbol => {
         const match = /^O:([A-Z]+)\d+C\d+$/.exec(symbol);
         return match ? match[1] : null;
-      }).filter((x): x is string => Boolean(x)))];  // Correzione: type guard per rimuovere null dal tipo
+      }).filter((x): x is string => Boolean(x)))];
     }
 
     // Logica per full-prices (prezzi opzioni)

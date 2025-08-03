@@ -1,54 +1,53 @@
-import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
+import { supabaseClient } from '../../../lib/supabaseClient'; // Adatta il path, usa client condiviso per auth
 
 export const runtime = 'edge';
 
-const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!)
-
-const POLYGON_API_KEY = process.env.POLYGON_API_KEY!
-const CONTRACTS_URL = 'https://api.polygon.io/v3/reference/options/contracts'
+const POLYGON_API_KEY = process.env.POLYGON_API_KEY!;
+const CONTRACTS_URL = 'https://api.polygon.io/v3/reference/options/contracts';
 
 function isThirdFriday(dateStr: string): boolean {
-  const date = new Date(dateStr)
-  return date.getDay() === 5 && date.getDate() >= 15 && date.getDate() <= 21
+  const date = new Date(dateStr);
+  return date.getDay() === 5 && date.getDate() >= 15 && date.getDate() <= 21;
 }
 
 function formatExpiryLabel(dateStr: string): string {
-  const date = new Date(dateStr)
-  const mesi = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC']
-  const mese = mesi[date.getMonth()]
-  const anno = date.getFullYear().toString().slice(2)
-  return `${mese} ${anno}`
+  const date = new Date(dateStr);
+  const mesi = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC'];
+  const mese = mesi[date.getMonth()];
+  const anno = date.getFullYear().toString().slice(2);
+  return `${mese} ${anno}`;
 }
 
 function normalizeExpiry(expiry: string): string {
   if (expiry.length === 7) {
-    const [year, month] = expiry.split('-').map(Number)
-    return getThirdFriday(year, month).toISOString().split('T')[0]
+    const [year, month] = expiry.split('-').map(Number);
+    return getThirdFriday(year, month).toISOString().split('T')[0];
   }
-  return expiry
+  return expiry;
 }
 
 function getThirdFriday(year: number, month: number): Date {
-  const firstDay = new Date(year, month - 1, 1)
-  const firstFriday = new Date(firstDay)
-  while (firstFriday.getDay() !== 5) firstFriday.setDate(firstFriday.getDate() + 1)
-  firstFriday.setDate(firstFriday.getDate() + 14)
-  return firstFriday
+  const firstDay = new Date(year, month - 1, 1);
+  const firstFriday = new Date(firstDay);
+  while (firstFriday.getDay() !== 5) firstFriday.setDate(firstFriday.getDate() + 1);
+  firstFriday.setDate(firstFriday.getDate() + 14);
+  return firstFriday;
 }
 
 async function fetchContracts(ticker: string): Promise<any[]> {
-  let contracts: any[] = []
-  let url: string | null = `${CONTRACTS_URL}?underlying_ticker=${ticker}&contract_type=call&limit=1000&apiKey=${POLYGON_API_KEY}`
+  let contracts: any[] = [];
+  let url: string | null = `${CONTRACTS_URL}?underlying_ticker=${ticker}&contract_type=call&limit=1000&apiKey=${POLYGON_API_KEY}`;
 
   while (url) {
-    const res: Response = await fetch(url)
-    if (!res.ok) throw new Error(`Errore fetch contracts per ${ticker}: ${res.status}`)
-    const json: any = await res.json()
-    if (json.results) contracts.push(...json.results)
-    url = json.next_url ? `${json.next_url}&apiKey=${POLYGON_API_KEY}` : null
+    const res: Response = await fetch(url);
+    if (!res.ok) throw new Error(`Errore fetch contracts per ${ticker}: ${res.status}`);
+    const json: any = await res.json();
+    if (json.results) contracts.push(...json.results);
+    url = json.next_url ? `${json.next_url}&apiKey=${POLYGON_API_KEY}` : null;
   }
-  return contracts
+  return contracts;
 }
 
 async function fetchSpot(ticker: string): Promise<{ price: number; change_percent: number }> {
@@ -81,70 +80,67 @@ async function fetchSnapshot(symbol: string): Promise<{ bid: number; ask: number
 }
 
 function buildExpiriesMap(contracts: any[]) {
-  const map: Record<string, number[]> = {}
+  const map: Record<string, number[]> = {};
   for (const c of contracts) {
-    if (!isThirdFriday(c.expiration_date)) continue
-    if (!map[c.expiration_date]) map[c.expiration_date] = []
-    map[c.expiration_date].push(c.strike_price)
+    if (!isThirdFriday(c.expiration_date)) continue;
+    if (!map[c.expiration_date]) map[c.expiration_date] = [];
+    map[c.expiration_date].push(c.strike_price);
   }
-  for (const exp in map) map[exp].sort((a, b) => a - b)
-  return map
+  for (const exp in map) map[exp].sort((a, b) => a - b);
+  return map;
 }
 
 interface OptionEntry {
-  label: string
-  strike: number
-  bid: number
-  ask: number
-  last_trade_price: number
-  expiry: string
-  symbol: string
+  label: string;
+  strike: number;
+  bid: number;
+  ask: number;
+  last_trade_price: number;
+  expiry: string;
+  symbol: string;
 }
 
 interface OptionData {
-  ticker: string
-  spot: number
-  strike: number
-  expiry: string
-  current_bid: number
-  current_ask: number
-  current_last_trade_price: number
-  future: OptionEntry[]
-  earlier: OptionEntry[]
-  invalid?: boolean
+  ticker: string;
+  spot: number;
+  strike: number;
+  expiry: string;
+  current_bid: number;
+  current_ask: number;
+  current_last_trade_price: number;
+  future: OptionEntry[];
+  earlier: OptionEntry[];
+  invalid?: boolean;
 }
 
 export async function GET() {
   try {
-    const { data: tickersData, error: tickersError } = await supabase.from('tickers').select('ticker')
-    if (tickersError || !tickersData) throw new Error('Errore fetch tickers')
-    const tickers = tickersData.map(row => row.ticker)
+    // Controllo autenticazione utente
+    const { data: { user } } = await supabaseClient.auth.getUser();
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const output: OptionData[] = []
+    // Fetch tickers dell'utente da 'options' (invece di 'tickers' globale)
+    const { data: userOptions, error: optionsError } = await supabaseClient.from('options').select('*').eq('user_id', user.id);
+    if (optionsError || !userOptions) {
+      console.error('Errore fetch user options:', optionsError);
+      throw new Error('Errore fetch user data');
+    }
 
-    for (const ticker of tickers) {
-      const { data: saved, error } = await supabase
-        .from('options')  
-        .select('*')
-        .eq('ticker', ticker)
-        .single();  // Usa .single() invece di order/limit, poiché singleton per ticker
+    const output: OptionData[] = [];
 
-      if (error || !saved) {
-        console.warn(`No data for ${ticker}, skipping`)
-        continue
-      }
+    for (const saved of userOptions) {
+      const ticker = saved.ticker;
+      const CURRENT_EXPIRY = normalizeExpiry(saved.expiry);
+      const CURRENT_STRIKE = saved.strike;
 
-      const CURRENT_EXPIRY = normalizeExpiry(saved.expiry)
-      const CURRENT_STRIKE = saved.strike
-
-      const contracts = await fetchContracts(ticker)
-      contracts.sort((a, b) => a.expiration_date.localeCompare(b.expiration_date) || a.strike_price - b.strike_price)
+      const contracts = await fetchContracts(ticker);
+      contracts.sort((a, b) => a.expiration_date.localeCompare(b.expiration_date) || a.strike_price - b.strike_price);
 
       const current = contracts.find(c =>
         isThirdFriday(c.expiration_date) &&
         Math.abs(c.strike_price - CURRENT_STRIKE) < 0.01 &&
         normalizeExpiry(c.expiration_date) === CURRENT_EXPIRY
-      )
+      );
 
       if (!current) {
         output.push({
@@ -158,36 +154,36 @@ export async function GET() {
           earlier: [],
           future: [],
           invalid: true
-        })
-        continue
+        });
+        continue;
       }
 
-      const spotData = await fetchSpot(ticker)
+      const spotData = await fetchSpot(ticker);
       const currentPrices = await fetchSnapshot(current.ticker) ?? { bid: 0, ask: 0, last_trade_price: 0 };
-      const expiriesMap = buildExpiriesMap(contracts)
-      const monthlyExpiries = Object.keys(expiriesMap).sort()
-      const curIdx = monthlyExpiries.indexOf(CURRENT_EXPIRY)
+      const expiriesMap = buildExpiriesMap(contracts);
+      const monthlyExpiries = Object.keys(expiriesMap).sort();
+      const curIdx = monthlyExpiries.indexOf(CURRENT_EXPIRY);
 
       async function findOption(expiry: string, strikeRef: number, higher: boolean) {
-        const strikes = expiriesMap[expiry]
-        if (!strikes || strikes.length === 0) return null
+        const strikes = expiriesMap[expiry];
+        if (!strikes || strikes.length === 0) return null;
 
-        let selectedStrike: number | undefined
+        let selectedStrike: number | undefined;
 
         if (higher) {
           selectedStrike = strikes.find((s: number) => s > strikeRef) ||
             strikes.find((s: number) => s === strikeRef) ||
-            strikes[strikes.length - 1]
+            strikes[strikes.length - 1];
         } else {
           selectedStrike = [...strikes].reverse().find((s: number) => s < strikeRef) ||
             strikes.find((s: number) => s === strikeRef) ||
-            strikes[0]
+            strikes[0];
         }
 
-        if (!selectedStrike) return null
+        if (!selectedStrike) return null;
 
-        const match = contracts.find(c => c.expiration_date === expiry && c.strike_price === selectedStrike)
-        if (!match) return null
+        const match = contracts.find(c => c.expiration_date === expiry && c.strike_price === selectedStrike);
+        if (!match) return null;
         const prices = await fetchSnapshot(match.ticker);
         if (!prices) return null;
         return {
@@ -198,35 +194,35 @@ export async function GET() {
           last_trade_price: prices.last_trade_price,
           expiry,
           symbol: match.ticker
-        } as OptionEntry
+        } as OptionEntry;
       }
 
-      let future1: OptionEntry | null = null
-      let future2: OptionEntry | null = null
-      let earlier1: OptionEntry | null = null
-      let earlier2: OptionEntry | null = null
+      let future1: OptionEntry | null = null;
+      let future2: OptionEntry | null = null;
+      let earlier1: OptionEntry | null = null;
+      let earlier2: OptionEntry | null = null;
 
       for (let i = curIdx + 1; i < monthlyExpiries.length; i++) {
-        const f1 = await findOption(monthlyExpiries[i], CURRENT_STRIKE, true)
-        if (f1) { future1 = f1; break }
+        const f1 = await findOption(monthlyExpiries[i], CURRENT_STRIKE, true);
+        if (f1) { future1 = f1; break; }
       }
       if (future1) {
-        const idx1 = monthlyExpiries.indexOf(future1.expiry)
+        const idx1 = monthlyExpiries.indexOf(future1.expiry);
         for (let i = idx1 + 1; i < monthlyExpiries.length; i++) {
-          const f2 = await findOption(monthlyExpiries[i], future1.strike, true)
-          if (f2) { future2 = f2; break }
+          const f2 = await findOption(monthlyExpiries[i], future1.strike, true);
+          if (f2) { future2 = f2; break; }
         }
       }
 
       for (let i = curIdx - 1; i >= 0; i--) {
-        const e1 = await findOption(monthlyExpiries[i], CURRENT_STRIKE, false)
-        if (e1) { earlier1 = e1; break }
+        const e1 = await findOption(monthlyExpiries[i], CURRENT_STRIKE, false);
+        if (e1) { earlier1 = e1; break; }
       }
       if (earlier1) {
-        const idx1 = monthlyExpiries.indexOf(earlier1.expiry)
+        const idx1 = monthlyExpiries.indexOf(earlier1.expiry);
         for (let i = idx1 - 1; i >= 0; i--) {
-          const e2 = await findOption(monthlyExpiries[i], earlier1.strike, false)
-          if (e2) { earlier2 = e2; break }
+          const e2 = await findOption(monthlyExpiries[i], earlier1.strike, false);
+          if (e2) { earlier2 = e2; break; }
         }
       }
 
@@ -239,10 +235,10 @@ export async function GET() {
         current_ask: currentPrices.ask,
         current_last_trade_price: currentPrices.last_trade_price,
         future: [future1 || { label: 'OPZIONE INESISTENTE', strike: 0, bid: 0, ask: 0, last_trade_price: 0, expiry: '', symbol: '' },
-        future2 || { label: 'OPZIONE INESISTENTE', strike: 0, bid: 0, ask: 0, last_trade_price: 0, expiry: '', symbol: '' }],
+                 future2 || { label: 'OPZIONE INESISTENTE', strike: 0, bid: 0, ask: 0, last_trade_price: 0, expiry: '', symbol: '' }],
         earlier: [earlier1 || { label: 'OPZIONE INESISTENTE', strike: 0, bid: 0, ask: 0, last_trade_price: 0, expiry: '', symbol: '' },
-        earlier2 || { label: 'OPZIONE INESISTENTE', strike: 0, bid: 0, ask: 0, last_trade_price: 0, expiry: '', symbol: '' }]
-      })
+                  earlier2 || { label: 'OPZIONE INESISTENTE', strike: 0, bid: 0, ask: 0, last_trade_price: 0, expiry: '', symbol: '' }]
+      });
     }
 
     // Nuovo: Calcola change_percents async prima di upsert
@@ -251,8 +247,8 @@ export async function GET() {
       return spotData.change_percent || 0;
     }));
 
-    // Salva persistente per alert
-    const { error: upsertError } = await supabase.from('options').upsert(
+    // Salva persistente per alert, con user_id
+    const { error: upsertError } = await supabaseClient.from('options').upsert(
       output.map((o, index) => ({
         ticker: o.ticker,
         spot: o.spot,
@@ -264,15 +260,16 @@ export async function GET() {
         current_last_trade_price: o.current_last_trade_price,
         earlier: o.earlier,
         future: o.future,
-        created_at: new Date().toISOString()
+        created_at: new Date().toISOString(),
+        user_id: user.id  // Aggiunto per multi-user
       })),
-      { onConflict: 'ticker' }
+      { onConflict: 'ticker,user_id' }  // Modificato per conflict su ticker + user_id
     );
     if (upsertError) console.error('❌ Errore upsert /api/options:', upsertError.message);
 
-    return NextResponse.json(output)
+    return NextResponse.json(output);
   } catch (err: any) {
-    console.error('❌ Errore /api/options:', err.message)
-    return NextResponse.json([], { status: 500 })
+    console.error('❌ Errore /api/options:', err.message);
+    return NextResponse.json([], { status: 500 });
   }
 }

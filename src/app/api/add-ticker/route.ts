@@ -1,14 +1,17 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import { normalizeExpiry } from '../../../utils/functions';  // Assumi esista, dal tuo codice
+import { supabaseClient } from '../../../lib/supabaseClient';  // Usa il client condiviso per auth
 
 export const runtime = 'edge';
-
-const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!);
 
 export async function POST(req: Request) {
     let ticker: string | undefined;
     try {
+        // Controllo autenticazione utente
+        const { data: { user } } = await supabaseClient.auth.getUser();
+        if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
         const body = await req.json();
         ticker = body?.ticker?.toUpperCase();
 
@@ -30,8 +33,8 @@ export async function POST(req: Request) {
         }
         const nextExpiry = normalizeExpiry(`${year}-${String(month + 1).padStart(2, '0')}`);
 
-        // Upsert in 'options' con valori non null espliciti (sovrascrive se esiste già)
-        const { error: optionsError } = await supabase.from('options').upsert([
+        // Upsert in 'options' con user_id e valori non null espliciti (sovrascrive se esiste già per questo user)
+        const { error: optionsError } = await supabaseClient.from('options').upsert([
             { 
                 ticker, 
                 spot: 0,  // Valore default non null
@@ -41,16 +44,17 @@ export async function POST(req: Request) {
                 current_ask: 0,
                 current_last_trade_price: 0,
                 earlier: [],
-                future: []
+                future: [],
+                user_id: user.id  // Aggiunto per multi-user
             }
-        ], { onConflict: 'ticker' });
+        ], { onConflict: 'ticker,user_id' });  // Modificato per conflict su ticker + user_id
         if (optionsError) {
             console.error('Errore upsert options:', optionsError.message);
             throw new Error(`Errore upsert options: ${optionsError.message}`);
         }
 
-        // Insert/Upsert in tickers (evita duplicati)
-        const { error: tickError } = await supabase.from('tickers').upsert([{ ticker }], { onConflict: 'ticker' });
+        // Insert/Upsert in tickers (evita duplicati, rimane globale)
+        const { error: tickError } = await supabaseClient.from('tickers').upsert([{ ticker }], { onConflict: 'ticker' });
         if (tickError) {
             console.error('Errore upsert tickers:', tickError.message);
             throw new Error(`Errore upsert tickers: ${tickError.message}`);

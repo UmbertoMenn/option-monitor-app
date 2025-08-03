@@ -1,23 +1,27 @@
-import { createClient } from '@supabase/supabase-js';
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
+import { supabaseClient } from '../../../lib/supabaseClient'; // Adatta path, usa client condiviso per auth
 
 export const runtime = 'edge';
 
-const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!);
-
 export async function GET() {
-  const { data, error } = await supabase.from('alerts').select('*');
+  const { data: { user } } = await supabaseClient.auth.getUser();
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const { data, error } = await supabaseClient.from('alerts').select('*').eq('user_id', user.id);
   if (error) return NextResponse.json({ error }, { status: 500 });
   return NextResponse.json(data.reduce((acc: Record<string, boolean>, row) => { acc[row.ticker] = row.enabled; return acc; }, {}));
 }
 
-export async function POST(req: NextRequest) {
+export async function POST(req: Request) {
+  const { data: { user } } = await supabaseClient.auth.getUser();
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
   const { ticker, enabled } = await req.json();
-  const { error } = await supabase.from('alerts').upsert({ ticker, enabled }, { onConflict: 'ticker' });
+  const { error } = await supabaseClient.from('alerts').upsert({ ticker, enabled, user_id: user.id }, { onConflict: 'ticker,user_id' });
   if (error) return NextResponse.json({ error }, { status: 500 });
   if (!enabled) {
-    // Pulisci alert-sent su disable
-    const { error: deleteErr } = await supabase.from('alerts_sent').delete().eq('ticker', ticker);
+    // Pulisci alert-sent su disable, filtrato per user
+    const { error: deleteErr } = await supabaseClient.from('alerts_sent').delete().eq('ticker', ticker).eq('user_id', user.id);
     if (deleteErr) console.error('Errore pulizia alert-sent su toggle off:', deleteErr);
   }
   return NextResponse.json({ success: true });

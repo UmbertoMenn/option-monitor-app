@@ -1,8 +1,12 @@
 {
   "crons": [
     {
-      "path": "/api/check-alerts",
-      "schedule": "*/10 * * * *"
+      "path": "/api/update-prices",
+      "schedule": "*/1 9-23 * * "
+    },
+    {
+      "path": "/api/update-prices",
+      "schedule": "/1 0-1 * * *"
     }
   ]
 }

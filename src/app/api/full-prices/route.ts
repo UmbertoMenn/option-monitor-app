@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { LRUCache } from 'lru-cache';
+import { supabaseClient } from '../../../lib/supabaseClient'; // Adatta il path, usa client condiviso per auth
 
 export const runtime = 'edge';
 
@@ -16,15 +17,38 @@ const cache = new LRUCache<string, CacheData>({ max: 500, ttl: 1000 * 5 });  // 
 
 export async function GET(req: Request) {
   try {
-    const { searchParams } = new URL(req.url);
-    const symbols = searchParams.get('symbols');
-    console.log('Simboli richiesti:', symbols);
+    // Controllo autenticazione utente
+    const { data: { user } } = await supabaseClient.auth.getUser();
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    if (!symbols) {
+    const { searchParams } = new URL(req.url);
+    const symbolsParam = searchParams.get('symbols');
+    console.log('Simboli richiesti:', symbolsParam);
+
+    if (!symbolsParam) {
       return NextResponse.json({ error: 'Missing symbols' }, { status: 400 });
     }
 
-    const symbolList = symbols.split(',');
+    let symbolList = symbolsParam.split(',');
+
+    // Fetch tickers dell'utente per filtro multi-user
+    const { data: userOptions, error: optionsError } = await supabaseClient.from('options').select('ticker').eq('user_id', user.id);
+    if (optionsError) {
+      console.error('Errore fetch user options:', optionsError);
+      return NextResponse.json({}, { status: 500 });
+    }
+    const userTickers = userOptions.map(o => o.ticker);
+
+    // Filtra symbolList ai soli con ticker in userTickers
+    symbolList = symbolList.filter(symbol => {
+      const match = /^O:([A-Z]+)\d+C\d+$/.exec(symbol);
+      return match && userTickers.includes(match[1]);
+    });
+
+    if (symbolList.length === 0) {
+      console.warn('No valid symbols for user');
+      return NextResponse.json({});
+    }
 
     const fetches = symbolList.map(async (symbol) => {
       const cached = cache.get(symbol);

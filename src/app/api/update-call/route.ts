@@ -34,6 +34,28 @@ function normalizeExpiry(expiry: string): string {
 
 export async function POST(req: Request) {
   try {
+    // Ottieni il token dall'header per l'autenticazione multi-user
+    const authHeader = req.headers.get('Authorization')
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return NextResponse.json(
+        { success: false, error: 'Autenticazione richiesta' },
+        { status: 401 }
+      )
+    }
+
+    const token = authHeader.split('Bearer ')[1]
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token)
+
+    if (authError || !user) {
+      console.error('❌ Errore autenticazione:', authError?.message)
+      return NextResponse.json(
+        { success: false, error: 'Utente non autenticato' },
+        { status: 401 }
+      )
+    }
+
+    const userId = user.id
+
     const body = await req.json()
     const { ticker, strike, expiry, current_bid, current_ask, current_last_trade_price } = body
 
@@ -46,7 +68,8 @@ export async function POST(req: Request) {
       )
     }
 
-    console.log('📤 Nuovo salvataggio:', {
+    console.log('📤 Nuovo salvataggio per utente:', {
+      user_id: userId,
       ticker,
       strike,
       normalizedExpiry,
@@ -57,6 +80,7 @@ export async function POST(req: Request) {
 
     const { error } = await supabase.from('options').upsert([
       {
+        user_id: userId,
         ticker,
         strike,
         expiry: normalizedExpiry,
@@ -65,18 +89,20 @@ export async function POST(req: Request) {
         current_last_trade_price,
         created_at: new Date().toISOString()
       }
-    ], { onConflict: 'ticker' })
+    ], { onConflict: 'user_id,ticker' })
 
     if (error) {
       console.error('❌ Errore Supabase UPSERT:', error.message)
       return NextResponse.json({ success: false }, { status: 500 })
     }
 
-    // Pulisci alert-sent su update call
-    const { error: deleteErr } = await supabase.from('alerts_sent').delete().eq('ticker', ticker);
-    if (deleteErr) console.error('Errore pulizia alert-sent su update-call:', deleteErr);
+    // Pulisci alert-sent su update call, filtrando per user_id
+    const { error: deleteErr } = await supabase.from('alerts_sent').delete()
+      .eq('user_id', userId)
+      .eq('ticker', ticker)
+    if (deleteErr) console.error('Errore pulizia alert-sent su update-call:', deleteErr)
 
-    console.log('✅ Riga aggiornata su Supabase')
+    console.log('✅ Riga aggiornata su Supabase per utente:', userId)
     return NextResponse.json({ success: true })
   } catch (err: any) {
     console.error('❌ Errore route update-call:', err.message)

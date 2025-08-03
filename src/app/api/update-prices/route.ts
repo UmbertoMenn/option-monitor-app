@@ -1,19 +1,11 @@
 // QUESTA ROUTE FETCHA I PREZZI DA POLYGON, AGGIORNA LA TABELLA prices_cache SU SUPABASE, AGGIORNA OPTIONS E VERIFICA GLI ALERT (UNICO JOB)
 import { NextResponse } from 'next/server';
 import { supabaseClient } from '../../../lib/supabaseClient'; // Adatta il path
-import { Receiver } from '@upstash/qstash'; // Per verifica manuale signature in App Router
-import { qstash } from '../../../lib/qstash'; // Il client QStash
-import { LRUCache } from 'lru-cache'; // npm install lru-cache se non hai
-import { sendTelegramMessage } from '../../../utils/sendTelegram'; // Importa la funzione Telegram
-import { getSymbolFromExpiryStrike, isFattibile } from '../../../utils/functions'; // Importa le funzioni necessarie
+import { LRUCache } from 'lru-cache';
+import { sendTelegramMessage } from '../../../utils/sendTelegram';
+import { getSymbolFromExpiryStrike, isFattibile } from '../../../utils/functions';
 
 const POLYGON_API_KEY = process.env.POLYGON_API_KEY!;
-
-// Inizializza Receiver per verifica signature
-const receiver = new Receiver({
-  currentSigningKey: process.env.QSTASH_CURRENT_SIGNING_KEY!,
-  nextSigningKey: process.env.QSTASH_NEXT_SIGNING_KEY!
-});
 
 // Tipi dal tuo codice (definiti qui per evitare errori)
 interface PricesData {
@@ -51,10 +43,15 @@ interface OptionData {
   earlier: OptionEntry[];
   future: OptionEntry[];
   change_percent: number;
+  user_id: string; // Aggiunto per multi-user
 }
 
 interface SentAlerts {
-  [ticker: string]: { [level: string]: boolean };
+  [user_id: string]: { [ticker: string]: { [level: string]: boolean } };
+}
+
+interface AlertsEnabled {
+  [user_id: string]: { [ticker: string]: boolean };
 }
 
 // Funzioni dal tuo page.tsx (non globali)
@@ -65,14 +62,43 @@ function formatStrike(strike: number): string {
 // Cache LRU come nel tuo data/route.ts
 const cache = new LRUCache<string, { bid: number; ask: number; last_trade_price: number }>({ max: 500, ttl: 1000 * 5 });
 
-// Funzione per fetchare prezzi (adattata dal tuo data/route.ts)
+// Funzione per check mercato (adattata con Europe/Rome per 10:00-22:00 lun-ven IT)
+function isMarketOpen(): boolean {
+  try {
+    const now = new Date();
+    const options: Intl.DateTimeFormatOptions = {
+      timeZone: 'Europe/Rome', // Fuso orario italiano
+      weekday: 'long',
+      hour: 'numeric',
+      hour12: false,
+    };
+    const formatter = new Intl.DateTimeFormat('en-US', options);
+    const parts = formatter.formatToParts(now);
+    let day = '';
+    let hour = -1;
+    for (const part of parts) {
+      if (part.type === 'weekday') day = part.value;
+      if (part.type === 'hour') hour = parseInt(part.value, 10);
+    }
+    if (day === '' || hour === -1) return false;
+    const weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+    const isWeekday = weekdays.includes(day);
+    const isMarketHours = hour >= 10 && hour < 22; // 10:00-21:59 IT
+    return isWeekday && isMarketHours;
+  } catch (error) {
+    console.error("Errore nel determinare l'orario di mercato:", error);
+    return false;
+  }
+}
+
+// Funzione per fetchare prezzi (adattata dal tuo data/route.ts, completa)
 async function fetchExternalPrices(symbols: string[], tickers: string[]): Promise<{
   optionsData: Record<string, { bid: number; ask: number; last_trade_price: number }>;
   spotsData: Record<string, { price: number; change_percent: number }>;
 }> {
   const optionsData: Record<string, { bid: number; ask: number; last_trade_price: number }> = {};
 
-  // Fetch individuali per options (come nel tuo codice)
+  // Fetch individuali per options
   const pricesFetches = symbols.map(async (symbol) => {
     const cached = cache.get(symbol);
     if (cached) {
@@ -111,7 +137,7 @@ async function fetchExternalPrices(symbols: string[], tickers: string[]): Promis
     optionsData[symbol] = pricesResults[index] || { bid: 0, ask: 0, last_trade_price: 0 };
   });
 
-  // Fetch batch per spot (come nel tuo codice)
+  // Fetch batch per spot
   const spotsData: Record<string, { price: number; change_percent: number }> = {};
   if (tickers.length > 0) {
     const tickersQuery = tickers.join(',');
@@ -135,34 +161,32 @@ async function fetchExternalPrices(symbols: string[], tickers: string[]): Promis
   return { optionsData, spotsData };
 }
 
-// Handler unico
-async function updatePricesHandler(request: Request) {
-  // Verifica manuale della signature per App Router
-  const signature = request.headers.get('Upstash-Signature');
-  const body = await request.text();
-  if (!signature || !await receiver.verify({ signature, body })) {
-    return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
+// Handler (per Vercel Cron, con GET)
+export async function GET() {
+  if (!isMarketOpen()) {
+    console.log('Mercato chiuso: skip update.');
+    return NextResponse.json({ success: true, message: 'Market closed' });
   }
 
   try {
     // Raccogli symbols e tickers
-    const { data: allOptions, error: optionsError } = await supabaseClient.from('options').select('*'); // Espandi select per includere tutti i campi necessari (spot, change_percent, etc.)
+    const { data: allOptions, error: optionsError } = await supabaseClient.from('options').select('*');
     if (optionsError) throw optionsError;
 
     const symbols = new Set<string>();
     const tickers = new Set<string>();
-    allOptions.forEach((opt: OptionData) => {  // Tipo esplicito per opt
+    allOptions.forEach((opt: OptionData) => {
       tickers.add(opt.ticker);
       symbols.add(getSymbolFromExpiryStrike(opt.ticker, opt.expiry, opt.strike));
-      opt.earlier.forEach((e: OptionEntry) => symbols.add(e.symbol)); // Tipo per e
-      opt.future.forEach((f: OptionEntry) => symbols.add(f.symbol)); // Tipo per f
+      opt.earlier.forEach((e: OptionEntry) => symbols.add(e.symbol));
+      opt.future.forEach((f: OptionEntry) => symbols.add(f.symbol));
     });
 
     // Fetch dati
     const { optionsData, spotsData } = await fetchExternalPrices(Array.from(symbols), Array.from(tickers));
 
     // Upsert in prices_cache
-    for (const [symbol, values] of Object.entries(optionsData) as [string, { bid: number; ask: number; last_trade_price: number }][]) {  // Tipo esplicito per entries
+    for (const [symbol, values] of Object.entries(optionsData) as [string, { bid: number; ask: number; last_trade_price: number }][]) {
       await supabaseClient.from('prices_cache').upsert({
         key: symbol,
         type: 'option',
@@ -173,7 +197,7 @@ async function updatePricesHandler(request: Request) {
       }, { onConflict: 'key' });
     }
 
-    for (const [ticker, values] of Object.entries(spotsData) as [string, { price: number; change_percent: number }][]) {  // Tipo esplicito per entries
+    for (const [ticker, values] of Object.entries(spotsData) as [string, { price: number; change_percent: number }][]) {
       await supabaseClient.from('prices_cache').upsert({
         key: ticker,
         type: 'spot',
@@ -197,30 +221,35 @@ async function updatePricesHandler(request: Request) {
         current_ask: currentData.ask,
         current_last_trade_price: currentData.last_trade_price,
         created_at: new Date().toISOString()
-      }).eq('ticker', ticker);
+      }).eq('ticker', ticker).eq('user_id', item.user_id);
 
-      if (error) console.error('Errore update options per ticker:', ticker, error);
+      if (error) console.error('Errore update options per ticker:', ticker, 'user:', item.user_id, error);
     }
 
     // Ricarica options aggiornati
     const { data: updatedOptionsData, error: reloadError } = await supabaseClient.from('options').select('*');
     if (reloadError) throw reloadError;
 
-    // Fetch alerts enabled
+    // Fetch alerts enabled (multi-user)
     const { data: alertsData, error: alertsError } = await supabaseClient.from('alerts').select('*');
     if (alertsError) throw alertsError;
-    const alertsEnabled: { [ticker: string]: boolean } = alertsData.reduce((acc, { ticker, enabled }: { ticker: string; enabled: boolean }) => ({ ...acc, [ticker]: enabled }), {});
-
-    // Fetch sent alerts
-    const { data: sentData, error: sentError } = await supabaseClient.from('alerts_sent').select('*');
-    if (sentError) throw sentError;
-    const sentAlerts: SentAlerts = sentData.reduce((acc, { ticker, level }: { ticker: string; level: string }) => {
-      if (!acc[ticker]) acc[ticker] = {};
-      acc[ticker][level] = true;
+    const alertsEnabled: AlertsEnabled = alertsData.reduce((acc: AlertsEnabled, { user_id, ticker, enabled }) => {
+      if (!acc[user_id]) acc[user_id] = {};
+      acc[user_id][ticker] = enabled;
       return acc;
     }, {});
 
-    // Crea pricesGrouped per isFattibile (risolve il bug di tipo)
+    // Fetch sent alerts (multi-user)
+    const { data: sentData, error: sentError } = await supabaseClient.from('alerts_sent').select('*');
+    if (sentError) throw sentError;
+    const sentAlerts: SentAlerts = sentData.reduce((acc: SentAlerts, { user_id, ticker, level }) => {
+      if (!acc[user_id]) acc[user_id] = {};
+      if (!acc[user_id][ticker]) acc[user_id][ticker] = {};
+      acc[user_id][ticker][level] = true;
+      return acc;
+    }, {});
+
+    // Crea pricesGrouped per isFattibile
     const pricesGrouped: PricesData = {};
     for (const [symbol, val] of Object.entries(optionsData)) {
       const match = /^O:([A-Z]+)\d+C\d+$/.exec(symbol);
@@ -230,9 +259,10 @@ async function updatePricesHandler(request: Request) {
       pricesGrouped[ticker][symbol] = val;
     }
 
-    // Verifica e invia alerts (logica completa da check-alerts, con tipi espliciti)
-    for (const item of updatedOptionsData as OptionData[]) {  // Tipo esplicito per item
-      if (!alertsEnabled[item.ticker] || item.spot <= 0) continue;
+    // Verifica e invia alerts (con Telegram per-user)
+    for (const item of updatedOptionsData) {
+      const userAlerts = alertsEnabled[item.user_id] || {};
+      if (!userAlerts[item.ticker] || item.spot <= 0) continue;
       const delta = ((item.strike - item.spot) / item.spot) * 100;
       const change_percent = item.change_percent || 0;
       const changeSign = change_percent >= 0 ? '+' : '';
@@ -242,56 +272,59 @@ async function updatePricesHandler(request: Request) {
       const currMonthIndex = Number(currMonth) - 1;
       const currentLabel = `${monthNames[currMonthIndex]} ${currYear.slice(2)} C${item.strike}`;
       const levels = [4, 3, 2, 1];
-      if (!sentAlerts[item.ticker]) sentAlerts[item.ticker] = {};
+      const userSent = sentAlerts[item.user_id] || {};
+      const tickerSent = userSent[item.ticker] || {};
+      if (!tickerSent) userSent[item.ticker] = {};
+
+      // Fetch chat_id per l'utente
+      const { data: userProfile, error: profileError } = await supabaseClient.from('profiles').select('telegram_chat_id').eq('id', item.user_id).single();
+      if (profileError || !userProfile || !userProfile.telegram_chat_id) {
+        console.warn(`No chat_id for user ${item.user_id}, skipping alert for ${item.ticker}`);
+        continue;
+      }
+      const userChatId = userProfile.telegram_chat_id;
 
       for (const level of levels) {
-        const f1: OptionEntry = item.future[0] || { label: 'N/A', bid: 0, last_trade_price: 0, symbol: '', ask: 0, strike: 0, expiry: '' };
-        const f2: OptionEntry = item.future[1] || { label: 'N/A', bid: 0, last_trade_price: 0, symbol: '', ask: 0, strike: 0, expiry: '' };
+        const f1 = item.future[0] || { label: 'N/A', bid: 0, last_trade_price: 0, symbol: '', ask: 0, strike: 0, expiry: '' };
+        const f2 = item.future[1] || { label: 'N/A', bid: 0, last_trade_price: 0, symbol: '', ask: 0, strike: 0, expiry: '' };
         const f1Bid = pricesGrouped[item.ticker]?.[f1.symbol]?.bid ?? f1.bid ?? 0;
         const f1Last = pricesGrouped[item.ticker]?.[f1.symbol]?.last_trade_price ?? f1.last_trade_price ?? 0;
         const f1Price = f1Bid > 0 ? f1Bid : f1Last;
         const f2Bid = pricesGrouped[item.ticker]?.[f2.symbol]?.bid ?? f2.bid ?? 0;
         const f2Last = pricesGrouped[item.ticker]?.[f2.symbol]?.last_trade_price ?? f2.last_trade_price ?? 0;
         const f2Price = f2Bid > 0 ? f2Bid : f2Last;
-        if (currentPrice > 0 && f1Price > 0 && f2Price > 0 && delta < level && !sentAlerts[item.ticker][level]) {
-          const { error } = await supabaseClient.from('alerts_sent').insert([{ ticker: item.ticker, level: level.toString() }]);
+        if (currentPrice > 0 && f1Price > 0 && f2Price > 0 && delta < level && !tickerSent[level]) {
+          const { error } = await supabaseClient.from('alerts_sent').insert([{ ticker: item.ticker, level: level.toString(), user_id: item.user_id }]);
           if (error) console.error('Errore insert alert-sent:', error);
-          else sentAlerts[item.ticker][level] = true;
+          else tickerSent[level] = true;
           const f1Label = f1.label.replace(/C(\d+)/, '$1 CALL');
           const f2Label = f2.label.replace(/C(\d+)/, '$1 CALL');
           const currLabelFormatted = currentLabel.replace(/C(\d+)/, '$1 CALL');
-          const alertMessage = `🔴 ${item.ticker} – DELTA: ${delta.toFixed(2)}% – Rollare\n\nSpot: ${item.spot}\nDelta Spot: ${item.spot} (${changeSign}${change_percent.toFixed(2)}%)\nStrike: ${item.strike}\nCurrent Call: ${currLabelFormatted} - ${currentPrice.toFixed(2)}\n\n#Future 1: ${f1Label} - ${f1Price.toFixed(2)}\n#Future 2: ${f2Label} - ${f2Price.toFixed(2)}`;
-          sendTelegramMessage(alertMessage);
+          const alertMessage = `🔴 ${item.ticker} – DELTA: ${delta.toFixed(2)}% – Rollare\n\nSpot: ${item.spot} (${changeSign}${change_percent.toFixed(2)}%)\nStrike: ${item.strike}\nCurrent Call: ${currLabelFormatted} - ${currentPrice.toFixed(2)}\n\n#Future 1: ${f1Label} - ${f1Price.toFixed(2)}\n#Future 2: ${f2Label} - ${f2Price.toFixed(2)}`;
+          sendTelegramMessage(alertMessage, userChatId); // Per-user
         }
       }
 
-      const hasFattibileEarlier = item.earlier.some((opt: OptionEntry) => isFattibile(opt, item, pricesGrouped)); // Tipo esplicito per opt
-      const e1: OptionEntry = item.earlier[0] || { label: 'N/A', bid: 0, last_trade_price: 0, symbol: '', ask: 0, strike: 0, expiry: '' };
-      const e2: OptionEntry = item.earlier[1] || { label: 'N/A', bid: 0, last_trade_price: 0, symbol: '', ask: 0, strike: 0, expiry: '' };
+      const hasFattibileEarlier = item.earlier.some((opt: OptionEntry) => isFattibile(opt, item, pricesGrouped));
+      const e1 = item.earlier[0] || { label: 'N/A', bid: 0, last_trade_price: 0, symbol: '', ask: 0, strike: 0, expiry: '' };
+      const e2 = item.earlier[1] || { label: 'N/A', bid: 0, last_trade_price: 0, symbol: '', ask: 0, strike: 0, expiry: '' };
       const e1Bid = pricesGrouped[item.ticker]?.[e1.symbol]?.bid ?? e1.bid ?? 0;
       const e1Last = pricesGrouped[item.ticker]?.[e1.symbol]?.last_trade_price ?? e1.last_trade_price ?? 0;
       const e1Price = e1Bid > 0 ? e1Bid : e1Last;
       const e2Bid = pricesGrouped[item.ticker]?.[e2.symbol]?.bid ?? e2.bid ?? 0;
       const e2Last = pricesGrouped[item.ticker]?.[e2.symbol]?.last_trade_price ?? e2.last_trade_price ?? 0;
       const e2Price = e2Bid > 0 ? e2Bid : e2Last;
-      if (currentPrice > 0 && e1Price > 0 && e2Price > 0 && hasFattibileEarlier && !sentAlerts[item.ticker]['fattibile_high']) {
-        const { error } = await supabaseClient.from('alerts_sent').insert([{ ticker: item.ticker, level: 'fattibile_high' }]);
+      if (currentPrice > 0 && e1Price > 0 && e2Price > 0 && hasFattibileEarlier && !tickerSent['fattibile_high']) {
+        const { error } = await supabaseClient.from('alerts_sent').insert([{ ticker: item.ticker, level: 'fattibile_high', user_id: item.user_id }]);
         if (error) console.error('Errore insert alert-sent:', error);
-        else sentAlerts[item.ticker]['fattibile_high'] = true;
+        else tickerSent['fattibile_high'] = true;
         const e1Label = e1.label.replace(/C(\d+)/, '$1 CALL');
         const e2Label = e2.label.replace(/C(\d+)/, '$1 CALL');
         const currLabelFormatted = currentLabel.replace(/C(\d+)/, '$1 CALL');
-        const alertMessage = `🟢 ${item.ticker} – DELTA: ${delta.toFixed(2)}% (Earlier fattibile disponibile)\n\nSpot: ${item.spot}\nDelta Spot: ${item.spot} (${changeSign}${change_percent.toFixed(2)}%)\nCurrent Call: ${currLabelFormatted} - ${currentPrice.toFixed(2)}\n\n#Earlier 1: ${e1Label} - ${e1Price.toFixed(2)}\n#Earlier 2: ${e2Label} - ${e2Price.toFixed(2)}`;
-        sendTelegramMessage(alertMessage);
+        const alertMessage = `🟢 ${item.ticker} – DELTA: ${delta.toFixed(2)}% (Earlier fattibile disponibile)\n\nSpot: ${item.spot} (${changeSign}${change_percent.toFixed(2)}%)\nCurrent Call: ${currLabelFormatted} - ${currentPrice.toFixed(2)}\n\n#Earlier 1: ${e1Label} - ${e1Price.toFixed(2)}\n#Earlier 2: ${e2Label} - ${e2Price.toFixed(2)}`;
+        sendTelegramMessage(alertMessage, userChatId); // Per-user
       }
     }
-
-    // Ri-schedula il job successivo con delay 5 secondi
-    await qstash.publishJSON({
-      url: `${process.env.NEXT_PUBLIC_SITE_URL}/api/update-prices`,
-      delay: '5s',
-      headers: { 'Content-Type': 'application/json' }
-    });
 
     return NextResponse.json({ success: true });
   } catch (err) {
@@ -299,6 +332,3 @@ async function updatePricesHandler(request: Request) {
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
-
-// Export
-export const POST = updatePricesHandler; // Verifica manuale dentro, no wrapper

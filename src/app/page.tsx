@@ -3,6 +3,8 @@
 import React, { useEffect, useState, useRef, useCallback, Fragment } from 'react'
 import { createClient, SupabaseClient } from '@supabase/supabase-js'; // Aggiunto import esplicito per SupabaseClient
 import { sendTelegramMessage } from './telegram';
+import { useRouter } from 'next/navigation';
+import { supabaseClient } from '../lib/supabaseClient'; // Adatta path
 
 function formatStrike(strike: number): string {
   return String(Math.round(strike * 1000)).padStart(8, '0')
@@ -78,18 +80,18 @@ function isMarketOpen(): boolean {
       if (part.type === 'weekday') day = part.value;
       if (part.type === 'hour') hour = parseInt(part.value, 10);
     }
-    
+
     // Se non riusciamo a leggere l'ora, per sicurezza diciamo che il mercato è chiuso
     if (day === '' || hour === -1) return false;
 
     // Controlla se è un giorno feriale
     const weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
     const isWeekday = weekdays.includes(day);
-    
+
     // Controlla se l'ora rientra nel pre-market e nella sessione regolare (4:00 AM - 4:00 PM ET)
     // hour < 16 significa "fino alle 15:59", coprendo l'intera sessione di trading
     const isMarketHours = hour >= 4 && hour < 16;
-    
+
     return isWeekday && isMarketHours;
 
   } catch (error) {
@@ -894,6 +896,34 @@ export default function Page(): JSX.Element {
   const [alertsEnabled, setAlertsEnabled] = useState<{ [ticker: string]: boolean }>({})
   const [pendingRoll, setPendingRoll] = useState<{ ticker: string, opt: OptionEntry } | null>(null)
   const supabaseClient = useRef(createClient<any, "public", any>(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)).current; // Fix: Generics espliciti
+  const [user, setUser] = useState<any>(null); // Aggiungi questo state
+  const router = useRouter();
+
+  useEffect(() => {
+    const checkSession = async () => {
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (!session) {
+        router.push('/login');
+      } else {
+        setUser(session.user);
+      }
+    };
+    checkSession();
+
+    const { data: authListener } = supabaseClient.auth.onAuthStateChange((_event, session) => {
+      if (!session) {
+        router.push('/login');
+      } else {
+        setUser(session.user);
+      }
+    });
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
+  }, [router]);
+
+  if (!user) return <div>Caricamento...</div>; // Loader mentre check
 
   useEffect(() => {
     const channel = supabaseClient.channel('options').on('postgres_changes', { event: '*', schema: 'public', table: 'options' }, () => {
@@ -1553,7 +1583,7 @@ export default function Page(): JSX.Element {
     }
   };
 
-// DOPO (Il codice corretto)
+  // DOPO (Il codice corretto)
 
   useEffect(() => {
     if (data.length === 0) return;
@@ -1575,7 +1605,7 @@ export default function Page(): JSX.Element {
 
     return () => clearInterval(interval); // Pulisci l'intervallo quando il componente viene smontato
   }, [data]);
-  
+
   useEffect(() => {
     if (data.length === 0) return;
     const alertInterval = setInterval(async () => {
@@ -1611,7 +1641,7 @@ export default function Page(): JSX.Element {
           await supabaseClient.from('alerts_sent').insert([{ ticker: item.ticker, level: 'fattibile_high' }]);
         }
       }
-    }, 60000);  // Ogni 60s
+    }, 5000);  // Ogni 5s
 
     return () => clearInterval(alertInterval);
   }, [data, alertsEnabled, prices]);  // Dipendenze per re-check
@@ -1688,6 +1718,14 @@ export default function Page(): JSX.Element {
       )}
 
       <div className="min-h-screen bg-black text-white p-2 flex flex-col gap-4 text-sm leading-tight">
+        {/* Bottone logout aggiunto qui, in alto */}
+        <button onClick={async () => {
+          await supabaseClient.auth.signOut();
+          router.push('/login');
+        }} className="bg-red-700 text-white px-4 py-2 rounded w-fit self-end">  {/* self-end per allinearlo a destra, opzionale */}
+          Logout
+        </button>
+
         <div className="p-2 bg-zinc-900 rounded mb-2">
           <input value={newTicker} onChange={e => setNewTicker(e.target.value.toUpperCase())} placeholder="Aggiungi ticker (es. AAPL)" className="bg-zinc-800 text-white p-1" />
           <button onClick={addTicker} className="bg-green-700 text-white px-2 py-1 rounded ml-2">Aggiungi</button>

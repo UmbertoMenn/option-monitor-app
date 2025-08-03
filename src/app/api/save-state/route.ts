@@ -1,28 +1,30 @@
-import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { supabaseClient } from '../../../lib/supabaseClient'; // Adatta il path, usa client condiviso per auth
 
 export const runtime = 'edge';
 
-const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!);
-
 export async function POST(req: Request) {
   try {
+    // Controllo autenticazione utente
+    const { data: { user } } = await supabaseClient.auth.getUser();
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
     const { ticker, future, earlier } = await req.json();
     console.log(`[DEBUG-SAVE-START] Ticker: ${ticker}, Future: ${JSON.stringify(future)}, Earlier: ${JSON.stringify(earlier)}`);
 
-    // Fetch dati attuali per merge (evita sovrascrizione)
-    const { data: currentData, error: fetchError } = await supabase.from('options').select('*').eq('ticker', ticker).single();
+    // Fetch dati attuali per merge (evita sovrascrizione), filtrato per user
+    const { data: currentData, error: fetchError } = await supabaseClient.from('options').select('*').eq('ticker', ticker).eq('user_id', user.id).single();
     if (fetchError || !currentData) {
       console.error('[DEBUG-SAVE-ERROR] Errore fetch dati attuali:', fetchError);
       return NextResponse.json({ success: false }, { status: 500 });
     }
 
-    // Update solo campi specifici, mantenendo gli altri
-    const { error: optionsError } = await supabase.from('options').update({ 
+    // Update solo campi specifici, mantenendo gli altri, filtrato per user
+    const { error: optionsError } = await supabaseClient.from('options').update({ 
       earlier, 
       future,
       created_at: new Date().toISOString()  // Traccia update
-    }).eq('ticker', ticker);
+    }).eq('ticker', ticker).eq('user_id', user.id);
     if (optionsError) {
       console.error('[DEBUG-SAVE-ERROR-OPTIONS]', optionsError);
       return NextResponse.json({ success: false }, { status: 500 });
