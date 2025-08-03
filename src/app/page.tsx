@@ -1663,24 +1663,6 @@ export default function Page(): JSX.Element {
     };
   }, [data, alertsEnabled, prices]);  // Dipendenze per re-check
 
-  useEffect(() => {
-    if (Object.keys(prices).length === 0) return;
-    setData((prev: OptionData[]) => prev.map(item => {
-      const newSpot = spots[item.ticker]?.price > 0 ? spots[item.ticker]?.price : item.spot;
-      if (!item) return item;
-      const currentSymbol = getSymbolFromExpiryStrike(item.ticker, item.expiry, item.strike);
-      const tickerPrices = prices[item.ticker] || {};
-      const currentData = tickerPrices[currentSymbol] ?? { bid: item.current_bid ?? 0, ask: item.current_ask ?? 0, last_trade_price: item.current_last_trade_price ?? 0 };
-      return {
-        ...item,
-        spot: newSpot,
-        current_bid: currentData.bid,
-        current_ask: currentData.ask,
-        current_last_trade_price: currentData.last_trade_price
-      };
-    }));
-  }, [prices, spots, getSymbolFromExpiryStrike]);
-
   const isFattibile = (opt: OptionEntry, item: OptionData) => {
     const tickerPrices = prices[item.ticker] || {}
     const optPriceData = tickerPrices[opt.symbol]
