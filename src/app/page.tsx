@@ -25,9 +25,9 @@ const authenticatedFetch = async (url: string, options: RequestInit = {}) => {
 
     // Assicurati che Content-Type sia impostato se si invia un body JSON (comune per POST/PUT)
     if (!headers.has('Content-Type')) {
-        if (options.body && typeof options.body === 'string') {
-             headers.set('Content-Type', 'application/json');
-        }
+      if (options.body && typeof options.body === 'string') {
+        headers.set('Content-Type', 'application/json');
+      }
     }
 
     // 3. Esegui la fetch
@@ -143,34 +143,34 @@ type PricesType = Record<string, Record<string, { bid: number; ask: number; last
 
 // Definizione dei Props per MemoizedTickerCard
 interface TickerCardProps {
-    item: OptionData;
-    prices: PricesType;
-    setPrices: React.Dispatch<React.SetStateAction<PricesType>>;
-    isFattibile: (opt: OptionEntry, item: OptionData) => boolean;
-    setPendingRoll: React.Dispatch<React.SetStateAction<{ ticker: string, opt: OptionEntry } | null>>;
-    selected: { [ticker: string]: { year: string, month: string, strike: number | null } };
-    setSelected: React.Dispatch<React.SetStateAction<{ [ticker: string]: { year: string, month: string, strike: number | null } }>>;
-    showDropdowns: { [ticker: string]: boolean };
-    setShowDropdowns: React.Dispatch<React.SetStateAction<{ [ticker: string]: boolean }>>;
-    alertsEnabled: { [ticker: string]: boolean };
-    setAlertsEnabled: React.Dispatch<React.SetStateAction<{ [ticker: string]: boolean }>>;
-    sentAlerts: React.MutableRefObject<{ [ticker: string]: { [level: string]: boolean } }>;
-    chain: Record<string, Record<string, Record<string, number[]>>>;
-    updateCurrentCall: (ticker: string) => Promise<void>;
-    shiftExpiryByMonth: (ticker: string, opt: OptionEntry, direction: 'next' | 'prev', type: 'future' | 'earlier') => OptionEntry | null;
-    data: OptionData[];
-    setData: React.Dispatch<React.SetStateAction<OptionData[]>>;
-    setChain: React.Dispatch<React.SetStateAction<Record<string, Record<string, Record<string, number[]>>>>>;
-    spots: Record<string, { price: number; change_percent: number }>;
-    supabaseClient: SupabaseClient<any, "public", any>;
+  item: OptionData;
+  prices: PricesType;
+  setPrices: React.Dispatch<React.SetStateAction<PricesType>>;
+  isFattibile: (opt: OptionEntry, item: OptionData) => boolean;
+  setPendingRoll: React.Dispatch<React.SetStateAction<{ ticker: string, opt: OptionEntry } | null>>;
+  selected: { [ticker: string]: { year: string, month: string, strike: number | null } };
+  setSelected: React.Dispatch<React.SetStateAction<{ [ticker: string]: { year: string, month: string, strike: number | null } }>>;
+  showDropdowns: { [ticker: string]: boolean };
+  setShowDropdowns: React.Dispatch<React.SetStateAction<{ [ticker: string]: boolean }>>;
+  alertsEnabled: { [ticker: string]: boolean };
+  setAlertsEnabled: React.Dispatch<React.SetStateAction<{ [ticker: string]: boolean }>>;
+  sentAlerts: React.MutableRefObject<{ [ticker: string]: { [level: string]: boolean } }>;
+  chain: Record<string, Record<string, Record<string, number[]>>>;
+  updateCurrentCall: (ticker: string) => Promise<void>;
+  shiftExpiryByMonth: (ticker: string, opt: OptionEntry, direction: 'next' | 'prev', type: 'future' | 'earlier') => OptionEntry | null;
+  data: OptionData[];
+  setData: React.Dispatch<React.SetStateAction<OptionData[]>>;
+  setChain: React.Dispatch<React.SetStateAction<Record<string, Record<string, Record<string, number[]>>>>>;
+  spots: Record<string, { price: number; change_percent: number }>;
+  supabaseClient: SupabaseClient<any, "public", any>;
 }
 
 const MemoizedTickerCard = React.memo((props: TickerCardProps) => {
-    const {
-        item, prices, setPrices, isFattibile, setPendingRoll, selected, setSelected,
-        showDropdowns, setShowDropdowns, alertsEnabled, setAlertsEnabled, sentAlerts,
-        chain, updateCurrentCall, shiftExpiryByMonth, data, setData, setChain, spots, supabaseClient
-    } = props;
+  const {
+    item, prices, setPrices, isFattibile, setPendingRoll, selected, setSelected,
+    showDropdowns, setShowDropdowns, alertsEnabled, setAlertsEnabled, sentAlerts,
+    chain, updateCurrentCall, shiftExpiryByMonth, data, setData, setChain, spots, supabaseClient
+  } = props;
 
   const deltaPct = item.spot > 0 ? ((item.strike - item.spot) / item.spot) * 100 : 0;
   const deltaColor = deltaPct < 4 ? 'font-bold text-red-400' : 'font-bold text-green-400';
@@ -295,7 +295,7 @@ const MemoizedTickerCard = React.memo((props: TickerCardProps) => {
       </div>
       {showDropdown && (
         <div className="grid grid-cols-3 gap-2 mb-2">
-            {/* Dropdowns Anno, Mese, Strike */}
+          {/* Dropdowns Anno, Mese, Strike */}
           <select
             value={sel.year}
             onChange={e => setSelected((prev) => ({ ...prev, [ticker]: { ...sel, year: e.target.value, month: '', strike: null } }))}
@@ -327,7 +327,7 @@ const MemoizedTickerCard = React.memo((props: TickerCardProps) => {
             ))}
           </select>
 
-           {Object.keys(tickerChain).length === 0 && (
+          {Object.keys(tickerChain).length === 0 && (
             <div className="col-span-3 text-red-500 text-xs mt-1">
               Nessuna scadenza disponibile. Verifica console per errori o se il ticker ha opzioni. Prova a rimuovere e riaggiungere il ticker.
             </div>
@@ -367,214 +367,214 @@ const MemoizedTickerCard = React.memo((props: TickerCardProps) => {
       {/* Refactoring: Unificazione sezioni Future e Earlier per ridurre duplicazione codice */}
       {['Future', 'Earlier'].map(sectionType => (
         <Fragment key={sectionType}>
-            <div className="mb-1 font-semibold bg-gray-800 text-orange-500 text-center rounded py-0.5">{sectionType}</div>
-            {(sectionType === 'Future' ? item.future : item.earlier).map((opt, i) => {
-                const optPriceData = tickerPrices[opt.symbol]
-                // Calcolo prezzo Bid (Bid o Last se Bid è 0)
-                const optBid = (optPriceData?.bid ?? opt.bid ?? 0) > 0 ? (optPriceData?.bid ?? opt.bid ?? 0) : (optPriceData?.last_trade_price ?? opt.last_trade_price ?? 0)
-                const optAsk = optPriceData?.ask ?? opt.ask ?? 0
+          <div className="mb-1 font-semibold bg-gray-800 text-orange-500 text-center rounded py-0.5">{sectionType}</div>
+          {(sectionType === 'Future' ? item.future : item.earlier).map((opt, i) => {
+            const optPriceData = tickerPrices[opt.symbol]
+            // Calcolo prezzo Bid (Bid o Last se Bid è 0)
+            const optBid = (optPriceData?.bid ?? opt.bid ?? 0) > 0 ? (optPriceData?.bid ?? opt.bid ?? 0) : (optPriceData?.last_trade_price ?? opt.last_trade_price ?? 0)
+            const optAsk = optPriceData?.ask ?? opt.ask ?? 0
 
-                // Calcolo Delta Premio % rispetto a Spot
-                const delta = item.spot > 0 ? ((optBid - currentAskToShow) / item.spot) * 100 : 0;
-                const deltaColor_opt = delta >= 0 ? 'text-green-400' : 'text-red-400'
-                const deltaSign = delta >= 0 ? '+' : ''
-                const fattibile = isFattibile(opt, item);
+            // Calcolo Delta Premio % rispetto a Spot
+            const delta = item.spot > 0 ? ((optBid - currentAskToShow) / item.spot) * 100 : 0;
+            const deltaColor_opt = delta >= 0 ? 'text-green-400' : 'text-red-400'
+            const deltaSign = delta >= 0 ? '+' : ''
+            const fattibile = isFattibile(opt, item);
 
-                return (
-                <div key={i} className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-1 gap-1 sm:gap-0">
-                    <span className="flex items-center gap-1">
-                    <span title={opt.expiry}>
-                        <span className="bg-zinc-800 px-2 py-1 rounded border border-red-400">{opt.label}</span>
-                        <span className="bg-zinc-800 px-2 py-1 rounded border border-red-400">{optBid.toFixed(2)} / {optAsk.toFixed(2)}</span>
-                        {optPriceData && (
-                        <span title="Premio aggiuntivo/riduttivo rispetto alla call attuale, diviso il prezzo spot" className={`ml-1 ${deltaColor_opt}`}>
-                            {deltaSign}{delta.toFixed(2)}%
-                        </span>
-                        )}
-                        {fattibile && (
-                        <span className="text-green-400" title="Fattibile: strike ≥ spot + 4%, prezzo ≥ prezzo call attuale">🟢</span>)}
-                    </span>
-                    </span>
-                    <div className="flex gap-1 items-center">
-                    <button
-                        onClick={() => setPendingRoll({ ticker: item.ticker, opt })}
-                        className="bg-[rgba(70,120,240,0.8)] hover:bg-[rgba(70,120,240,1)] text-white text-xs font-bold px-2 py-0.5 rounded"
-                        title="Aggiorna la call attuale con questa opzione"
-                    >
-                        ROLLA
-                    </button>
+            return (
+              <div key={i} className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-1 gap-1 sm:gap-0">
+                <span className="flex items-center gap-1">
+                  <span title={opt.expiry}>
+                    <span className="bg-zinc-800 px-2 py-1 rounded border border-red-400">{opt.label}</span>
+                    <span className="bg-zinc-800 px-2 py-1 rounded border border-red-400">{optBid.toFixed(2)} / {optAsk.toFixed(2)}</span>
+                    {optPriceData && (
+                      <span title="Premio aggiuntivo/riduttivo rispetto alla call attuale, diviso il prezzo spot" className={`ml-1 ${deltaColor_opt}`}>
+                        {deltaSign}{delta.toFixed(2)}%
+                      </span>
+                    )}
+                    {fattibile && (
+                      <span className="text-green-400" title="Fattibile: strike ≥ spot + 4%, prezzo ≥ prezzo call attuale">🟢</span>)}
+                  </span>
+                </span>
+                <div className="flex gap-1 items-center">
+                  <button
+                    onClick={() => setPendingRoll({ ticker: item.ticker, opt })}
+                    className="bg-[rgba(70,120,240,0.8)] hover:bg-[rgba(70,120,240,1)] text-white text-xs font-bold px-2 py-0.5 rounded"
+                    title="Aggiorna la call attuale con questa opzione"
+                  >
+                    ROLLA
+                  </button>
 
-                    {/* Pulsanti di aggiustamento (Strike Up/Down, Month Back/Forward) */}
-                    <button
-                        title="Strike Up"
-                        className="bg-green-700 hover:bg-green-800 text-white text-xs px-1 rounded"
-                        onClick={async () => {
-                            // Logica Strike Up
-                            let expiry = opt.expiry;
-                            let strike = opt.strike;
-                            const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC'];
+                  {/* Pulsanti di aggiustamento (Strike Up/Down, Month Back/Forward) */}
+                  <button
+                    title="Strike Up"
+                    className="bg-green-700 hover:bg-green-800 text-white text-xs px-1 rounded"
+                    onClick={async () => {
+                      // Logica Strike Up
+                      let expiry = opt.expiry;
+                      let strike = opt.strike;
+                      const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC'];
 
-                            // Gestione Fallback se l'opzione è inesistente (utilizzando helper esterno)
-                            if (opt.label === 'OPZIONE INESISTENTE' || expiry === '') {
-                                const fallback = findFirstAvailableExpiry(chain[item.ticker]);
-                                if (!fallback) {
-                                    alert('Nessuna scadenza disponibile nel chain per questo ticker.');
-                                    return;
-                                }
-                                expiry = fallback.expiry;
-                                strike = fallback.strikes[0]; // Inizia dal basso
-                            }
-
-                            const [year, month] = expiry.split('-');
-                            const monthIndex = Number(month) - 1;
-                            const chainStrikes = chain[item.ticker]?.[year]?.[monthNames[monthIndex]] || [];
-                            const nextStrike = chainStrikes.find((s: number) => s > strike);
-
-                            if (!nextStrike) return;
-
-                            const newSymbol = getSymbolFromExpiryStrike(item.ticker, expiry, nextStrike);
-
-                            // *** CORREZIONE 401: Usa authenticatedFetch ***
-                            const res = await authenticatedFetch(`/api/full-prices?symbols=${newSymbol}`);
-                            // ***************************************
-
-                            let newData = await processPriceResponse(res, newSymbol, item.ticker, setPrices);
-
-                            const updatedOpt = {
-                                ...opt,
-                                strike: nextStrike,
-                                label: `${monthNames[monthIndex]} ${year.slice(2)} C${nextStrike}`,
-                                symbol: newSymbol,
-                                bid: newData.bid,
-                                ask: newData.ask,
-                                last_trade_price: newData.last_trade_price,
-                                expiry
-                            };
-
-                            updateOptionData(item.ticker, sectionType, i, updatedOpt, setData);
-                            // saveState utilizza internamente authenticatedFetch
-                            saveState(item.ticker, data);
-                        }}
-                    >
-                        🔼
-                    </button>
-
-                    <button
-                        title="Strike Down"
-                        className="bg-red-700 hover:bg-red-800 text-white text-xs px-1 rounded"
-                        onClick={async () => {
-                             // Logica Strike Down
-                            let expiry = opt.expiry;
-                            let strike = opt.strike;
-                            const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC'];
-
-                             // Gestione Fallback
-                            if (opt.label === 'OPZIONE INESISTENTE' || expiry === '') {
-                                const fallback = findFirstAvailableExpiry(chain[item.ticker]);
-                                if (!fallback) {
-                                    alert('Nessuna scadenza disponibile nel chain per questo ticker.');
-                                    return;
-                                }
-                                expiry = fallback.expiry;
-                                strike = fallback.strikes[fallback.strikes.length - 1]; // Inizia dall'alto
-                            }
-
-                            const [year, month] = expiry.split('-');
-                            const monthIndex = Number(month) - 1;
-                            const chainStrikes = chain[item.ticker]?.[year]?.[monthNames[monthIndex]] || [];
-                            const prevStrike = [...chainStrikes].reverse().find((s: number) => s < strike);
-
-                            if (!prevStrike) return;
-
-                            const newSymbol = getSymbolFromExpiryStrike(item.ticker, expiry, prevStrike);
-
-                             // *** CORREZIONE 401: Usa authenticatedFetch ***
-                            const res = await authenticatedFetch(`/api/full-prices?symbols=${newSymbol}`);
-                             // ***************************************
-
-                            let newData = await processPriceResponse(res, newSymbol, item.ticker, setPrices);
-
-                            const updatedOpt = {
-                                ...opt,
-                                strike: prevStrike,
-                                label: `${monthNames[monthIndex]} ${year.slice(2)} C${prevStrike}`,
-                                symbol: newSymbol,
-                                bid: newData.bid,
-                                ask: newData.ask,
-                                last_trade_price: newData.last_trade_price,
-                                expiry
-                            };
-
-                            updateOptionData(item.ticker, sectionType, i, updatedOpt, setData);
-                            saveState(item.ticker, data);
-                        }}
-                    >
-                        🔽
-                    </button>
-                    <button
-                        title="Month Back"
-                        className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded"
-                        onClick={async () => {
-                        const shift = shiftExpiryByMonth(item.ticker, opt, 'prev', sectionType === 'Future' ? 'future' : 'earlier')
-                        if (!shift) return
-
-                        const newSymbol = getSymbolFromExpiryStrike(item.ticker, shift.expiry, shift.strike)
-
-                         // *** CORREZIONE 401: Usa authenticatedFetch ***
-                        const res = await authenticatedFetch(`/api/full-prices?symbols=${newSymbol}`)
-                         // ***************************************
-
-                        let newData = await processPriceResponse(res, newSymbol, item.ticker, setPrices);
-
-                        const updatedOpt = {
-                            ...opt,
-                            ...shift, // Sovrascrive label, expiry, strike
-                            symbol: newSymbol,
-                            bid: newData.bid,
-                            ask: newData.ask,
-                            last_trade_price: newData.last_trade_price
+                      // Gestione Fallback se l'opzione è inesistente (utilizzando helper esterno)
+                      if (opt.label === 'OPZIONE INESISTENTE' || expiry === '') {
+                        const fallback = findFirstAvailableExpiry(chain[item.ticker]);
+                        if (!fallback) {
+                          alert('Nessuna scadenza disponibile nel chain per questo ticker.');
+                          return;
                         }
+                        expiry = fallback.expiry;
+                        strike = fallback.strikes[0]; // Inizia dal basso
+                      }
 
-                        updateOptionData(item.ticker, sectionType, i, updatedOpt, setData);
-                        saveState(item.ticker, data);
-                        }}
-                    >
-                        ◀️
-                    </button>
-                    <button
-                        title="Month Forward"
-                        className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded"
-                        onClick={async () => {
-                            const shift = shiftExpiryByMonth(item.ticker, opt, 'next', sectionType === 'Future' ? 'future' : 'earlier')
-                            if (!shift) return
+                      const [year, month] = expiry.split('-');
+                      const monthIndex = Number(month) - 1;
+                      const chainStrikes = chain[item.ticker]?.[year]?.[monthNames[monthIndex]] || [];
+                      const nextStrike = chainStrikes.find((s: number) => s > strike);
 
-                            const newSymbol = getSymbolFromExpiryStrike(item.ticker, shift.expiry, shift.strike)
+                      if (!nextStrike) return;
 
-                            // *** CORREZIONE 401: Usa authenticatedFetch ***
-                            const res = await authenticatedFetch(`/api/full-prices?symbols=${newSymbol}`)
-                            // ***************************************
+                      const newSymbol = getSymbolFromExpiryStrike(item.ticker, expiry, nextStrike);
 
-                            let newData = await processPriceResponse(res, newSymbol, item.ticker, setPrices);
+                      // *** CORREZIONE 401: Usa authenticatedFetch ***
+                      const res = await authenticatedFetch(`/api/full-prices?symbols=${newSymbol}`);
+                      // ***************************************
 
-                            const updatedOpt = {
-                                ...opt,
-                                ...shift,
-                                symbol: newSymbol,
-                                bid: newData.bid,
-                                ask: newData.ask,
-                                last_trade_price: newData.last_trade_price
-                            }
+                      let newData = await processPriceResponse(res, newSymbol, item.ticker, setPrices);
 
-                            updateOptionData(item.ticker, sectionType, i, updatedOpt, setData);
-                            saveState(item.ticker, data);
-                        }}
-                    >
-                        ▶️
-                    </button>
-                    </div>
+                      const updatedOpt = {
+                        ...opt,
+                        strike: nextStrike,
+                        label: `${monthNames[monthIndex]} ${year.slice(2)} C${nextStrike}`,
+                        symbol: newSymbol,
+                        bid: newData.bid,
+                        ask: newData.ask,
+                        last_trade_price: newData.last_trade_price,
+                        expiry
+                      };
+
+                      updateOptionData(item.ticker, sectionType, i, updatedOpt, setData);
+                      // saveState utilizza internamente authenticatedFetch
+                      saveState(item.ticker, data);
+                    }}
+                  >
+                    🔼
+                  </button>
+
+                  <button
+                    title="Strike Down"
+                    className="bg-red-700 hover:bg-red-800 text-white text-xs px-1 rounded"
+                    onClick={async () => {
+                      // Logica Strike Down
+                      let expiry = opt.expiry;
+                      let strike = opt.strike;
+                      const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC'];
+
+                      // Gestione Fallback
+                      if (opt.label === 'OPZIONE INESISTENTE' || expiry === '') {
+                        const fallback = findFirstAvailableExpiry(chain[item.ticker]);
+                        if (!fallback) {
+                          alert('Nessuna scadenza disponibile nel chain per questo ticker.');
+                          return;
+                        }
+                        expiry = fallback.expiry;
+                        strike = fallback.strikes[fallback.strikes.length - 1]; // Inizia dall'alto
+                      }
+
+                      const [year, month] = expiry.split('-');
+                      const monthIndex = Number(month) - 1;
+                      const chainStrikes = chain[item.ticker]?.[year]?.[monthNames[monthIndex]] || [];
+                      const prevStrike = [...chainStrikes].reverse().find((s: number) => s < strike);
+
+                      if (!prevStrike) return;
+
+                      const newSymbol = getSymbolFromExpiryStrike(item.ticker, expiry, prevStrike);
+
+                      // *** CORREZIONE 401: Usa authenticatedFetch ***
+                      const res = await authenticatedFetch(`/api/full-prices?symbols=${newSymbol}`);
+                      // ***************************************
+
+                      let newData = await processPriceResponse(res, newSymbol, item.ticker, setPrices);
+
+                      const updatedOpt = {
+                        ...opt,
+                        strike: prevStrike,
+                        label: `${monthNames[monthIndex]} ${year.slice(2)} C${prevStrike}`,
+                        symbol: newSymbol,
+                        bid: newData.bid,
+                        ask: newData.ask,
+                        last_trade_price: newData.last_trade_price,
+                        expiry
+                      };
+
+                      updateOptionData(item.ticker, sectionType, i, updatedOpt, setData);
+                      saveState(item.ticker, data);
+                    }}
+                  >
+                    🔽
+                  </button>
+                  <button
+                    title="Month Back"
+                    className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded"
+                    onClick={async () => {
+                      const shift = shiftExpiryByMonth(item.ticker, opt, 'prev', sectionType === 'Future' ? 'future' : 'earlier')
+                      if (!shift) return
+
+                      const newSymbol = getSymbolFromExpiryStrike(item.ticker, shift.expiry, shift.strike)
+
+                      // *** CORREZIONE 401: Usa authenticatedFetch ***
+                      const res = await authenticatedFetch(`/api/full-prices?symbols=${newSymbol}`)
+                      // ***************************************
+
+                      let newData = await processPriceResponse(res, newSymbol, item.ticker, setPrices);
+
+                      const updatedOpt = {
+                        ...opt,
+                        ...shift, // Sovrascrive label, expiry, strike
+                        symbol: newSymbol,
+                        bid: newData.bid,
+                        ask: newData.ask,
+                        last_trade_price: newData.last_trade_price
+                      }
+
+                      updateOptionData(item.ticker, sectionType, i, updatedOpt, setData);
+                      saveState(item.ticker, data);
+                    }}
+                  >
+                    ◀️
+                  </button>
+                  <button
+                    title="Month Forward"
+                    className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-1 rounded"
+                    onClick={async () => {
+                      const shift = shiftExpiryByMonth(item.ticker, opt, 'next', sectionType === 'Future' ? 'future' : 'earlier')
+                      if (!shift) return
+
+                      const newSymbol = getSymbolFromExpiryStrike(item.ticker, shift.expiry, shift.strike)
+
+                      // *** CORREZIONE 401: Usa authenticatedFetch ***
+                      const res = await authenticatedFetch(`/api/full-prices?symbols=${newSymbol}`)
+                      // ***************************************
+
+                      let newData = await processPriceResponse(res, newSymbol, item.ticker, setPrices);
+
+                      const updatedOpt = {
+                        ...opt,
+                        ...shift,
+                        symbol: newSymbol,
+                        bid: newData.bid,
+                        ask: newData.ask,
+                        last_trade_price: newData.last_trade_price
+                      }
+
+                      updateOptionData(item.ticker, sectionType, i, updatedOpt, setData);
+                      saveState(item.ticker, data);
+                    }}
+                  >
+                    ▶️
+                  </button>
                 </div>
-                )
-            })}
+              </div>
+            )
+          })}
         </Fragment>
       ))}
     </div>
@@ -585,72 +585,72 @@ const MemoizedTickerCard = React.memo((props: TickerCardProps) => {
 
 // Helper per trovare la prima scadenza disponibile nella chain
 const findFirstAvailableExpiry = (tickerChain: Record<string, Record<string, number[]>>) => {
-    if (!tickerChain) return null;
-    const years = Object.keys(tickerChain).sort();
-    if (years.length === 0) return null;
+  if (!tickerChain) return null;
+  const years = Object.keys(tickerChain).sort();
+  if (years.length === 0) return null;
 
-    const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC'];
+  const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC'];
 
-    for (const year of years) {
-        // Ordina i mesi correttamente
-        const months = Object.keys(tickerChain[year]).sort((a, b) => monthNames.indexOf(a) - monthNames.indexOf(b));
-        for (const month of months) {
-            const strikes = tickerChain[year][month] || [];
-            if (strikes.length > 0) {
-                const monthIndex = monthNames.indexOf(month);
-                const expiry = getThirdFriday(Number(year), monthIndex + 1);
-                return { expiry, strikes };
-            }
-        }
+  for (const year of years) {
+    // Ordina i mesi correttamente
+    const months = Object.keys(tickerChain[year]).sort((a, b) => monthNames.indexOf(a) - monthNames.indexOf(b));
+    for (const month of months) {
+      const strikes = tickerChain[year][month] || [];
+      if (strikes.length > 0) {
+        const monthIndex = monthNames.indexOf(month);
+        const expiry = getThirdFriday(Number(year), monthIndex + 1);
+        return { expiry, strikes };
+      }
     }
-    return null;
+  }
+  return null;
 };
 
 // Helper per processare la risposta dei prezzi e aggiornare lo stato
 const processPriceResponse = async (res: Response, symbol: string, ticker: string, setPrices: React.Dispatch<React.SetStateAction<PricesType>>) => {
-    let newData = { bid: 0, ask: 0, last_trade_price: 0 };
-    if (res.ok) {
-        const json = await res.json();
-        newData = json[symbol] || { bid: 0, ask: 0, last_trade_price: 0 };
-        setPrices((prev: PricesType) => ({
-            ...prev,
-            [ticker]: { ...prev[ticker], [symbol]: { ...newData, symbol: symbol } }
-        }));
-    }
-    return newData;
+  let newData = { bid: 0, ask: 0, last_trade_price: 0 };
+  if (res.ok) {
+    const json = await res.json();
+    newData = json[symbol] || { bid: 0, ask: 0, last_trade_price: 0 };
+    setPrices((prev: PricesType) => ({
+      ...prev,
+      [ticker]: { ...prev[ticker], [symbol]: { ...newData, symbol: symbol } }
+    }));
+  }
+  return newData;
 };
 
 // Helper per aggiornare lo stato 'data' in modo immutabile
 const updateOptionData = (ticker: string, sectionType: string, index: number, updatedOpt: OptionEntry, setData: React.Dispatch<React.SetStateAction<OptionData[]>>) => {
-    setData(prevData => prevData.map(d => {
-        if (d.ticker !== ticker) return d;
-        if (sectionType === 'Future') {
-            const newFuture = [...d.future];
-            newFuture[index] = updatedOpt;
-            return { ...d, future: newFuture };
-        } else {
-            const newEarlier = [...d.earlier];
-            newEarlier[index] = updatedOpt;
-            return { ...d, earlier: newEarlier };
-        }
-    }));
+  setData(prevData => prevData.map(d => {
+    if (d.ticker !== ticker) return d;
+    if (sectionType === 'Future') {
+      const newFuture = [...d.future];
+      newFuture[index] = updatedOpt;
+      return { ...d, future: newFuture };
+    } else {
+      const newEarlier = [...d.earlier];
+      newEarlier[index] = updatedOpt;
+      return { ...d, earlier: newEarlier };
+    }
+  }));
 };
 
 // Helper per salvare lo stato sul server (Usa authenticatedFetch)
 const saveState = (ticker: string, currentData: OptionData[]) => {
-    const itemData = currentData.find(d => d.ticker === ticker);
-    if (!itemData) return;
+  const itemData = currentData.find(d => d.ticker === ticker);
+  if (!itemData) return;
 
-    // *** CORREZIONE 401: Usa authenticatedFetch ***
-    authenticatedFetch('/api/save-state', {
-        method: 'POST',
-        body: JSON.stringify({
-            ticker: ticker,
-            future: itemData.future || [],
-            earlier: itemData.earlier || []
-        })
-    }).catch(err => console.error('Errore salvataggio stato:', err));
-    // ***************************************
+  // *** CORREZIONE 401: Usa authenticatedFetch ***
+  authenticatedFetch('/api/save-state', {
+    method: 'POST',
+    body: JSON.stringify({
+      ticker: ticker,
+      future: itemData.future || [],
+      earlier: itemData.earlier || []
+    })
+  }).catch(err => console.error('Errore salvataggio stato:', err));
+  // ***************************************
 };
 
 // ------------------------------------------------------------------------------------
@@ -677,11 +677,11 @@ export default function Page(): JSX.Element {
     try {
       const res = await authenticatedFetch('/api/tickers')
       if (!res.ok) {
-         if (res.status === 401) {
-            console.error('Sessione non valida (401) durante fetchTickers.');
-            // Potrebbe essere utile forzare il logout o il refresh della sessione
-         }
-         throw new Error(`Errore fetch tickers: ${res.status}`);
+        if (res.status === 401) {
+          console.error('Sessione non valida (401) durante fetchTickers.');
+          // Potrebbe essere utile forzare il logout o il refresh della sessione
+        }
+        throw new Error(`Errore fetch tickers: ${res.status}`);
       }
       const json = await res.json()
       setTickers(json)
@@ -715,7 +715,7 @@ export default function Page(): JSX.Element {
         const json = await res.json()
         if (Array.isArray(json)) setData(json)
       } else if (res.status !== 401) {
-         console.error('Errore fetch /api/options:', res.status);
+        console.error('Errore fetch /api/options:', res.status);
       }
     } catch (err) {
       console.error('Errore fetch /api/options', err)
@@ -810,10 +810,10 @@ export default function Page(): JSX.Element {
         const tickersStr = tickersList.join(',');
         const spotRes = await authenticatedFetch(`/api/spots?tickers=${tickersStr}`);
         if (spotRes.ok) {
-            const newSpots = await spotRes.json();
-            setSpots(newSpots);
+          const newSpots = await spotRes.json();
+          setSpots(newSpots);
         } else {
-            console.error('Error fetching spots:', spotRes.status);
+          console.error('Error fetching spots:', spotRes.status);
         }
       }
     } catch (err) {
@@ -832,10 +832,10 @@ export default function Page(): JSX.Element {
 
     // Gestione fallback se l'opzione di partenza è inesistente
     if (opt.label === 'OPZIONE INESISTENTE' || !opt.expiry) {
-        const fallback = findFirstAvailableExpiry(tickerChain);
-        if (!fallback) return null;
-        currentExpiry = fallback.expiry;
-        currentStrike = type === 'future' ? fallback.strikes[0] : fallback.strikes[fallback.strikes.length - 1];
+      const fallback = findFirstAvailableExpiry(tickerChain);
+      if (!fallback) return null;
+      currentExpiry = fallback.expiry;
+      currentStrike = type === 'future' ? fallback.strikes[0] : fallback.strikes[fallback.strikes.length - 1];
     }
 
     const [yearStr, monthStr] = currentExpiry.split('-')
@@ -929,44 +929,44 @@ export default function Page(): JSX.Element {
     const maxAttempts = 60;
 
     while (allFutureMonths.length < 2 && attempts < maxAttempts) {
-        attempts++;
-        monthIdx++;
-        if (monthIdx >= 12) {
-            monthIdx = 0;
-            year++;
-        }
-        const futureMonth = monthNames[monthIdx];
-        const fStrikeList = tickerChain[year.toString()]?.[futureMonth] || [];
-        if (fStrikeList.length > 0) {
-            allFutureMonths.push({ monthIdx, year });
-        }
+      attempts++;
+      monthIdx++;
+      if (monthIdx >= 12) {
+        monthIdx = 0;
+        year++;
+      }
+      const futureMonth = monthNames[monthIdx];
+      const fStrikeList = tickerChain[year.toString()]?.[futureMonth] || [];
+      if (fStrikeList.length > 0) {
+        allFutureMonths.push({ monthIdx, year });
+      }
     }
 
     for (let i = 0; i < Math.min(2, allFutureMonths.length); i++) {
-        const { monthIdx, year } = allFutureMonths[i];
-        const futureMonth = monthNames[monthIdx];
-        const fStrikeList = tickerChain[year.toString()]?.[futureMonth] || [];
-        let fStrike = fStrikeList.find((s: number) => s > strikeRef) ||
-            fStrikeList.find((s: number) => s === strikeRef) ||
-            fStrikeList[fStrikeList.length - 1];
+      const { monthIdx, year } = allFutureMonths[i];
+      const futureMonth = monthNames[monthIdx];
+      const fStrikeList = tickerChain[year.toString()]?.[futureMonth] || [];
+      let fStrike = fStrikeList.find((s: number) => s > strikeRef) ||
+        fStrikeList.find((s: number) => s === strikeRef) ||
+        fStrikeList[fStrikeList.length - 1];
 
-        if (fStrike) {
-            const expiry = getThirdFriday(year, monthIdx + 1);
-            const symbol = getSymbolFromExpiryStrike(ticker, expiry, fStrike);
-            if (symbol) {
-                const optPrices = prices[ticker]?.[symbol] ?? { bid: 0, ask: 0, last_trade_price: 0 };
-                future.push({
-                    label: `${futureMonth} ${String(year).slice(2)} C${fStrike}`,
-                    symbol,
-                    strike: fStrike,
-                    bid: optPrices.bid,
-                    ask: optPrices.ask,
-                    last_trade_price: optPrices.last_trade_price,
-                    expiry
-                });
-                strikeRef = fStrike;
-            }
+      if (fStrike) {
+        const expiry = getThirdFriday(year, monthIdx + 1);
+        const symbol = getSymbolFromExpiryStrike(ticker, expiry, fStrike);
+        if (symbol) {
+          const optPrices = prices[ticker]?.[symbol] ?? { bid: 0, ask: 0, last_trade_price: 0 };
+          future.push({
+            label: `${futureMonth} ${String(year).slice(2)} C${fStrike}`,
+            symbol,
+            strike: fStrike,
+            bid: optPrices.bid,
+            ask: optPrices.ask,
+            last_trade_price: optPrices.last_trade_price,
+            expiry
+          });
+          strikeRef = fStrike;
         }
+      }
     }
 
     // Calcolo EARLIER
@@ -977,74 +977,74 @@ export default function Page(): JSX.Element {
     attempts = 0;
 
     while (allEarlierMonths.length < 1 && attempts < maxAttempts) {
-        attempts++;
-        monthIdx--;
-        if (monthIdx < 0) {
-            monthIdx = 11;
-            year--;
-        }
-        if (year < 2000) break; // Limite inferiore ragionevole
+      attempts++;
+      monthIdx--;
+      if (monthIdx < 0) {
+        monthIdx = 11;
+        year--;
+      }
+      if (year < 2000) break; // Limite inferiore ragionevole
 
-        const earlierMonth = monthNames[monthIdx];
-        const eStrikeList = tickerChain[year.toString()]?.[earlierMonth] || [];
-        if (eStrikeList.length > 0) {
-            allEarlierMonths.push({ monthIdx, year });
-        }
+      const earlierMonth = monthNames[monthIdx];
+      const eStrikeList = tickerChain[year.toString()]?.[earlierMonth] || [];
+      if (eStrikeList.length > 0) {
+        allEarlierMonths.push({ monthIdx, year });
+      }
     }
 
     if (allEarlierMonths.length > 0) {
-        const { monthIdx, year } = allEarlierMonths[0];
-        const earlierMonth = monthNames[monthIdx];
-        const eStrikeList = tickerChain[year.toString()]?.[earlierMonth] || [];
+      const { monthIdx, year } = allEarlierMonths[0];
+      const earlierMonth = monthNames[monthIdx];
+      const eStrikeList = tickerChain[year.toString()]?.[earlierMonth] || [];
 
-        let eStrike1 = [...eStrikeList].reverse().find((s: number) => s < strikeRef) ||
-            eStrikeList.find((s: number) => s === strikeRef) ||
-            eStrikeList[0];
+      let eStrike1 = [...eStrikeList].reverse().find((s: number) => s < strikeRef) ||
+        eStrikeList.find((s: number) => s === strikeRef) ||
+        eStrikeList[0];
 
-        if (eStrike1) {
-            const expiry = getThirdFriday(year, monthIdx + 1);
-            const symbol = getSymbolFromExpiryStrike(ticker, expiry, eStrike1);
-            if (symbol) {
-                const optPrices = prices[ticker]?.[symbol] ?? { bid: 0, ask: 0, last_trade_price: 0 };
-                earlier.push({
-                    label: `${earlierMonth} ${String(year).slice(2)} C${eStrike1}`,
-                    symbol,
-                    strike: eStrike1,
-                    bid: optPrices.bid,
-                    ask: optPrices.ask,
-                    last_trade_price: optPrices.last_trade_price,
-                    expiry
-                });
-                strikeRef = eStrike1; // Aggiorna strikeRef per la seconda earlier
-            }
+      if (eStrike1) {
+        const expiry = getThirdFriday(year, monthIdx + 1);
+        const symbol = getSymbolFromExpiryStrike(ticker, expiry, eStrike1);
+        if (symbol) {
+          const optPrices = prices[ticker]?.[symbol] ?? { bid: 0, ask: 0, last_trade_price: 0 };
+          earlier.push({
+            label: `${earlierMonth} ${String(year).slice(2)} C${eStrike1}`,
+            symbol,
+            strike: eStrike1,
+            bid: optPrices.bid,
+            ask: optPrices.ask,
+            last_trade_price: optPrices.last_trade_price,
+            expiry
+          });
+          strikeRef = eStrike1; // Aggiorna strikeRef per la seconda earlier
+        }
+      }
+
+      // Seconda Earlier
+      if (eStrike1) {
+        let eStrike2 = [...eStrikeList].reverse().find((s: number) => s < strikeRef);
+
+        // Se non trova uno strike inferiore, prende il primo disponibile se diverso dal primo
+        if (!eStrike2 && eStrikeList.length > 0) {
+          eStrike2 = eStrikeList[0];
         }
 
-        // Seconda Earlier
-        if (eStrike1) {
-            let eStrike2 = [...eStrikeList].reverse().find((s: number) => s < strikeRef);
-
-            // Se non trova uno strike inferiore, prende il primo disponibile se diverso dal primo
-            if (!eStrike2 && eStrikeList.length > 0) {
-                 eStrike2 = eStrikeList[0];
-            }
-
-            if (eStrike2 && eStrike2 !== eStrike1) {
-                 const expiry = getThirdFriday(year, monthIdx + 1);
-                const symbol = getSymbolFromExpiryStrike(ticker, expiry, eStrike2);
-                if (symbol) {
-                    const optPrices = prices[ticker]?.[symbol] ?? { bid: 0, ask: 0, last_trade_price: 0 };
-                    earlier.push({
-                        label: `${earlierMonth} ${String(year).slice(2)} C${eStrike2}`,
-                        symbol,
-                        strike: eStrike2,
-                        bid: optPrices.bid,
-                        ask: optPrices.ask,
-                        last_trade_price: optPrices.last_trade_price,
-                        expiry
-                    });
-                }
-            }
+        if (eStrike2 && eStrike2 !== eStrike1) {
+          const expiry = getThirdFriday(year, monthIdx + 1);
+          const symbol = getSymbolFromExpiryStrike(ticker, expiry, eStrike2);
+          if (symbol) {
+            const optPrices = prices[ticker]?.[symbol] ?? { bid: 0, ask: 0, last_trade_price: 0 };
+            earlier.push({
+              label: `${earlierMonth} ${String(year).slice(2)} C${eStrike2}`,
+              symbol,
+              strike: eStrike2,
+              bid: optPrices.bid,
+              ask: optPrices.ask,
+              last_trade_price: optPrices.last_trade_price,
+              expiry
+            });
+          }
         }
+      }
     }
 
     while (future.length < 2) future.push({ label: 'OPZIONE INESISTENTE', strike: 0, bid: 0, ask: 0, last_trade_price: 0, expiry: '', symbol: '' });
@@ -1127,14 +1127,14 @@ export default function Page(): JSX.Element {
       current_ask = newData.ask > 0 ? newData.ask : newData.last_trade_price;
       current_last_trade_price = newData.last_trade_price;
 
-       // Aggiorna di nuovo lo stato locale con i prezzi aggiornati
-       setData(prevData => prevData.map(item => {
+      // Aggiorna di nuovo lo stato locale con i prezzi aggiornati
+      setData(prevData => prevData.map(item => {
         if (item.ticker !== ticker) return item;
         return {
-            ...item,
-            current_bid,
-            current_ask,
-            current_last_trade_price
+          ...item,
+          current_bid,
+          current_ask,
+          current_last_trade_price
         };
       }));
     }
@@ -1155,12 +1155,12 @@ export default function Page(): JSX.Element {
     // ***************************************
 
     if (confirmRes.ok) {
-        const confirmJson = await confirmRes.json()
-        if (!confirmJson.success) {
-            console.error('Errore logico nel salvataggio su Supabase per', ticker)
-        }
+      const confirmJson = await confirmRes.json()
+      if (!confirmJson.success) {
+        console.error('Errore logico nel salvataggio su Supabase per', ticker)
+      }
     } else {
-        console.error('Errore HTTP chiamata /api/update-call', confirmRes.status);
+      console.error('Errore HTTP chiamata /api/update-call', confirmRes.status);
     }
 
     // Pulisci alert-sent (richiede RLS Policy per DELETE)
@@ -1172,8 +1172,8 @@ export default function Page(): JSX.Element {
   // Gestisce il click sul bottone ROLLA (dopo conferma modale)
   const handleRollaClick = useCallback(async (ticker: string, opt: OptionEntry) => {
     if (!opt.expiry || opt.label === 'OPZIONE INESISTENTE') {
-        console.error("Tentativo di rollare su un'opzione inesistente.");
-        return;
+      console.error("Tentativo di rollare su un'opzione inesistente.");
+      return;
     }
 
     const [yearStr, monthStr] = opt.expiry.split('-')
@@ -1224,9 +1224,9 @@ export default function Page(): JSX.Element {
 
     // Fetch immediato dei prezzi per la nuova call rollata
     const newSymbol = currentSymbol;
-     // *** CORREZIONE 401: Usa authenticatedFetch ***
+    // *** CORREZIONE 401: Usa authenticatedFetch ***
     const res = await authenticatedFetch(`/api/full-prices?symbols=${newSymbol}`);
-     // ***************************************
+    // ***************************************
 
     if (res.ok) {
       const json = await res.json();
@@ -1240,14 +1240,14 @@ export default function Page(): JSX.Element {
       current_ask = newData.ask > 0 ? newData.ask : newData.last_trade_price;
       current_last_trade_price = newData.last_trade_price;
 
-       // Aggiorna di nuovo lo stato locale con i prezzi aggiornati
-       setData(prevData => prevData.map(item => {
+      // Aggiorna di nuovo lo stato locale con i prezzi aggiornati
+      setData(prevData => prevData.map(item => {
         if (item.ticker !== ticker) return item;
         return {
-            ...item,
-            current_bid,
-            current_ask,
-            current_last_trade_price
+          ...item,
+          current_bid,
+          current_ask,
+          current_last_trade_price
         };
       }));
     }
@@ -1268,12 +1268,12 @@ export default function Page(): JSX.Element {
     // ***************************************
 
     if (confirmRes.ok) {
-        const confirmJson = await confirmRes.json()
-        if (!confirmJson.success) {
-            console.error('Errore logico nel salvataggio su Supabase per', ticker)
-        }
+      const confirmJson = await confirmRes.json()
+      if (!confirmJson.success) {
+        console.error('Errore logico nel salvataggio su Supabase per', ticker)
+      }
     } else {
-        console.error('Errore HTTP chiamata /api/update-call', confirmRes.status);
+      console.error('Errore HTTP chiamata /api/update-call', confirmRes.status);
     }
 
     // Pulisci alert-sent (richiede RLS Policy per DELETE)
@@ -1285,9 +1285,9 @@ export default function Page(): JSX.Element {
   const addTicker = async () => {
     if (!newTicker) return;
     const tickerToAdd = newTicker.toUpperCase().trim();
-     if (tickers.includes(tickerToAdd)) {
-        alert("Ticker già presente.");
-        return;
+    if (tickers.includes(tickerToAdd)) {
+      alert("Ticker già presente.");
+      return;
     }
     try {
       const res = await authenticatedFetch('/api/add-ticker', { method: 'POST', body: JSON.stringify({ ticker: tickerToAdd }) });
@@ -1313,13 +1313,13 @@ export default function Page(): JSX.Element {
       if (res.ok) {
         console.log(`Removed ${ticker} - refreshing...`);
         // Aggiornamento UI ottimistico
-         setTickers(prev => prev.filter(t => t !== ticker));
-         setData(prev => prev.filter(d => d.ticker !== ticker));
-         setChain(prev => {
-             const next = {...prev};
-             delete next[ticker];
-             return next;
-         });
+        setTickers(prev => prev.filter(t => t !== ticker));
+        setData(prev => prev.filter(d => d.ticker !== ticker));
+        setChain(prev => {
+          const next = { ...prev };
+          delete next[ticker];
+          return next;
+        });
       } else {
         console.error('Errore API remove-ticker:', res.status);
       }
@@ -1332,39 +1332,41 @@ export default function Page(): JSX.Element {
 
   // --- EFFECTS ---
 
-  // 1. Gestione Autenticazione e Sessione (Migliorato con Loading State)
+// 1. Gestione Autenticazione e Sessione (Migliorato con Loading State)
   useEffect(() => {
     let isMounted = true;
     const checkSession = async () => {
       try {
-        const { data: { session } } = await supabaseClient.auth.getSession();
+        const { data: { session }, error } = await supabaseClient.auth.getSession();
+        console.log('Session from getSession:', session); // Log sessione completa per debug
+        console.log('Error from getSession:', error); // Log eventuali errori da getSession
         if (isMounted) {
           if (session) {
             setUser(session.user);
           } else {
-            // Se non c'è sessione, reindirizza al login
+            console.log('No session found, pushing to /login'); // Log redirect
             router.push('/login');
           }
           setLoading(false); // Fine caricamento
         }
       } catch (err) {
-        console.error('Errore check session:', err);
+        console.error('Exception in checkSession:', err); // Log eccezioni generali
         if (isMounted) {
-            setLoading(false);
-            router.push('/login');
+          setLoading(false);
+          router.push('/login');
         }
       }
     };
-    checkSession();
+    checkSession();  // Chiamata qui, all'interno dell'useEffect
 
     // Listener per cambiamenti di stato autenticazione (login/logout)
     const { data: authListener } = supabaseClient.auth.onAuthStateChange((_event, session) => {
       if (isMounted) {
         if (session) {
-            setUser(session.user);
+          setUser(session.user);
         } else {
-            setUser(null);
-            router.push('/login');
+          setUser(null);
+          router.push('/login');
         }
       }
     });
@@ -1373,28 +1375,7 @@ export default function Page(): JSX.Element {
       isMounted = false;
       authListener.subscription.unsubscribe();
     };
-  }, [router]);
-
-
-  // 2. Sottoscrizione Realtime a Supabase
-  useEffect(() => {
-    if (!user) return;
-    let isMounted = true;
-    // Ascolta le modifiche alla tabella 'options' (RLS deve essere attivo sul DB)
-    const channel = supabaseClient.channel(`user_options_changes`)
-    .on('postgres_changes',
-        { event: '*', schema: 'public', table: 'options' },
-        (payload) => {
-          console.log('Ricevuta modifica real-time, ricarico dati.');
-          if (isMounted) fetchData();
-    }).subscribe();
-
-    return () => {
-      isMounted = false;
-      supabaseClient.removeChannel(channel);
-    };
-  }, [user, fetchData]);
-
+  }, [router]);  // Dipendenze: solo router
 
   // 3. Fetch Iniziale dei Dati
   useEffect(() => {
@@ -1419,15 +1400,15 @@ export default function Page(): JSX.Element {
     let isMounted = true;
 
     const executeFetchPrices = () => {
-        if (isMarketOpen() && isMounted) {
-            console.log('✅ Market is open, fetching prices...');
-            fetchPrices();
-          }
+      if (isMarketOpen() && isMounted) {
+        console.log('✅ Market is open, fetching prices...');
+        fetchPrices();
+      }
     }
 
     // Esegui subito se il mercato è aperto
     if (isMarketOpen()) {
-        executeFetchPrices();
+      executeFetchPrices();
     }
 
     // Imposta intervallo (Aumentato a 15 secondi per ridurre carico API rispetto ai 5s originali)
@@ -1440,8 +1421,8 @@ export default function Page(): JSX.Element {
   }, [user, data, fetchPrices]);
 
 
-   // Definizione isFattibile (Memoizzata)
-   const isFattibile = useCallback((opt: OptionEntry, item: OptionData) => {
+  // Definizione isFattibile (Memoizzata)
+  const isFattibile = useCallback((opt: OptionEntry, item: OptionData) => {
     const tickerPrices = prices[item.ticker] || {}
     const optPriceData = tickerPrices[opt.symbol]
 
@@ -1477,57 +1458,57 @@ export default function Page(): JSX.Element {
       if (!isMounted || !isMarketOpen()) return;
 
       try {
-          // Fetch alert inviati da Supabase (Supabase SDK gestisce automaticamente il token)
-          // RLS deve essere attivo sulla tabella alerts_sent per filtrare per user_id
-          const { data: sentData, error } = await supabaseClient.from('alerts_sent').select('*');
+        // Fetch alert inviati da Supabase (Supabase SDK gestisce automaticamente il token)
+        // RLS deve essere attivo sulla tabella alerts_sent per filtrare per user_id
+        const { data: sentData, error } = await supabaseClient.from('alerts_sent').select('*');
 
-          if (error) {
-              console.error("Errore nel fetch degli alert inviati:", error);
-              return;
+        if (error) {
+          console.error("Errore nel fetch degli alert inviati:", error);
+          return;
+        }
+
+        // Mappa locale per controlli efficienti
+        const sentAlertsLocal: Record<string, Record<string, boolean>> = (sentData || []).reduce((acc, row) => {
+          if (!acc[row.ticker]) acc[row.ticker] = {};
+          acc[row.ticker][row.level] = true;
+          return acc;
+        }, {} as Record<string, Record<string, boolean>>);
+
+        for (const item of data) {
+          if (!alertsEnabled[item.ticker] || item.spot <= 0) continue;
+
+          const delta = ((item.strike - item.spot) / item.spot) * 100;
+          const levels = [4, 3, 2, 1];
+
+          if (!sentAlertsLocal[item.ticker]) sentAlertsLocal[item.ticker] = {};
+          const tickerSent = sentAlertsLocal[item.ticker];
+
+          // Alert Delta Basso (Pericolo)
+          for (const level of levels) {
+            if (delta < level && !tickerSent[level.toString()]) {
+              const alertMessage = `🔴 ${item.ticker} – DELTA: ${delta.toFixed(2)}% – Rollare`;
+              sendTelegramMessage(alertMessage);
+
+              // Registra l'invio su Supabase. Assicurati che user_id sia incluso per RLS.
+              await supabaseClient.from('alerts_sent').insert([{ ticker: item.ticker, level: level.toString(), user_id: user.id }]);
+              tickerSent[level.toString()] = true;
+            }
           }
 
-          // Mappa locale per controlli efficienti
-          const sentAlertsLocal: Record<string, Record<string, boolean>> = (sentData || []).reduce((acc, row) => {
-              if (!acc[row.ticker]) acc[row.ticker] = {};
-              acc[row.ticker][row.level] = true;
-              return acc;
-          }, {} as Record<string, Record<string, boolean>>);
+          // Alert Fattibile Earlier (Opportunità)
+          const hasFattibile = item.earlier.some(opt => isFattibile(opt, item));
+          if (hasFattibile && !tickerSent['fattibile_high']) {
+            const alertMessage = `🟢 ${item.ticker} – Earlier fattibile disponibile`;
+            sendTelegramMessage(alertMessage);
 
-          for (const item of data) {
-              if (!alertsEnabled[item.ticker] || item.spot <= 0) continue;
-
-              const delta = ((item.strike - item.spot) / item.spot) * 100;
-              const levels = [4, 3, 2, 1];
-
-              if (!sentAlertsLocal[item.ticker]) sentAlertsLocal[item.ticker] = {};
-              const tickerSent = sentAlertsLocal[item.ticker];
-
-              // Alert Delta Basso (Pericolo)
-              for (const level of levels) {
-                  if (delta < level && !tickerSent[level.toString()]) {
-                      const alertMessage = `🔴 ${item.ticker} – DELTA: ${delta.toFixed(2)}% – Rollare`;
-                      sendTelegramMessage(alertMessage);
-
-                      // Registra l'invio su Supabase. Assicurati che user_id sia incluso per RLS.
-                      await supabaseClient.from('alerts_sent').insert([{ ticker: item.ticker, level: level.toString(), user_id: user.id }]);
-                      tickerSent[level.toString()] = true;
-                  }
-              }
-
-              // Alert Fattibile Earlier (Opportunità)
-              const hasFattibile = item.earlier.some(opt => isFattibile(opt, item));
-              if (hasFattibile && !tickerSent['fattibile_high']) {
-                  const alertMessage = `🟢 ${item.ticker} – Earlier fattibile disponibile`;
-                  sendTelegramMessage(alertMessage);
-
-                  await supabaseClient.from('alerts_sent').insert([{ ticker: item.ticker, level: 'fattibile_high', user_id: user.id }]);
-                  tickerSent['fattibile_high'] = true;
-              }
+            await supabaseClient.from('alerts_sent').insert([{ ticker: item.ticker, level: 'fattibile_high', user_id: user.id }]);
+            tickerSent['fattibile_high'] = true;
           }
+        }
       } catch (err) {
-          console.error("Errore durante il controllo degli alert:", err);
+        console.error("Errore durante il controllo degli alert:", err);
       }
-  };
+    };
 
     // Imposta intervallo (Aumentato a 30 secondi)
     const alertInterval = setInterval(checkAlerts, 30000);
@@ -1558,10 +1539,10 @@ export default function Page(): JSX.Element {
 
       // Evita re-render se i dati non sono cambiati (ottimizzazione)
       if (item.spot === newSpot &&
-          item.current_bid === newBid &&
-          item.current_ask === newAsk &&
-          item.current_last_trade_price === newLast) {
-            return item;
+        item.current_bid === newBid &&
+        item.current_ask === newAsk &&
+        item.current_last_trade_price === newLast) {
+        return item;
       }
 
       return {
@@ -1618,12 +1599,12 @@ export default function Page(): JSX.Element {
       <div className="min-h-screen bg-black text-white p-2 flex flex-col gap-4 text-sm leading-tight">
         {/* Header con Logout */}
         <div className="flex justify-end">
-            <button onClick={async () => {
+          <button onClick={async () => {
             await supabaseClient.auth.signOut();
             // Il redirect è gestito dall'Auth Listener in useEffect
-            }} className="bg-red-700 text-white px-4 py-2 rounded w-fit">
+          }} className="bg-red-700 text-white px-4 py-2 rounded w-fit">
             Logout
-            </button>
+          </button>
         </div>
 
         {/* Sezione Aggiunta Ticker */}
@@ -1633,7 +1614,7 @@ export default function Page(): JSX.Element {
             onChange={e => setNewTicker(e.target.value.toUpperCase())}
             onKeyDown={e => { if (e.key === 'Enter') addTicker(); }} // Aggiunto Enter key handler
             placeholder="Aggiungi ticker (es. AAPL)"
-            className="bg-zinc-800 text-white p-1"/>
+            className="bg-zinc-800 text-white p-1" />
           <button onClick={addTicker} className="bg-green-700 text-white px-2 py-1 rounded ml-2">Aggiungi</button>
           <div className="mt-2">
             Tickers attuali: {tickers.map(t => <span key={t} className="mr-2">{t} <button onClick={() => removeTicker(t)} className="text-red-500">X</button></span>)}
@@ -1654,52 +1635,52 @@ export default function Page(): JSX.Element {
                   <div>La call corrente salvata su Supabase non è più disponibile o ha dati errati. Seleziona una nuova call.</div>
 
                   {/* Dropdown per la correzione (sempre visibile se invalido) */}
-                    <div className="grid grid-cols-3 gap-2 mt-2">
-                      <select
-                        value={sel.year}
-                        onChange={e => setSelected((prev) => ({ ...prev, [ticker]: { ...sel, year: e.target.value, month: '', strike: null } }))}
-                        className="bg-zinc-800 text-white p-1"
-                      >
-                        <option value="">Anno</option>
-                        {Object.keys(tickerChain).sort().map(y => <option key={y} value={y}>{y}</option>)}
-                      </select>
+                  <div className="grid grid-cols-3 gap-2 mt-2">
+                    <select
+                      value={sel.year}
+                      onChange={e => setSelected((prev) => ({ ...prev, [ticker]: { ...sel, year: e.target.value, month: '', strike: null } }))}
+                      className="bg-zinc-800 text-white p-1"
+                    >
+                      <option value="">Anno</option>
+                      {Object.keys(tickerChain).sort().map(y => <option key={y} value={y}>{y}</option>)}
+                    </select>
 
-                      <select
-                        value={sel.month}
-                        onChange={e => setSelected((prev) => ({ ...prev, [ticker]: { ...sel, month: e.target.value, strike: null } }))}
-                        className="bg-zinc-800 text-white p-1"
-                        disabled={!sel.year}
-                      >
-                        <option value="">Mese</option>
-                        {sel.year && Object.keys(tickerChain[sel.year] || {}).map(m => <option key={m} value={m}>{m}</option>)}
-                      </select>
+                    <select
+                      value={sel.month}
+                      onChange={e => setSelected((prev) => ({ ...prev, [ticker]: { ...sel, month: e.target.value, strike: null } }))}
+                      className="bg-zinc-800 text-white p-1"
+                      disabled={!sel.year}
+                    >
+                      <option value="">Mese</option>
+                      {sel.year && Object.keys(tickerChain[sel.year] || {}).map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
 
-                      <select
-                        value={sel.strike ?? ''}
-                        onChange={e => setSelected((prev) => ({ ...prev, [ticker]: { ...sel, strike: Number(e.target.value) } }))}
-                        className="bg-zinc-800 text-white p-1"
-                        disabled={!sel.month}
-                      >
-                        <option value="">Strike</option>
-                        {sel.year && sel.month && (tickerChain[sel.year]?.[sel.month] || []).map(s => (
-                          <option key={s} value={s}>{s}</option>
-                        ))}
-                      </select>
+                    <select
+                      value={sel.strike ?? ''}
+                      onChange={e => setSelected((prev) => ({ ...prev, [ticker]: { ...sel, strike: Number(e.target.value) } }))}
+                      className="bg-zinc-800 text-white p-1"
+                      disabled={!sel.month}
+                    >
+                      <option value="">Strike</option>
+                      {sel.year && sel.month && (tickerChain[sel.year]?.[sel.month] || []).map(s => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
 
-                      <button
-                        onClick={() => updateCurrentCall(ticker)}
-                        disabled={!sel.year || !sel.month || !sel.strike}
-                        className="col-span-3 mt-1 bg-green-700 hover:bg-green-800 disabled:bg-gray-600 text-white text-xs font-medium px-2 py-1 rounded"
-                      >
-                        ✔️ Conferma nuova CALL
-                      </button>
+                    <button
+                      onClick={() => updateCurrentCall(ticker)}
+                      disabled={!sel.year || !sel.month || !sel.strike}
+                      className="col-span-3 mt-1 bg-green-700 hover:bg-green-800 disabled:bg-gray-600 text-white text-xs font-medium px-2 py-1 rounded"
+                    >
+                      ✔️ Conferma nuova CALL
+                    </button>
 
-                       {Object.keys(tickerChain).length === 0 && (
-                        <div className="col-span-3 text-yellow-500 text-xs mt-1">
-                          Nessuna scadenza disponibile. Verifica il ticker.
-                        </div>
-                      )}
-                    </div>
+                    {Object.keys(tickerChain).length === 0 && (
+                      <div className="col-span-3 text-yellow-500 text-xs mt-1">
+                        Nessuna scadenza disponibile. Verifica il ticker.
+                      </div>
+                    )}
+                  </div>
                 </div>
               )
             }
