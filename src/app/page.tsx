@@ -1641,7 +1641,7 @@ export default function Page(): JSX.Element {
           await supabaseClient.from('alerts_sent').insert([{ ticker: item.ticker, level: 'fattibile_high' }]);
         }
       }
-    }, 5000);  // Ogni 5s
+    }, 5000);  // Ogni 5 secondi
 
     return () => clearInterval(alertInterval);
   }, [data, alertsEnabled, prices]);  // Dipendenze per re-check
