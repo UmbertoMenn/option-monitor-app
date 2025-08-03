@@ -1,10 +1,10 @@
 'use client'
 
 import React, { useEffect, useState, useRef, useCallback, Fragment } from 'react'
-import { createClient, SupabaseClient } from '@supabase/supabase-js'; // Aggiunto import esplicito per SupabaseClient
+import { SupabaseClient } from '@supabase/supabase-js';
 import { sendTelegramMessage } from './telegram';
 import { useRouter } from 'next/navigation';
-import { supabaseClient } from '../lib/supabaseClient'; // Adatta path
+import { supabaseClient } from '../lib/supabaseClient'; // Usa solo questo singleton
 
 function formatStrike(strike: number): string {
   return String(Math.round(strike * 1000)).padStart(8, '0')
@@ -895,55 +895,21 @@ export default function Page(): JSX.Element {
   const sentAlerts = useRef<{ [ticker: string]: { [level: string]: boolean } }>({});
   const [alertsEnabled, setAlertsEnabled] = useState<{ [ticker: string]: boolean }>({})
   const [pendingRoll, setPendingRoll] = useState<{ ticker: string, opt: OptionEntry } | null>(null)
-  const supabaseClient = useRef(createClient<any, "public", any>(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)).current; // Fix: Generics espliciti
   const [user, setUser] = useState<any>(null); // Aggiungi questo state
   const router = useRouter();
 
-  useEffect(() => {
-    const checkSession = async () => {
-      const { data: { session } } = await supabaseClient.auth.getSession();
-      if (!session) {
-        router.push('/login');
-      } else {
-        setUser(session.user);
-      }
-    };
-    checkSession();
-
-    const { data: authListener } = supabaseClient.auth.onAuthStateChange((_event, session) => {
-      if (!session) {
-        router.push('/login');
-      } else {
-        setUser(session.user);
-      }
-    });
-
-    return () => {
-      authListener.subscription.unsubscribe();
-    };
-  }, [router]);
-
-  if (!user) return <div>Caricamento...</div>; // Loader mentre check
-
-  useEffect(() => {
-    const channel = supabaseClient.channel('options').on('postgres_changes', { event: '*', schema: 'public', table: 'options' }, () => {
-      fetchData();  // Refresh data on any change
-    }).subscribe();
-
-    return () => { channel.unsubscribe(); };
-  }, []);
-
-  const fetchTickers = async () => {
+  const fetchTickers = useCallback(async () => {
     try {
       const res = await fetch('/api/tickers')
+      if (!res.ok) throw new Error(`Errore fetch tickers: ${res.status}`);
       const json = await res.json()
       setTickers(json)
     } catch (err) {
       console.error('Errore fetch tickers', err)
     }
-  };
+  }, []);
 
-  const fetchAlerts = async () => {
+  const fetchAlerts = useCallback(async () => {
     try {
       const res = await fetch('/api/alerts');
       if (res.ok) {
@@ -953,9 +919,9 @@ export default function Page(): JSX.Element {
     } catch (err) {
       console.error('Errore fetch alerts:', err);
     }
-  };
+  }, []);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       const res = await fetch('/api/options')
       const json = await res.json()
@@ -963,9 +929,9 @@ export default function Page(): JSX.Element {
     } catch (err) {
       console.error('Errore fetch /api/options', err)
     }
-  }
+  }, []);
 
-  const fetchChain = async () => {
+  const fetchChain = useCallback(async () => {
     try {
       const chains: Record<string, Record<string, Record<string, number[]>>> = {}
       console.log('Starting fetchChain - current tickers:', tickers); // Debug iniziale
@@ -994,15 +960,9 @@ export default function Page(): JSX.Element {
     } catch (err) {
       console.error('Global error in fetchChain:', err);
     }
-  };
+  }, [tickers]);
 
-  useEffect(() => {
-    if (tickers.length > 0) {
-      fetchChain();
-    }
-  }, [tickers]); // Ri-chiama fetchChain ogni volta che tickers cambia (load/add/remove)
-
-  const fetchPrices = async () => {
+  const fetchPrices = useCallback(async () => {
     try {
       let symbols: string[] = [];
       data.forEach(item => {
@@ -1068,7 +1028,7 @@ export default function Page(): JSX.Element {
     } catch (err) {
       console.error('Errore fetch /api/full-prices:', err);
     }
-  };
+  }, [data, getSymbolFromExpiryStrike]);
 
   const shiftExpiryByMonth = useCallback((ticker: string, opt: OptionEntry, direction: 'next' | 'prev', type: 'future' | 'earlier'): OptionEntry | null => {
     const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC'];
@@ -1548,12 +1508,6 @@ export default function Page(): JSX.Element {
     await supabaseClient.from('alerts_sent').delete().eq('ticker', ticker);
   }, [data, prices, chain, getSymbolFromExpiryStrike, getThirdFriday, setData]);
 
-  useEffect(() => {
-    fetchTickers()
-    fetchData()
-    fetchAlerts()
-  }, []);
-
   const addTicker = async () => {
     if (!newTicker) return;
     try {
@@ -1583,14 +1537,69 @@ export default function Page(): JSX.Element {
     }
   };
 
-  // DOPO (Il codice corretto)
+  useEffect(() => {
+    let isMounted = true;
+    const checkSession = async () => {
+      try {
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        if (!session && isMounted) {
+          router.push('/login');
+        } else if (isMounted) {
+          setUser(session?.user);
+        }
+      } catch (err) {
+        console.error('Errore check session:', err);
+      }
+    };
+    checkSession();
+
+    const { data: authListener } = supabaseClient.auth.onAuthStateChange((_event, session) => {
+      if (!session && isMounted) {
+        router.push('/login');
+      } else if (isMounted) {
+        setUser(session?.user);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      authListener.subscription.unsubscribe();
+    };
+  }, [router]);
+
+  if (!user) return <div>Caricamento...</div>; // Loader mentre check
+
+  useEffect(() => {
+    let isMounted = true;
+    const channel = supabaseClient.channel('options').on('postgres_changes', { event: '*', schema: 'public', table: 'options' }, () => {
+      if (isMounted) fetchData();  // Refresh data on any change
+    }).subscribe();
+
+    return () => {
+      isMounted = false;
+      channel.unsubscribe();
+    };
+  }, [fetchData]);
+
+  useEffect(() => {
+    fetchTickers()
+    fetchData()
+    fetchAlerts()
+  }, [fetchTickers, fetchData, fetchAlerts]);
+
+  useEffect(() => {
+    if (tickers.length > 0) {
+      fetchChain();
+    }
+  }, [tickers, fetchChain]);
 
   useEffect(() => {
     if (data.length === 0) return;
 
+    let isMounted = true;
     const interval = setInterval(() => {
       // Controlla se il mercato è aperto prima di chiamare l'API
-      if (isMarketOpen()) {
+      if (isMarketOpen() && isMounted) {
         console.log('✅ Market is open, fetching prices...');
         fetchPrices();
       } else {
@@ -1599,16 +1608,21 @@ export default function Page(): JSX.Element {
     }, 5000); // L'intervallo continua a girare ogni 5 secondi
 
     // Esegui un fetch immediato al caricamento se il mercato è aperto
-    if (isMarketOpen()) {
+    if (isMarketOpen() && isMounted) {
       fetchPrices();
     }
 
-    return () => clearInterval(interval); // Pulisci l'intervallo quando il componente viene smontato
-  }, [data]);
+    return () => {
+      isMounted = false;
+      clearInterval(interval); // Pulisci l'intervallo quando il componente viene smontato
+    };
+  }, [data, fetchPrices]);
 
   useEffect(() => {
     if (data.length === 0) return;
+    let isMounted = true;
     const alertInterval = setInterval(async () => {
+      if (!isMounted) return;
       // Fetch sentAlerts from Supabase
       const result = await supabaseClient.from('alerts_sent').select('*');
       const sentData = result.data; // Estrai data
@@ -1643,7 +1657,10 @@ export default function Page(): JSX.Element {
       }
     }, 5000);  // Ogni 5 secondi
 
-    return () => clearInterval(alertInterval);
+    return () => {
+      isMounted = false;
+      clearInterval(alertInterval);
+    };
   }, [data, alertsEnabled, prices]);  // Dipendenze per re-check
 
   useEffect(() => {
@@ -1665,7 +1682,6 @@ export default function Page(): JSX.Element {
       };
     }));
   }, [prices, getSymbolFromExpiryStrike]);  // Esegui ogni volta che prices cambia
-
 
   const isFattibile = (opt: OptionEntry, item: OptionData) => {
     const tickerPrices = prices[item.ticker] || {}

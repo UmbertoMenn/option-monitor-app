@@ -13,8 +13,10 @@ export default function Login() {
   const handleLogin = async () => {
     const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
     if (error) {
+      console.error('Login error:', error.message, error.status); // Logging dettagliato per debug
       setError(error.message);
     } else {
+      console.log('Login success:', data); // Logging opzionale per conferme
       router.push('/');
     }
   };
