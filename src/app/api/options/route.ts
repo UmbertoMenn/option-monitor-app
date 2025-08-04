@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
-import { createServerClient } from '@supabase/ssr';  // Usa questo pacchetto raccomandato
-import { cookies } from 'next/headers';
-import { createClient } from '@supabase/supabase-js';  // Mantenuto se necessario, ma non usato qui
+import { createSupabaseServerClient } from '../../../utils/supabase/server';  // Usa il wrapper standardizzato
+import type { Database } from '../../../types/supabase';  // Importa tipi generati per tipizzare upsert
 
 export const runtime = 'edge';
+export const dynamic = 'force-dynamic';
 
 const POLYGON_API_KEY = process.env.POLYGON_API_KEY!;
 const CONTRACTS_URL = 'https://api.polygon.io/v3/reference/options/contracts';
@@ -21,12 +21,10 @@ function formatExpiryLabel(dateStr: string): string {
   return `${mese} ${anno}`;
 }
 
-function normalizeExpiry(expiry: string): string {
-  if (expiry.length === 7) {
-    const [year, month] = expiry.split('-').map(Number);
-    return getThirdFriday(year, month).toISOString().split('T')[0];
-  }
-  return expiry;
+function normalizeExpiry(expiry: string | null): string {
+  if (!expiry || expiry.length !== 7) return '';  // Guardia per null o formato invalido
+  const [year, month] = expiry.split('-').map(Number);
+  return getThirdFriday(year, month).toISOString().split('T')[0];
 }
 
 function getThirdFriday(year: number, month: number): Date {
@@ -93,50 +91,38 @@ function buildExpiriesMap(contracts: any[]) {
 
 interface OptionEntry {
   label: string;
-  strike: number;
-  bid: number;
-  ask: number;
-  last_trade_price: number;
+  strike: number | null;  // Permetti null
+  bid: number | null;
+  ask: number | null;
+  last_trade_price: number | null;
   expiry: string;
   symbol: string;
 }
 
 interface OptionData {
   ticker: string;
-  spot: number;
-  strike: number;
+  spot: number | null;
+  strike: number | null;  // Permetti null
   expiry: string;
-  current_bid: number;
-  current_ask: number;
-  current_last_trade_price: number;
+  current_bid: number | null;
+  current_ask: number | null;
+  current_last_trade_price: number | null;
   future: OptionEntry[];
   earlier: OptionEntry[];
   invalid?: boolean;
 }
 
 export async function GET() {
-  // Crea client Supabase server-side con cookies (gestione asincrona per fix Promise<ReadonlyRequestCookies>)
-  const cookieStore = await cookies();  // Await per gestire asincronicità in Next.js 15+
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value;  // Solo 'get' per lettura sessione (evita errori su set/delete)
-        },
-        // Ometti 'set' e 'remove' poiché non necessari per getUser e causano errori su Readonly
-      },
-    }
-  );
+  const supabase = await createSupabaseServerClient();
 
   try {
     // Controllo autenticazione utente server-side
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) {
-      console.error('Sessione non valida in GET /api/options:', userError);
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError || !session) {
+      console.error('Sessione non valida in GET /api/options:', sessionError);
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    const user = session.user;
 
     // Fetch tickers dell'utente da 'options' (invece di 'tickers' globale)
     const { data: userOptions, error: optionsError } = await supabase.from('options').select('*').eq('user_id', user.id);
@@ -149,6 +135,22 @@ export async function GET() {
 
     for (const saved of userOptions) {
       const ticker = saved.ticker;
+      if (!saved.expiry || saved.strike === undefined || saved.strike === null) {  // Guardia estesa per undefined/null
+        output.push({
+          ticker,
+          spot: null,
+          strike: null,
+          expiry: '',
+          current_bid: null,
+          current_ask: null,
+          current_last_trade_price: null,
+          earlier: [],
+          future: [],
+          invalid: true
+        });
+        continue;
+      }
+
       const CURRENT_EXPIRY = normalizeExpiry(saved.expiry);
       const CURRENT_STRIKE = saved.strike;
 
@@ -164,12 +166,12 @@ export async function GET() {
       if (!current) {
         output.push({
           ticker,
-          spot: 0,
+          spot: null,
           strike: CURRENT_STRIKE,
           expiry: CURRENT_EXPIRY,
-          current_bid: 0,
-          current_ask: 0,
-          current_last_trade_price: 0,
+          current_bid: null,
+          current_ask: null,
+          current_last_trade_price: null,
           earlier: [],
           future: [],
           invalid: true
@@ -199,7 +201,7 @@ export async function GET() {
             strikes[0];
         }
 
-        if (!selectedStrike) return null;
+        if (selectedStrike === undefined) return null;  // Guardia per undefined
 
         const match = contracts.find(c => c.expiration_date === expiry && c.strike_price === selectedStrike);
         if (!match) return null;
@@ -208,9 +210,9 @@ export async function GET() {
         return {
           label: `${formatExpiryLabel(expiry)} C${selectedStrike}`,
           strike: selectedStrike,
-          bid: prices.bid,
-          ask: prices.ask,
-          last_trade_price: prices.last_trade_price,
+          bid: prices.bid ?? null,
+          ask: prices.ask ?? null,
+          last_trade_price: prices.last_trade_price ?? null,
           expiry,
           symbol: match.ticker
         } as OptionEntry;
@@ -228,7 +230,7 @@ export async function GET() {
       if (future1) {
         const idx1 = monthlyExpiries.indexOf(future1.expiry);
         for (let i = idx1 + 1; i < monthlyExpiries.length; i++) {
-          const f2 = await findOption(monthlyExpiries[i], future1.strike, true);
+          const f2 = await findOption(monthlyExpiries[i], future1.strike ?? 0, true);  // Default a 0 se null
           if (f2) { future2 = f2; break; }
         }
       }
@@ -240,23 +242,23 @@ export async function GET() {
       if (earlier1) {
         const idx1 = monthlyExpiries.indexOf(earlier1.expiry);
         for (let i = idx1 - 1; i >= 0; i--) {
-          const e2 = await findOption(monthlyExpiries[i], earlier1.strike, false);
+          const e2 = await findOption(monthlyExpiries[i], earlier1.strike ?? 0, false);  // Default a 0 se null
           if (e2) { earlier2 = e2; break; }
         }
       }
 
       output.push({
         ticker,
-        spot: spotData.price,
-        strike: CURRENT_STRIKE,
+        spot: spotData.price ?? null,
+        strike: CURRENT_STRIKE ?? null,
         expiry: CURRENT_EXPIRY,
-        current_bid: currentPrices.bid,
-        current_ask: currentPrices.ask,
-        current_last_trade_price: currentPrices.last_trade_price,
-        future: [future1 || { label: 'OPZIONE INESISTENTE', strike: 0, bid: 0, ask: 0, last_trade_price: 0, expiry: '', symbol: '' },
-                 future2 || { label: 'OPZIONE INESISTENTE', strike: 0, bid: 0, ask: 0, last_trade_price: 0, expiry: '', symbol: '' }],
-        earlier: [earlier1 || { label: 'OPZIONE INESISTENTE', strike: 0, bid: 0, ask: 0, last_trade_price: 0, expiry: '', symbol: '' },
-                  earlier2 || { label: 'OPZIONE INESISTENTE', strike: 0, bid: 0, ask: 0, last_trade_price: 0, expiry: '', symbol: '' }]
+        current_bid: currentPrices.bid ?? null,
+        current_ask: currentPrices.ask ?? null,
+        current_last_trade_price: currentPrices.last_trade_price ?? null,
+        future: [future1 || { label: 'OPZIONE INESISTENTE', strike: null, bid: null, ask: null, last_trade_price: null, expiry: '', symbol: '' },
+                 future2 || { label: 'OPZIONE INESISTENTE', strike: null, bid: null, ask: null, last_trade_price: null, expiry: '', symbol: '' }],
+        earlier: [earlier1 || { label: 'OPZIONE INESISTENTE', strike: null, bid: null, ask: null, last_trade_price: null, expiry: '', symbol: '' },
+                  earlier2 || { label: 'OPZIONE INESISTENTE', strike: null, bid: null, ask: null, last_trade_price: null, expiry: '', symbol: '' }]
       });
     }
 
@@ -266,24 +268,24 @@ export async function GET() {
       return spotData.change_percent || 0;
     }));
 
-    // Salva persistente per alert, con user_id
-    const { error: upsertError } = await supabase.from('options').upsert(
-      output.map((o, index) => ({
-        ticker: o.ticker,
-        spot: o.spot,
-        change_percent: change_percents[index],
-        strike: o.strike,
-        expiry: o.expiry,
-        current_bid: o.current_bid,
-        current_ask: o.current_ask,
-        current_last_trade_price: o.current_last_trade_price,
-        earlier: o.earlier,
-        future: o.future,
-        created_at: new Date().toISOString(),
-        user_id: user.id  // Aggiunto per multi-user
-      })),
-      { onConflict: 'ticker,user_id' }  // Modificato per conflict su ticker + user_id
-    );
+    // Tipizza l'upsert per risolvere overload mismatch (usa tipo Insert diretto)
+    type OptionsInsert = Database['public']['Tables']['options']['Insert'];
+    const upsertData: OptionsInsert[] = output.map((o, index) => ({
+      ticker: o.ticker, // always present and string
+      spot: o.spot ?? 0,
+      change_percent: change_percents[index],
+      strike: o.strike ?? 0,
+      expiry: o.expiry,
+      current_bid: o.current_bid ?? 0,
+      current_ask: o.current_ask ?? 0,
+      current_last_trade_price: o.current_last_trade_price ?? 0,
+      earlier: JSON.stringify(o.earlier),  // Serializza come JSON string
+      future: JSON.stringify(o.future),    // Serializza come JSON string
+      created_at: new Date().toISOString(),
+      user_id: user.id
+    }));
+
+    const { error: upsertError } = await supabase.from('options').upsert(upsertData, { onConflict: 'ticker,user_id' });
     if (upsertError) console.error('❌ Errore upsert /api/options:', upsertError.message);
 
     return NextResponse.json(output);
