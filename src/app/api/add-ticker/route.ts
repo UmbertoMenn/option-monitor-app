@@ -1,12 +1,16 @@
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';  // Usa helper coerente
+import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
-import { createSupabaseServerClient } from '../../../utils/supabase/server';  // Usa la funzione corretta
-import { normalizeExpiry } from '../../../utils/functions';  // Assumi esista
+import { normalizeExpiry } from '../../../utils/functions';  // Mantenuto import esistente
 
 export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
-  const supabase = await createSupabaseServerClient();
+  const cookieStore = cookies();
+  const supabase = createRouteHandlerClient({
+    cookies: () => cookieStore
+  });
 
   try {
     // Verifica sessione utente server-side

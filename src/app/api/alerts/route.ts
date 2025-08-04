@@ -1,4 +1,4 @@
-import { createServerClient } from '@supabase/ssr';  // Usa questo pacchetto raccomandato
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';  // Usa helper coerente con middleware
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 
@@ -6,19 +6,10 @@ export const runtime = 'edge';
 export const dynamic = 'force-dynamic';  // Forza dynamic rendering per sessioni
 
 export async function GET() {
-  // Crea client Supabase server-side con cookies (gestione asincrona)
-  const cookieStore = await cookies();  // Await per gestire asincronicità
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value;  // Solo 'get' per lettura sessione
-        },
-      },
-    }
-  );
+  const cookieStore = cookies();
+  const supabase = createRouteHandlerClient({
+    cookies: () => cookieStore
+  });
 
   try {
     // Verifica sessione e utente server-side
@@ -45,19 +36,10 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  // Crea client Supabase server-side con cookies (gestione asincrona)
-  const cookieStore = await cookies();  // Await per gestire asincronicità
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value;  // Solo 'get' per lettura sessione
-        },
-      },
-    }
-  );
+  const cookieStore = cookies();
+  const supabase = createRouteHandlerClient({
+    cookies: () => cookieStore
+  });
 
   try {
     // Verifica sessione e utente server-side

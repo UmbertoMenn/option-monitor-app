@@ -1,5 +1,6 @@
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';  // Usa helper coerente con middleware
+import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
-import { createSupabaseServerClient } from '../../../utils/supabase/server';  // Usa il wrapper standardizzato
 import type { Database } from '../../../types/supabase';  // Importa tipi generati per tipizzare upsert
 
 export const runtime = 'edge';
@@ -113,7 +114,10 @@ interface OptionData {
 }
 
 export async function GET() {
-  const supabase = await createSupabaseServerClient();
+  const cookieStore = cookies();
+  const supabase = createRouteHandlerClient<Database>({
+    cookies: () => cookieStore
+  });
 
   try {
     // Controllo autenticazione utente server-side

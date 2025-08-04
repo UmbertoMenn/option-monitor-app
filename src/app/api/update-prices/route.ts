@@ -1,4 +1,4 @@
-import { createServerClient } from '@supabase/ssr';  // Usa questo pacchetto raccomandato
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';  // Usa helper coerente con middleware
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { LRUCache } from 'lru-cache';
@@ -164,21 +164,12 @@ async function fetchExternalPrices(symbols: string[], tickers: string[]): Promis
   return { optionsData, spotsData };
 }
 
-// Handler (per Vercel Cron, con GET)
+// Handler (per Vercel Cron, con GET) - Skip auth sessione per cron job, usa client anonimo
 export async function GET() {
-  // Crea client Supabase server-side con cookies (gestione asincrona) - Nota: per cron, potrebbe non avere cookies, ma assumiamo auth globale o skip se non necessario. Per sicurezza, skippo auth qui se è un job.
-  const cookieStore = await cookies();  // Await per gestire asincronicità
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value;  // Solo 'get' per lettura sessione
-        },
-      },
-    }
-  );
+  const cookieStore = cookies();
+  const supabase = createRouteHandlerClient({
+    cookies: () => cookieStore
+  });
 
   if (!isMarketOpen()) {
     console.log('Mercato chiuso: skip update.');
