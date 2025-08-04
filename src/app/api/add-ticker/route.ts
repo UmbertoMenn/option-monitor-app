@@ -1,25 +1,12 @@
-import { createServerClient } from '@supabase/ssr';  // Usa questo pacchetto raccomandato
-import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
-import { normalizeExpiry } from '../../../utils/functions';  // Assumi esista, altrimenti implementala
+import { createSupabaseServerClient } from '../../../utils/supabase/server';  // Usa la funzione corretta
+import { normalizeExpiry } from '../../../utils/functions';  // Assumi esista
 
 export const runtime = 'edge';
+export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
-  // Crea client Supabase server-side con cookies (gestione asincrona per fix Promise<ReadonlyRequestCookies>)
-  const cookieStore = await cookies();  // Await per gestire asincronicità in Next.js 15+
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value;  // Solo 'get' per lettura sessione (evita errori su set/delete)
-        },
-        // Ometti 'set' e 'remove' poiché non necessari per getSession/getUser e causano errori su Readonly
-      },
-    }
-  );
+  const supabase = await createSupabaseServerClient();
 
   try {
     // Verifica sessione utente server-side
@@ -49,7 +36,7 @@ export async function POST(req: Request) {
       month -= 12;
       year += 1;
     }
-    const nextExpiry = normalizeExpiry(`${year}-${String(month + 1).padStart(2, '0')}`);  // Uso corretto di normalizeExpiry
+    const nextExpiry = normalizeExpiry(`${year}-${String(month + 1).padStart(2, '0')}`);
 
     // Upsert in 'options' con user_id
     const { error: optionsError } = await supabase.from('options').upsert([
