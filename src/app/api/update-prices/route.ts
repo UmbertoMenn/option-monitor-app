@@ -1,9 +1,12 @@
-// QUESTA ROUTE FETCHA I PREZZI DA POLYGON, AGGIORNA LA TABELLA prices_cache SU SUPABASE, AGGIORNA OPTIONS E VERIFICA GLI ALERT (UNICO JOB)
+import { createServerClient } from '@supabase/ssr';  // Usa questo pacchetto raccomandato
+import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
-import { supabaseClient } from '../../../lib/supabaseClient'; // Adatta il path
 import { LRUCache } from 'lru-cache';
 import { sendTelegramMessage } from '../../../utils/sendTelegram';
 import { getSymbolFromExpiryStrike, isFattibile } from '../../../utils/functions';
+
+export const runtime = 'edge';
+export const dynamic = 'force-dynamic';  // Forza dynamic per job cron-like
 
 const POLYGON_API_KEY = process.env.POLYGON_API_KEY!;
 
@@ -163,14 +166,28 @@ async function fetchExternalPrices(symbols: string[], tickers: string[]): Promis
 
 // Handler (per Vercel Cron, con GET)
 export async function GET() {
+  // Crea client Supabase server-side con cookies (gestione asincrona) - Nota: per cron, potrebbe non avere cookies, ma assumiamo auth globale o skip se non necessario. Per sicurezza, skippo auth qui se è un job.
+  const cookieStore = await cookies();  // Await per gestire asincronicità
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value;  // Solo 'get' per lettura sessione
+        },
+      },
+    }
+  );
+
   if (!isMarketOpen()) {
     console.log('Mercato chiuso: skip update.');
     return NextResponse.json({ success: true, message: 'Market closed' });
   }
 
   try {
-    // Raccogli symbols e tickers
-    const { data: allOptions, error: optionsError } = await supabaseClient.from('options').select('*');
+    // Raccogli symbols e tickers da tutti gli utenti (multi-user)
+    const { data: allOptions, error: optionsError } = await supabase.from('options').select('*');
     if (optionsError) throw optionsError;
 
     const symbols = new Set<string>();
@@ -185,9 +202,9 @@ export async function GET() {
     // Fetch dati
     const { optionsData, spotsData } = await fetchExternalPrices(Array.from(symbols), Array.from(tickers));
 
-    // Upsert in prices_cache
+    // Upsert in prices_cache (globale, senza user_id assumendo)
     for (const [symbol, values] of Object.entries(optionsData) as [string, { bid: number; ask: number; last_trade_price: number }][]) {
-      await supabaseClient.from('prices_cache').upsert({
+      await supabase.from('prices_cache').upsert({
         key: symbol,
         type: 'option',
         bid: values.bid,
@@ -198,7 +215,7 @@ export async function GET() {
     }
 
     for (const [ticker, values] of Object.entries(spotsData) as [string, { price: number; change_percent: number }][]) {
-      await supabaseClient.from('prices_cache').upsert({
+      await supabase.from('prices_cache').upsert({
         key: ticker,
         type: 'spot',
         price: values.price,
@@ -207,14 +224,14 @@ export async function GET() {
       }, { onConflict: 'key' });
     }
 
-    // Aggiorna options con dati freschi
+    // Aggiorna options con dati freschi (per-user)
     for (const item of allOptions) {
       const ticker = item.ticker;
       const spotData = spotsData[ticker] || { price: 0, change_percent: 0 };
       const currentSymbol = getSymbolFromExpiryStrike(ticker, item.expiry, item.strike);
       const currentData = optionsData[currentSymbol] || { bid: 0, ask: 0, last_trade_price: 0 };
 
-      const { error } = await supabaseClient.from('options').update({
+      const { error } = await supabase.from('options').update({
         spot: spotData.price,
         change_percent: spotData.change_percent,
         current_bid: currentData.bid,
@@ -226,12 +243,12 @@ export async function GET() {
       if (error) console.error('Errore update options per ticker:', ticker, 'user:', item.user_id, error);
     }
 
-    // Ricarica options aggiornati
-    const { data: updatedOptionsData, error: reloadError } = await supabaseClient.from('options').select('*');
+    // Ricarica options aggiornati (tutti, per multi-user)
+    const { data: updatedOptionsData, error: reloadError } = await supabase.from('options').select('*');
     if (reloadError) throw reloadError;
 
     // Fetch alerts enabled (multi-user)
-    const { data: alertsData, error: alertsError } = await supabaseClient.from('alerts').select('*');
+    const { data: alertsData, error: alertsError } = await supabase.from('alerts').select('*');
     if (alertsError) throw alertsError;
     const alertsEnabled: AlertsEnabled = alertsData.reduce((acc: AlertsEnabled, { user_id, ticker, enabled }) => {
       if (!acc[user_id]) acc[user_id] = {};
@@ -240,7 +257,7 @@ export async function GET() {
     }, {});
 
     // Fetch sent alerts (multi-user)
-    const { data: sentData, error: sentError } = await supabaseClient.from('alerts_sent').select('*');
+    const { data: sentData, error: sentError } = await supabase.from('alerts_sent').select('*');
     if (sentError) throw sentError;
     const sentAlerts: SentAlerts = sentData.reduce((acc: SentAlerts, { user_id, ticker, level }) => {
       if (!acc[user_id]) acc[user_id] = {};
@@ -277,7 +294,7 @@ export async function GET() {
       if (!tickerSent) userSent[item.ticker] = {};
 
       // Fetch chat_id per l'utente
-      const { data: userProfile, error: profileError } = await supabaseClient.from('profiles').select('telegram_chat_id').eq('id', item.user_id).single();
+      const { data: userProfile, error: profileError } = await supabase.from('profiles').select('telegram_chat_id').eq('id', item.user_id).single();
       if (profileError || !userProfile || !userProfile.telegram_chat_id) {
         console.warn(`No chat_id for user ${item.user_id}, skipping alert for ${item.ticker}`);
         continue;
@@ -294,7 +311,7 @@ export async function GET() {
         const f2Last = pricesGrouped[item.ticker]?.[f2.symbol]?.last_trade_price ?? f2.last_trade_price ?? 0;
         const f2Price = f2Bid > 0 ? f2Bid : f2Last;
         if (currentPrice > 0 && f1Price > 0 && f2Price > 0 && delta < level && !tickerSent[level]) {
-          const { error } = await supabaseClient.from('alerts_sent').insert([{ ticker: item.ticker, level: level.toString(), user_id: item.user_id }]);
+          const { error } = await supabase.from('alerts_sent').insert([{ ticker: item.ticker, level: level.toString(), user_id: item.user_id }]);
           if (error) console.error('Errore insert alert-sent:', error);
           else tickerSent[level] = true;
           const f1Label = f1.label.replace(/C(\d+)/, '$1 CALL');
@@ -315,7 +332,7 @@ export async function GET() {
       const e2Last = pricesGrouped[item.ticker]?.[e2.symbol]?.last_trade_price ?? e2.last_trade_price ?? 0;
       const e2Price = e2Bid > 0 ? e2Bid : e2Last;
       if (currentPrice > 0 && e1Price > 0 && e2Price > 0 && hasFattibileEarlier && !tickerSent['fattibile_high']) {
-        const { error } = await supabaseClient.from('alerts_sent').insert([{ ticker: item.ticker, level: 'fattibile_high', user_id: item.user_id }]);
+        const { error } = await supabase.from('alerts_sent').insert([{ ticker: item.ticker, level: 'fattibile_high', user_id: item.user_id }]);
         if (error) console.error('Errore insert alert-sent:', error);
         else tickerSent['fattibile_high'] = true;
         const e1Label = e1.label.replace(/C(\d+)/, '$1 CALL');

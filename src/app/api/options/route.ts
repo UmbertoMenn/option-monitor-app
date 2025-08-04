@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-import { supabaseClient } from '../../../lib/supabaseClient'; // Adatta il path, usa client condiviso per auth
+import { createServerClient } from '@supabase/ssr';  // Usa questo pacchetto raccomandato
+import { cookies } from 'next/headers';
+import { createClient } from '@supabase/supabase-js';  // Mantenuto se necessario, ma non usato qui
 
 export const runtime = 'edge';
 
@@ -114,13 +115,31 @@ interface OptionData {
 }
 
 export async function GET() {
+  // Crea client Supabase server-side con cookies (gestione asincrona per fix Promise<ReadonlyRequestCookies>)
+  const cookieStore = await cookies();  // Await per gestire asincronicità in Next.js 15+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value;  // Solo 'get' per lettura sessione (evita errori su set/delete)
+        },
+        // Ometti 'set' e 'remove' poiché non necessari per getUser e causano errori su Readonly
+      },
+    }
+  );
+
   try {
-    // Controllo autenticazione utente
-    const { data: { user } } = await supabaseClient.auth.getUser();
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    // Controllo autenticazione utente server-side
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      console.error('Sessione non valida in GET /api/options:', userError);
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
     // Fetch tickers dell'utente da 'options' (invece di 'tickers' globale)
-    const { data: userOptions, error: optionsError } = await supabaseClient.from('options').select('*').eq('user_id', user.id);
+    const { data: userOptions, error: optionsError } = await supabase.from('options').select('*').eq('user_id', user.id);
     if (optionsError || !userOptions) {
       console.error('Errore fetch user options:', optionsError);
       throw new Error('Errore fetch user data');
@@ -248,7 +267,7 @@ export async function GET() {
     }));
 
     // Salva persistente per alert, con user_id
-    const { error: upsertError } = await supabaseClient.from('options').upsert(
+    const { error: upsertError } = await supabase.from('options').upsert(
       output.map((o, index) => ({
         ticker: o.ticker,
         spot: o.spot,

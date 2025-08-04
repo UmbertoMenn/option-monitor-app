@@ -1,26 +1,47 @@
+import { createServerClient } from '@supabase/ssr';  // Usa questo pacchetto raccomandato
+import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
-import { supabaseClient } from '../../../lib/supabaseClient'; // Adatta il path se necessario
 
 export const runtime = 'edge';
+export const dynamic = 'force-dynamic';  // Forza dynamic per auth e fetch
 
 const POLYGON_API_KEY = process.env.POLYGON_API_KEY;
 
 export async function GET(req: Request) {
-  const { data: { user } } = await supabaseClient.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  if (!POLYGON_API_KEY) {
-    console.error('POLYGON_API_KEY not set in environment variables');
-    return NextResponse.json({ error: 'API key missing' }, { status: 500 });
-  }
+  // Crea client Supabase server-side con cookies (gestione asincrona)
+  const cookieStore = await cookies();  // Await per gestire asincronicità
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value;  // Solo 'get' per lettura sessione
+        },
+      },
+    }
+  );
 
   try {
+    // Controllo autenticazione utente server-side
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError || !session) {
+      console.error('Sessione non valida in GET /api/spots:', sessionError);
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const user = session.user;
+
+    if (!POLYGON_API_KEY) {
+      console.error('POLYGON_API_KEY not set in environment variables');
+      return NextResponse.json({ error: 'API key missing' }, { status: 500 });
+    }
+
     const { searchParams } = new URL(req.url);
     const requestedTickers = searchParams.get('tickers')?.split(',') || [];
     if (requestedTickers.length === 0) return NextResponse.json({}, { status: 400 });
 
-    // Fetcha i tickers dell'utente da Supabase per filtrare
-    const { data: userOptions, error: tickError } = await supabaseClient.from('options').select('ticker').eq('user_id', user.id);
+    // Fetch alert tickers dell'utente da Supabase per filtrare
+    const { data: userOptions, error: tickError } = await supabase.from('options').select('ticker').eq('user_id', user.id);
     if (tickError) {
       console.error('[SPOTS-DEBUG-ERROR] Error fetching user tickers:', tickError);
       return NextResponse.json({ error: 'Error fetching user tickers' }, { status: 500 });

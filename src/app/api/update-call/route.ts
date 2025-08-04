@@ -1,12 +1,9 @@
-import { createClient } from '@supabase/supabase-js'
-import { NextResponse } from 'next/server'
+import { createServerClient } from '@supabase/ssr';  // Usa questo pacchetto raccomandato
+import { cookies } from 'next/headers';
+import { NextResponse } from 'next/server';
 
 export const runtime = 'edge';
-
-const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_ANON_KEY!
-)
+export const dynamic = 'force-dynamic';  // Forza dynamic per auth
 
 function getThirdFriday(year: number, month: number): string {
   let count = 0
@@ -33,28 +30,29 @@ function normalizeExpiry(expiry: string): string {
 }
 
 export async function POST(req: Request) {
+  // Crea client Supabase server-side con cookies (gestione asincrona)
+  const cookieStore = await cookies();  // Await per gestire asincronicità
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value;  // Solo 'get' per lettura sessione
+        },
+      },
+    }
+  );
+
   try {
-    // Ottieni il token dall'header per l'autenticazione multi-user
-    const authHeader = req.headers.get('Authorization')
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json(
-        { success: false, error: 'Autenticazione richiesta' },
-        { status: 401 }
-      )
+    // Controllo autenticazione utente server-side
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError || !session) {
+      console.error('Sessione non valida in POST /api/update-call:', sessionError);
+      return NextResponse.json({ success: false, error: 'Autenticazione richiesta' }, { status: 401 });
     }
-
-    const token = authHeader.split('Bearer ')[1]
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token)
-
-    if (authError || !user) {
-      console.error('❌ Errore autenticazione:', authError?.message)
-      return NextResponse.json(
-        { success: false, error: 'Utente non autenticato' },
-        { status: 401 }
-      )
-    }
-
-    const userId = user.id
+    const user = session.user;
+    const userId = user.id;
 
     const body = await req.json()
     const { ticker, strike, expiry, current_bid, current_ask, current_last_trade_price } = body

@@ -1,8 +1,10 @@
+import { createServerClient } from '@supabase/ssr';  // Usa questo pacchetto raccomandato
+import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { LRUCache } from 'lru-cache';
-import { supabaseClient } from '../../../lib/supabaseClient'; // Adatta il path, usa client condiviso per auth
 
 export const runtime = 'edge';
+export const dynamic = 'force-dynamic';  // Forza dynamic per auth e fetch
 
 const POLYGON_API_KEY = process.env.POLYGON_API_KEY!;
 
@@ -16,10 +18,28 @@ interface CacheData {
 const cache = new LRUCache<string, CacheData>({ max: 500, ttl: 1000 * 5 });  // Cache up to 500 items for 5 seconds
 
 export async function GET(req: Request) {
+  // Crea client Supabase server-side con cookies (gestione asincrona)
+  const cookieStore = await cookies();  // Await per gestire asincronicità
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value;  // Solo 'get' per lettura sessione
+        },
+      },
+    }
+  );
+
   try {
-    // Controllo autenticazione utente
-    const { data: { user } } = await supabaseClient.auth.getUser();
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    // Controllo autenticazione utente server-side
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError || !session) {
+      console.error('Sessione non valida in GET /api/full-prices:', sessionError);
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const user = session.user;
 
     const { searchParams } = new URL(req.url);
     const symbolsParam = searchParams.get('symbols');
@@ -32,7 +52,7 @@ export async function GET(req: Request) {
     let symbolList = symbolsParam.split(',');
 
     // Fetch tickers dell'utente per filtro multi-user
-    const { data: userOptions, error: optionsError } = await supabaseClient.from('options').select('ticker').eq('user_id', user.id);
+    const { data: userOptions, error: optionsError } = await supabase.from('options').select('ticker').eq('user_id', user.id);
     if (optionsError) {
       console.error('Errore fetch user options:', optionsError);
       return NextResponse.json({}, { status: 500 });

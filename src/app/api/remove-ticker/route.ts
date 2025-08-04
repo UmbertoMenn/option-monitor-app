@@ -1,13 +1,33 @@
+import { createServerClient } from '@supabase/ssr';  // Usa questo pacchetto raccomandato
+import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
-import { supabaseClient } from '../../../lib/supabaseClient'; // Adatta il path, usa client condiviso per auth
 
 export const runtime = 'edge';
+export const dynamic = 'force-dynamic';  // Forza dynamic per auth
 
 export async function POST(req: Request) {
+  // Crea client Supabase server-side con cookies (gestione asincrona)
+  const cookieStore = await cookies();  // Await per gestire asincronicità
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value;  // Solo 'get' per lettura sessione
+        },
+      },
+    }
+  );
+
   try {
-    // Controllo autenticazione utente
-    const { data: { user } } = await supabaseClient.auth.getUser();
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    // Controllo autenticazione utente server-side
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError || !session) {
+      console.error('Sessione non valida in POST /api/remove-ticker:', sessionError);
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const user = session.user;
 
     const body = await req.json();
     let ticker = body?.ticker?.toUpperCase();
@@ -17,25 +37,25 @@ export async function POST(req: Request) {
     }
 
     // Remove from 'alerts_sent' (child table, filtrato per user)
-    const { error: alertsSentError } = await supabaseClient.from('alerts_sent').delete().eq('ticker', ticker).eq('user_id', user.id);
+    const { error: alertsSentError } = await supabase.from('alerts_sent').delete().eq('ticker', ticker).eq('user_id', user.id);
     if (alertsSentError) {
       throw new Error(`Errore deleting alerts_sent: ${alertsSentError.message}`);
     }
 
     // Remove from 'alerts' (child table, filtrato per user)
-    const { error: alertsError } = await supabaseClient.from('alerts').delete().eq('ticker', ticker).eq('user_id', user.id);
+    const { error: alertsError } = await supabase.from('alerts').delete().eq('ticker', ticker).eq('user_id', user.id);
     if (alertsError) {
       throw new Error(`Errore deleting alerts: ${alertsError.message}`);
     }
 
     // Remove from 'options' (parent table, filtrato per user)
-    const { error: optionsError } = await supabaseClient.from('options').delete().eq('ticker', ticker).eq('user_id', user.id);
+    const { error: optionsError } = await supabase.from('options').delete().eq('ticker', ticker).eq('user_id', user.id);
     if (optionsError) {
       throw new Error(`Errore deleting options: ${optionsError.message}`);
     }
 
     // Remove from 'tickers' (rimane globale, senza user_id)
-    const { error: tickersError } = await supabaseClient.from('tickers').delete().eq('ticker', ticker);
+    const { error: tickersError } = await supabase.from('tickers').delete().eq('ticker', ticker);
     if (tickersError) {
       throw new Error(`Errore deleting tickers: ${tickersError.message}`);
     }

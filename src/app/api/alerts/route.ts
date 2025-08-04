@@ -1,28 +1,92 @@
+import { createServerClient } from '@supabase/ssr';  // Usa questo pacchetto raccomandato
+import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
-import { supabaseClient } from '../../../lib/supabaseClient'; // Adatta path, usa client condiviso per auth
 
 export const runtime = 'edge';
+export const dynamic = 'force-dynamic';  // Forza dynamic rendering per sessioni
 
 export async function GET() {
-  const { data: { user } } = await supabaseClient.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  // Crea client Supabase server-side con cookies (gestione asincrona)
+  const cookieStore = await cookies();  // Await per gestire asincronicità
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value;  // Solo 'get' per lettura sessione
+        },
+      },
+    }
+  );
 
-  const { data, error } = await supabaseClient.from('alerts').select('*').eq('user_id', user.id);
-  if (error) return NextResponse.json({ error }, { status: 500 });
-  return NextResponse.json(data.reduce((acc: Record<string, boolean>, row) => { acc[row.ticker] = row.enabled; return acc; }, {}));
+  try {
+    // Verifica sessione e utente server-side
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError || !session) {
+      console.error('Sessione non valida in GET /api/alerts:', sessionError);
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const user = session.user;
+
+    // Query filtrata per user_id
+    const { data, error } = await supabase.from('alerts').select('*').eq('user_id', user.id);
+    if (error) {
+      console.error('Errore fetch alerts:', error);
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    // Riduci i dati come nel tuo codice originale
+    return NextResponse.json(data.reduce((acc: Record<string, boolean>, row) => { acc[row.ticker] = row.enabled; return acc; }, {}));
+  } catch (err: any) {
+    console.error('Errore imprevisto in GET /api/alerts:', err);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+  }
 }
 
 export async function POST(req: Request) {
-  const { data: { user } } = await supabaseClient.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  // Crea client Supabase server-side con cookies (gestione asincrona)
+  const cookieStore = await cookies();  // Await per gestire asincronicità
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value;  // Solo 'get' per lettura sessione
+        },
+      },
+    }
+  );
 
-  const { ticker, enabled } = await req.json();
-  const { error } = await supabaseClient.from('alerts').upsert({ ticker, enabled, user_id: user.id }, { onConflict: 'ticker,user_id' });
-  if (error) return NextResponse.json({ error }, { status: 500 });
-  if (!enabled) {
-    // Pulisci alert-sent su disable, filtrato per user
-    const { error: deleteErr } = await supabaseClient.from('alerts_sent').delete().eq('ticker', ticker).eq('user_id', user.id);
-    if (deleteErr) console.error('Errore pulizia alert-sent su toggle off:', deleteErr);
+  try {
+    // Verifica sessione e utente server-side
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError || !session) {
+      console.error('Sessione non valida in POST /api/alerts:', sessionError);
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const user = session.user;
+
+    // Leggi body
+    const { ticker, enabled } = await req.json();
+
+    // Upsert filtrato per user_id
+    const { error } = await supabase.from('alerts').upsert({ ticker, enabled, user_id: user.id }, { onConflict: 'ticker,user_id' });
+    if (error) {
+      console.error('Errore upsert alerts:', error);
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    if (!enabled) {
+      // Pulisci alert-sent su disable, filtrato per user_id
+      const { error: deleteErr } = await supabase.from('alerts_sent').delete().eq('ticker', ticker).eq('user_id', user.id);
+      if (deleteErr) console.error('Errore pulizia alert-sent su toggle off:', deleteErr);
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (err: any) {
+    console.error('Errore imprevisto in POST /api/alerts:', err);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
-  return NextResponse.json({ success: true });
 }

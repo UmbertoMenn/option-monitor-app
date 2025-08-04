@@ -1,7 +1,9 @@
+import { createServerClient } from '@supabase/ssr';  // Usa questo pacchetto raccomandato
+import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
-import { supabaseClient } from '../../../lib/supabaseClient'; // Adatta path, usa client condiviso per auth
 
 export const runtime = 'edge';
+export const dynamic = 'force-dynamic';  // Forza dynamic per auth
 
 const POLYGON_API_KEY = process.env.POLYGON_API_KEY!;
 const CONTRACTS_URL = 'https://api.polygon.io/v3/reference/options/contracts';
@@ -35,17 +37,35 @@ async function fetchFullChain(ticker: string): Promise<any[]> {
 }
 
 export async function GET(req: Request) {
+  // Crea client Supabase server-side con cookies (gestione asincrona)
+  const cookieStore = await cookies();  // Await per gestire asincronicità
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value;  // Solo 'get' per lettura sessione
+        },
+      },
+    }
+  );
+
   try {
-    // Controllo autenticazione utente
-    const { data: { user } } = await supabaseClient.auth.getUser();
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    // Controllo autenticazione utente server-side
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError || !session) {
+      console.error('Sessione non valida in GET /api/chain:', sessionError);
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const user = session.user;
 
     const { searchParams } = new URL(req.url);
     const ticker = searchParams.get('ticker')?.toUpperCase();
     if (!ticker) return NextResponse.json({ error: 'Missing ticker' }, { status: 400 });
 
     // Verifica se il ticker appartiene all'utente
-    const { data: userTickers, error: tickError } = await supabaseClient.from('options').select('ticker').eq('ticker', ticker).eq('user_id', user.id);
+    const { data: userTickers, error: tickError } = await supabase.from('options').select('ticker').eq('ticker', ticker).eq('user_id', user.id);
     if (tickError || !userTickers || userTickers.length === 0) {
       console.error(`Ticker ${ticker} not found for user ${user.id}`);
       return NextResponse.json({ error: 'Ticker not found for user' }, { status: 404 });
