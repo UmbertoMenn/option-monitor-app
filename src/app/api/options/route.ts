@@ -3,7 +3,7 @@ import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import type { Database } from '../../../types/supabase';  // Importa tipi generati per tipizzare upsert
 
-export const runtime = 'edge';
+export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const POLYGON_API_KEY = process.env.POLYGON_API_KEY!;

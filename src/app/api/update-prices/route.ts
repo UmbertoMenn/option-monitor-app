@@ -5,7 +5,7 @@ import { LRUCache } from 'lru-cache';
 import { sendTelegramMessage } from '../../../utils/sendTelegram';
 import { getSymbolFromExpiryStrike, isFattibile } from '../../../utils/functions';
 
-export const runtime = 'edge';
+export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';  // Forza dynamic per job cron-like
 
 const POLYGON_API_KEY = process.env.POLYGON_API_KEY!;
