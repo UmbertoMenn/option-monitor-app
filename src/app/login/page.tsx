@@ -17,6 +17,9 @@ export default function Login() {
         setError(error.message);
         console.error('Login error:', error);
       } else {
+        // Refresh sessione per sync cookies dopo login
+        await supabaseClient.auth.refreshSession();
+        console.log('Sessione refreshed dopo login:', data.session); // Log per debug
         console.log('Login successful, redirecting to /');
         router.push('/');
       }
