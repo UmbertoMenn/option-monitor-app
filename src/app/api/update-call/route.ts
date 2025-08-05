@@ -1,4 +1,5 @@
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';  // Usa helper coerente con middleware
+// src/app/api/update-call/route.ts
+import { createClient } from '../../../utils/supabase/server';  // Path che funziona
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 
@@ -30,17 +31,24 @@ function normalizeExpiry(expiry: string): string {
 }
 
 export async function POST(req: Request) {
-  const cookieStore = cookies();
-  const supabase = createRouteHandlerClient({
-    cookies: () => cookieStore
-  });
+  const supabase = await createClient();  // Crea client
+
+  // Log cookies per debug
+  const cookieStore = await cookies();
+  console.log('Update-Call Route: Cookies:', cookieStore.getAll());
 
   try {
-    // Controllo autenticazione utente server-side
+    // Controllo sessione
     const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+    // Log sessione
+    console.log('Update-Call Route: Sessione:', session ? 'Valida (user: ' + session.user.id + ')' : 'Null');
+    console.log('Update-Call Route: Session Error:', sessionError ? sessionError.message : 'No error');
+    console.log('Update-Call Route: Access Token:', session?.access_token || 'Null');
+
     if (sessionError || !session) {
-      console.error('Sessione non valida in POST /api/update-call:', sessionError);
-      return NextResponse.json({ success: false, error: 'Autenticazione richiesta' }, { status: 401 });
+      console.error('Sessione non valida in POST /api/update-call:', sessionError?.message || 'No error');
+      return NextResponse.json({ success: false, error: 'Autenticazione richiesta', details: sessionError?.message || 'No details' }, { status: 401 });
     }
     const user = session.user;
     const userId = user.id;
@@ -82,19 +90,19 @@ export async function POST(req: Request) {
 
     if (error) {
       console.error('❌ Errore Supabase UPSERT:', error.message)
-      return NextResponse.json({ success: false }, { status: 500 })
+      return NextResponse.json({ success: false, error: 'Errore upsert options', details: error.message }, { status: 500 })
     }
 
     // Pulisci alert-sent su update call, filtrando per user_id
     const { error: deleteErr } = await supabase.from('alerts_sent').delete()
       .eq('user_id', userId)
       .eq('ticker', ticker)
-    if (deleteErr) console.error('Errore pulizia alert-sent su update-call:', deleteErr)
+    if (deleteErr) console.error('Errore pulizia alert-sent su update-call:', deleteErr.message)
 
     console.log('✅ Riga aggiornata su Supabase per utente:', userId)
     return NextResponse.json({ success: true })
   } catch (err: any) {
     console.error('❌ Errore route update-call:', err.message)
-    return NextResponse.json({ success: false }, { status: 500 })
+    return NextResponse.json({ success: false, error: 'Errore interno', details: err.message }, { status: 500 })
   }
 }

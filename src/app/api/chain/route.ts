@@ -1,4 +1,5 @@
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';  // Usa helper coerente con middleware
+// src/app/api/chain/route.ts
+import { createClient } from '../../../utils/supabase/server';  // Adatta path se necessario (es. '../../../utils/supabase/server')
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 
@@ -37,17 +38,24 @@ async function fetchFullChain(ticker: string): Promise<any[]> {
 }
 
 export async function GET(req: Request) {
-  const cookieStore = cookies();
-  const supabase = createRouteHandlerClient({
-    cookies: () => cookieStore
-  });
+  const supabase = await createClient();  // Crea client
+
+  // Log cookies per debug
+  const cookieStore = await cookies();
+  console.log('Chain Route: Cookies:', cookieStore.getAll());
 
   try {
-    // Controllo autenticazione utente server-side
+    // Controllo sessione
     const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+    // Log sessione
+    console.log('Chain Route: Sessione:', session ? 'Valida (user: ' + session.user.id + ')' : 'Null');
+    console.log('Chain Route: Session Error:', sessionError ? sessionError.message : 'No error');
+    console.log('Chain Route: Access Token:', session?.access_token || 'Null');
+
     if (sessionError || !session) {
-      console.error('Sessione non valida in GET /api/chain:', sessionError);
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      console.error('Sessione non valida in GET /api/chain:', sessionError?.message || 'No error');
+      return NextResponse.json({ error: 'Unauthorized', details: sessionError?.message || 'No details' }, { status: 401 });
     }
     const user = session.user;
 
@@ -55,7 +63,7 @@ export async function GET(req: Request) {
     const ticker = searchParams.get('ticker')?.toUpperCase();
     if (!ticker) return NextResponse.json({ error: 'Missing ticker' }, { status: 400 });
 
-    // Verifica se il ticker appartiene all'utente
+    // Verifica se il ticker appartiene all'utente (filtro multi-user da 'options')
     const { data: userTickers, error: tickError } = await supabase.from('options').select('ticker').eq('ticker', ticker).eq('user_id', user.id);
     if (tickError || !userTickers || userTickers.length === 0) {
       console.error(`Ticker ${ticker} not found for user ${user.id}`);

@@ -1,7 +1,8 @@
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';  // Usa helper coerente con middleware
+// src/app/api/options/route.ts
+import { createClient } from '../../../utils/supabase/server';  // Adatta path se necessario
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
-import type { Database } from '../../../types/supabase';  // Importa tipi generati per tipizzare upsert
+import type { Database } from '../../../types/supabase';  // Import tipi per upsert
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -114,25 +115,32 @@ interface OptionData {
 }
 
 export async function GET() {
-  const cookieStore = cookies();
-  const supabase = createRouteHandlerClient<Database>({
-    cookies: () => cookieStore
-  });
+  const supabase = await createClient();  // Crea client
+
+  // Log cookies per debug
+  const cookieStore = await cookies();
+  console.log('Options Route: Cookies:', cookieStore.getAll());
 
   try {
-    // Controllo autenticazione utente server-side
+    // Controllo sessione
     const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+    // Log sessione
+    console.log('Options Route: Sessione:', session ? 'Valida (user: ' + session.user.id + ')' : 'Null');
+    console.log('Options Route: Session Error:', sessionError ? sessionError.message : 'No error');
+    console.log('Options Route: Access Token:', session?.access_token || 'Null');
+
     if (sessionError || !session) {
-      console.error('Sessione non valida in GET /api/options:', sessionError);
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      console.error('Sessione non valida in GET /api/options:', sessionError?.message || 'No error');
+      return NextResponse.json({ error: 'Unauthorized', details: sessionError?.message || 'No details' }, { status: 401 });
     }
     const user = session.user;
 
-    // Fetch tickers dell'utente da 'options' (invece di 'tickers' globale)
+    // Fetch tickers dell'utente da 'options' (filtrata per user_id)
     const { data: userOptions, error: optionsError } = await supabase.from('options').select('*').eq('user_id', user.id);
     if (optionsError || !userOptions) {
-      console.error('Errore fetch user options:', optionsError);
-      throw new Error('Errore fetch user data');
+      console.error('Errore fetch user options:', optionsError?.message);
+      return NextResponse.json({ error: 'Errore fetch user data' }, { status: 500 });
     }
 
     const output: OptionData[] = [];

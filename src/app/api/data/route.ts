@@ -1,4 +1,5 @@
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';  // Usa helper coerente con middleware
+// src/app/api/data/route.ts
+import { createClient } from '../../../utils/supabase/server';  // Adatta path se necessario (es. '../../../utils/supabase/server')
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { LRUCache } from 'lru-cache';
@@ -18,17 +19,24 @@ interface CacheData {
 const cache = new LRUCache<string, CacheData>({ max: 500, ttl: 1000 * 5 });  // Cache up to 500 items for 5 seconds
 
 export async function GET(req: Request) {
-  const cookieStore = cookies();
-  const supabase = createRouteHandlerClient({
-    cookies: () => cookieStore
-  });
+  const supabase = await createClient();  // Crea client
+
+  // Log cookies per debug
+  const cookieStore = await cookies();
+  console.log('Data Route: Cookies:', cookieStore.getAll());
 
   try {
-    // Controllo autenticazione utente server-side
+    // Controllo sessione
     const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+    // Log sessione
+    console.log('Data Route: Sessione:', session ? 'Valida (user: ' + session.user.id + ')' : 'Null');
+    console.log('Data Route: Session Error:', sessionError ? sessionError.message : 'No error');
+    console.log('Data Route: Access Token:', session?.access_token || 'Null');
+
     if (sessionError || !session) {
-      console.error('Sessione non valida in GET /api/data:', sessionError);
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      console.error('Sessione non valida in GET /api/data:', sessionError?.message || 'No error');
+      return NextResponse.json({ prices: {}, spots: {} }, { status: 401 });
     }
     const user = session.user;
 
@@ -43,11 +51,11 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Missing symbols or tickers' }, { status: 400 });
     }
 
-    // Fetch tickers dell'utente per filtro multi-user
+    // Fetch tickers dell'utente per filtro multi-user da 'options'
     const { data: userOptions, error: optionsError } = await supabase.from('options').select('ticker').eq('user_id', user.id);
     if (optionsError) {
-      console.error('Errore fetch user options:', optionsError);
-      return NextResponse.json({ error: 'Error fetching user data' }, { status: 500 });
+      console.error('Errore fetch user options:', optionsError.message);
+      return NextResponse.json({ prices: {}, spots: {} }, { status: 500 });
     }
     const userTickers = userOptions.map(o => o.ticker);
 
