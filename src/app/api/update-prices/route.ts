@@ -270,24 +270,24 @@ export async function GET() {
     const { data: alertsData, error: alertsError } = await supabase.from('alerts').select('*');
     if (alertsError) throw alertsError;
     const alertsEnabled: AlertsEnabled = alertsData.reduce((acc, { user_id, ticker, enabled }) => {
-      if (user_id && ticker) {
+      if (user_id && ticker && enabled !== null) {  // Fix: Aggiunto check per enabled !== null
         acc[user_id] = acc[user_id] || {};
         acc[user_id][ticker] = enabled;
       }
       return acc;
-    }, {});
+    }, {} as AlertsEnabled);
 
     // Fetch sent alerts
     const { data: sentData, error: sentError } = await supabase.from('alerts_sent').select('*');
     if (sentError) throw sentError;
     const sentAlerts: SentAlerts = sentData.reduce((acc, { user_id, ticker, level }) => {
-      if (user_id && ticker) {
+      if (user_id && ticker && level) {  // Fix: Aggiunto check per level (non null e truthy)
         acc[user_id] = acc[user_id] || {};
         acc[user_id][ticker] = acc[user_id][ticker] || {};
         acc[user_id][ticker][level] = true;
       }
       return acc;
-    }, {});
+    }, {} as SentAlerts);
 
     // pricesGrouped for isFattibile
     const pricesGrouped: PricesData = {};
