@@ -24,8 +24,13 @@ function formatExpiryLabel(dateStr: string): string {
 }
 
 function normalizeExpiry(expiry: string | null): string {
-  if (!expiry || expiry.length !== 7) return '';  // Guardia per null o formato invalido
-  const [year, month] = expiry.split('-').map(Number);
+  if (!expiry) return '';  // Guardia per null o undefined
+  let yearMonth = expiry;
+  if (expiry.length === 10) {
+    yearMonth = expiry.slice(0, 7);  // Estrae 'YYYY-MM' da 'YYYY-MM-DD'
+  }
+  if (yearMonth.length !== 7) return '';  // Guardia per formato invalido
+  const [year, month] = yearMonth.split('-').map(Number);
   return getThirdFriday(year, month).toISOString().split('T')[0];
 }
 
@@ -166,6 +171,7 @@ export async function GET() {
       }
 
       const CURRENT_EXPIRY = normalizeExpiry(saved.expiry);
+      console.log(`CURRENT_EXPIRY per ${ticker}:`, CURRENT_EXPIRY); // Log aggiunto per debug normalization
       const CURRENT_STRIKE = saved.strike;
 
       const contracts = await fetchContracts(ticker);
