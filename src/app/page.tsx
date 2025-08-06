@@ -1396,7 +1396,6 @@ export default function Page(): JSX.Element {
   }, [user, tickers, fetchChain]);
 
 
-  // 5. Polling dei Prezzi (dipende dai Dati e dall'Orario di Mercato)
   useEffect(() => {
     if (!user || data.length === 0) return;
 
@@ -1406,23 +1405,42 @@ export default function Page(): JSX.Element {
       if (isMarketOpen() && isMounted) {
         console.log('✅ Market is open, fetching prices...');
         fetchPrices();
+      } else if (isMounted) {
+        console.log('❌ Market is closed, using fallback last_trade_price without polling.');
+        setData((prev) =>
+          prev.map((item) => ({
+            ...item,
+            current_bid: item.current_last_trade_price,
+            current_ask: item.current_last_trade_price,
+            earlier: item.earlier.map((opt) => ({
+              ...opt,
+              bid: opt.last_trade_price,
+              ask: opt.last_trade_price,
+            })),
+            future: item.future.map((opt) => ({
+              ...opt,
+              bid: opt.last_trade_price,
+              ask: opt.last_trade_price,
+            })),
+          }))
+        );
       }
-    }
+    };
 
-    // Esegui subito se il mercato è aperto
+    // Esegui subito per aggiornare i dati all'avvio
+    executeFetchPrices();
+
+    // Imposta intervallo solo se il mercato è aperto
+    let interval: NodeJS.Timeout | null = null;
     if (isMarketOpen()) {
-      executeFetchPrices();
+      interval = setInterval(executeFetchPrices, 5000);
     }
-
-    // Imposta intervallo (Aumentato a 15 secondi per ridurre carico API rispetto ai 5s originali)
-    const interval = setInterval(executeFetchPrices, 15000);
 
     return () => {
       isMounted = false;
-      clearInterval(interval);
+      if (interval) clearInterval(interval);
     };
   }, [user, data, fetchPrices]);
-
 
   // Definizione isFattibile (Memoizzata)
   const isFattibile = useCallback((opt: OptionEntry, item: OptionData) => {
