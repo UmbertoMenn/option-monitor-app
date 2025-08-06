@@ -208,6 +208,8 @@ const MemoizedTickerCard = React.memo((props: TickerCardProps) => {
   const changeColor = change_percent >= 0 ? 'text-green-300' : 'text-red-300';
   const changeSign = change_percent >= 0 ? '+' : '';
 
+  console.log(`Ticker: ${item.ticker}, Expiry: ${item.expiry}, Item:`, item);
+
   return (
     <div className="bg-zinc-900 border border-red-500 shadow-md rounded-lg p-3">
       <div className="flex justify-between items-center mb-1">
@@ -712,7 +714,8 @@ export default function Page(): JSX.Element {
     try {
       const res = await authenticatedFetch('/api/options')
       if (res.ok) {
-        const json = await res.json()
+        const json = await res.json();
+        console.log('Response raw da /api/options:', json); // Log aggiunto per debug
         if (Array.isArray(json)) setData(json)
       } else if (res.status !== 401) {
         console.error('Errore fetch /api/options:', res.status);
@@ -1332,7 +1335,7 @@ export default function Page(): JSX.Element {
 
   // --- EFFECTS ---
 
-// 1. Gestione Autenticazione e Sessione (Migliorato con Loading State)
+  // 1. Gestione Autenticazione e Sessione (Migliorato con Loading State)
   useEffect(() => {
     let isMounted = true;
     const checkSession = async () => {

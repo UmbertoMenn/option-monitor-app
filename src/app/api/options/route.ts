@@ -115,6 +115,7 @@ interface OptionData {
 }
 
 export async function GET() {
+  console.log('*** /api/options GET chiamata ***'); // Log iniziale per confermare esecuzione
   const supabase = await createClient();  // Crea client
 
   // Log cookies per debug
@@ -138,6 +139,7 @@ export async function GET() {
 
     // Fetch tickers dell'utente da 'options' (filtrata per user_id)
     const { data: userOptions, error: optionsError } = await supabase.from('options').select('*').eq('user_id', user.id);
+    console.log('User Options raw da Supabase:', userOptions, 'Error:', optionsError); // Log aggiunto per debug
     if (optionsError || !userOptions) {
       console.error('Errore fetch user options:', optionsError?.message);
       return NextResponse.json({ error: 'Errore fetch user data' }, { status: 500 });
