@@ -31,11 +31,12 @@ const authenticatedFetch = async (url: string, options: RequestInit = {}) => {
       }
     }
 
-    // 3. Esegui la fetch
+    console.log('[AUTH-FETCH] Calling', url, 'at', new Date().toISOString());
     return fetch(url, {
       ...options,
       headers,
-    });
+    });   
+    
   } catch (err) {
     console.error('Errore durante authenticatedFetch:', err);
     // Gestisci errori imprevisti durante la preparazione della fetch
