@@ -299,8 +299,8 @@ export async function GET() {
       current_bid: o.current_bid ?? 0,
       current_ask: o.current_ask ?? 0,
       current_last_trade_price: o.current_last_trade_price ?? 0,
-      earlier: JSON.stringify(o.earlier),  // Serializza come JSON string
-      future: JSON.stringify(o.future),    // Serializza come JSON string
+      earlier: JSON.stringify(o.earlier),  // Serializa come JSON string
+      future: JSON.stringify(o.future),    // Serializa come JSON string
       created_at: new Date().toISOString(),
       user_id: user.id
     }));
