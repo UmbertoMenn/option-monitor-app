@@ -1537,55 +1537,55 @@ export default function Page(): JSX.Element {
     fetchAlerts();
   }, [user, fetchTickers, fetchData, fetchAlerts]);
 
-  useEffect(() => {
-    if (!user || data.length === 0) return;
+useEffect(() => {
+  if (!user || data.length === 0) return;
 
-    let isMounted = true;
-    const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  let isMounted = true;
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
-    // Esegui fallback se mercato chiuso solo all'init
-    if (!isMarketOpen() && isMounted) {
-      console.log('❌ Market is closed, using fallback last_trade_price without polling.');
-      setData((prev) =>
-        prev.map((item) => ({
-          ...item,
-          current_bid: item.current_last_trade_price,
-          current_ask: item.current_last_trade_price,
-          earlier: item.earlier.map((opt) => ({
-            ...opt,
-            bid: opt.last_trade_price,
-            ask: opt.last_trade_price,
-          })),
-          future: item.future.map((opt) => ({
-            ...opt,
-            bid: opt.last_trade_price,
-            ask: opt.last_trade_price,
-          })),
-        }))
-      );
+  // Esegui fallback se mercato chiuso solo all'init
+  if (!isMarketOpen() && isMounted) {
+    console.log('❌ Market is closed, using fallback last_trade_price without polling.');
+    setData((prev) =>
+      prev.map((item) => ({
+        ...item,
+        current_bid: item.current_last_trade_price,
+        current_ask: item.current_last_trade_price,
+        earlier: item.earlier.map((opt) => ({
+          ...opt,
+          bid: opt.last_trade_price,
+          ask: opt.last_trade_price,
+        })),
+        future: item.future.map((opt) => ({
+          ...opt,
+          bid: opt.last_trade_price,
+          ask: opt.last_trade_price,
+        })),
+      }))
+    );
+  }
+
+  // Funzione per fetch prices (solo se aperto)
+  const executeFetchPrices = () => {
+    if (isMarketOpen() && isMounted) {
+      console.log('[PRICES] Execute fetch at', new Date().toISOString());
+      fetchPrices();
     }
+  };
 
-    // Funzione per fetch prices (solo se aperto)
-    const executeFetchPrices = () => {
-      if (isMarketOpen() && isMounted) {
-        console.log('[PRICES] Execute fetch at', new Date().toISOString());
-        fetchPrices();
-      }
-    };
+  // Esegui subito
+  executeFetchPrices();
 
-    // Esegui subito
-    executeFetchPrices();
+  // Imposta interval solo se aperto
+  if (isMarketOpen()) {
+    intervalRef.current = setInterval(executeFetchPrices, 5000);
+  }
 
-    // Imposta interval solo se aperto
-    if (isMarketOpen()) {
-      intervalRef.current = setInterval(executeFetchPrices, 5000);
-    }
-
-    return () => {
-      isMounted = false;
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }, [user, fetchPrices]); // Solo user e fetchPrices, no data per evitare loop
+  return () => {
+    isMounted = false;
+    if (intervalRef.current) clearInterval(intervalRef.current);
+  };
+}, [user, fetchPrices]); // Solo user e fetchPrices, no data per evitare loop
 
   // Definizione isFattibile (Memoizzata)
   const isFattibile = useCallback((opt: OptionEntry, item: OptionData) => {
