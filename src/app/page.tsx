@@ -35,8 +35,8 @@ const authenticatedFetch = async (url: string, options: RequestInit = {}) => {
     return fetch(url, {
       ...options,
       headers,
-    });   
-    
+    });
+
   } catch (err) {
     console.error('Errore durante authenticatedFetch:', err);
     // Gestisci errori imprevisti durante la preparazione della fetch
@@ -1539,21 +1539,15 @@ export default function Page(): JSX.Element {
     fetchAlerts();
   }, [user, fetchTickers, debouncedFetchData, fetchAlerts]);
 
-  // 4. Fetch della Chain (dipende dai Tickers)
-  useEffect(() => {
-    if (!user || tickers.length === 0) return;
-    fetchChain();
-  }, [user, tickers, fetchChain]);
-
-
   useEffect(() => {
     if (!user || data.length === 0) return;
 
     let isMounted = true;
+    const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
     const executeFetchPrices = () => {
+      console.log('[PRICES] Execute fetch at', new Date().toISOString());
       if (isMarketOpen() && isMounted) {
-        console.log('✅ Market is open, fetching prices...');
         fetchPrices();
       } else if (isMounted) {
         console.log('❌ Market is closed, using fallback last_trade_price without polling.');
@@ -1581,16 +1575,15 @@ export default function Page(): JSX.Element {
     executeFetchPrices();
 
     // Imposta intervallo solo se il mercato è aperto
-    let interval: NodeJS.Timeout | null = null;
     if (isMarketOpen()) {
-      interval = setInterval(executeFetchPrices, 5000);
+      intervalRef.current = setInterval(executeFetchPrices, 5000);
     }
 
     return () => {
       isMounted = false;
-      if (interval) clearInterval(interval);
+      if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [user, data, fetchPrices]);
+  }, [user, fetchPrices]); // Rimossa 'data' dalle dipendenze per evitare loop su setData
 
   // Definizione isFattibile (Memoizzata)
   const isFattibile = useCallback((opt: OptionEntry, item: OptionData) => {
