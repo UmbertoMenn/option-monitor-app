@@ -1543,36 +1543,40 @@ export default function Page(): JSX.Element {
     let isMounted = true;
     const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
+    // Esegui fallback se mercato chiuso solo all'init
+    if (!isMarketOpen() && isMounted) {
+      console.log('❌ Market is closed, using fallback last_trade_price without polling.');
+      setData((prev) =>
+        prev.map((item) => ({
+          ...item,
+          current_bid: item.current_last_trade_price,
+          current_ask: item.current_last_trade_price,
+          earlier: item.earlier.map((opt) => ({
+            ...opt,
+            bid: opt.last_trade_price,
+            ask: opt.last_trade_price,
+          })),
+          future: item.future.map((opt) => ({
+            ...opt,
+            bid: opt.last_trade_price,
+            ask: opt.last_trade_price,
+          })),
+        }))
+      );
+    }
+
+    // Funzione per fetch prices (solo se aperto)
     const executeFetchPrices = () => {
-      console.log('[PRICES] Execute fetch at', new Date().toISOString());
       if (isMarketOpen() && isMounted) {
+        console.log('[PRICES] Execute fetch at', new Date().toISOString());
         fetchPrices();
-      } else if (isMounted) {
-        console.log('❌ Market is closed, using fallback last_trade_price without polling.');
-        setData((prev) =>
-          prev.map((item) => ({
-            ...item,
-            current_bid: item.current_last_trade_price,
-            current_ask: item.current_last_trade_price,
-            earlier: item.earlier.map((opt) => ({
-              ...opt,
-              bid: opt.last_trade_price,
-              ask: opt.last_trade_price,
-            })),
-            future: item.future.map((opt) => ({
-              ...opt,
-              bid: opt.last_trade_price,
-              ask: opt.last_trade_price,
-            })),
-          }))
-        );
       }
     };
 
-    // Esegui subito per aggiornare i dati all'avvio
+    // Esegui subito
     executeFetchPrices();
 
-    // Imposta intervallo solo se il mercato è aperto
+    // Imposta interval solo se aperto
     if (isMarketOpen()) {
       intervalRef.current = setInterval(executeFetchPrices, 5000);
     }
@@ -1581,7 +1585,7 @@ export default function Page(): JSX.Element {
       isMounted = false;
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [user, fetchPrices]); // Rimossa 'data' dalle dipendenze per evitare loop su setData
+  }, [user, fetchPrices]); // Solo user e fetchPrices, no data per evitare loop
 
   // Definizione isFattibile (Memoizzata)
   const isFattibile = useCallback((opt: OptionEntry, item: OptionData) => {
