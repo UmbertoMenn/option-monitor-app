@@ -99,9 +99,46 @@ function getThirdFriday(year: number, monthIndex: number): string {
 
 
 function isMarketOpen(): boolean {
-     console.log('🔧 Forcing isMarketOpen to return true for testing');
-     return true;
-   }
+  try {
+    const now = new Date();
+
+    const options: Intl.DateTimeFormatOptions = {
+      timeZone: 'America/New_York', // Fuso orario di riferimento per i mercati USA
+      weekday: 'long',
+      hour: 'numeric',
+      hour12: false,
+    };
+
+    const formatter = new Intl.DateTimeFormat('en-US', options);
+    const parts = formatter.formatToParts(now);
+
+    let day = '';
+    let hour = -1;
+
+    for (const part of parts) {
+      if (part.type === 'weekday') day = part.value;
+      // Gestione robusta dell'ora, considerando che '24' può essere restituito
+      if (part.type === 'hour') hour = part.value === '24' ? 0 : parseInt(part.value, 10);
+    }
+
+    if (day === '' || hour === -1) return false;
+
+    // Controlla se è un giorno feriale
+    const weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+    const isWeekday = weekdays.includes(day);
+
+    // Controlla se l'ora rientra nel pre-market e nella sessione regolare (4:00 AM - 4:00 PM ET)
+    // hour < 16 significa "fino alle 15:59"
+    const isMarketHours = hour >= 4 && hour < 16;
+
+    return isWeekday && isMarketHours;
+
+  } catch (error) {
+    console.error("Errore nel determinare l'orario di mercato:", error);
+    return false; // In caso di errore, meglio non fare chiamate API
+  }
+}
+
 type PricesType = Record<string, Record<string, { bid: number; ask: number; last_trade_price: number; symbol: string }>>;
 
 // Definizione dei Props per MemoizedTickerCard
