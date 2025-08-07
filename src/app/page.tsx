@@ -1537,7 +1537,7 @@ export default function Page(): JSX.Element {
     fetchAlerts();
   }, [user, fetchTickers, fetchData, fetchAlerts]);
 
-/*   useEffect(() => {
+  useEffect(() => {
     if (!user || data.length === 0) return;
 
     let isMounted = true;
@@ -1582,7 +1582,7 @@ export default function Page(): JSX.Element {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, [user, fetchPrices]); // Rimossa 'data' dalle dipendenze per evitare loop su setData
- */
+
   // Definizione isFattibile (Memoizzata)
   const isFattibile = useCallback((opt: OptionEntry, item: OptionData) => {
     const tickerPrices = prices[item.ticker] || {}
