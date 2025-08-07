@@ -825,7 +825,6 @@ export default function Page(): JSX.Element {
   }, [data]);
   // ***************************************
 
-  // Funzione per spostare la scadenza (usata nei bottoni ◀️ ▶️)
   const shiftExpiryByMonth = useCallback((ticker: string, opt: OptionEntry, direction: 'next' | 'prev', type: 'future' | 'earlier'): OptionEntry | null => {
     const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC'];
     const tickerChain = chain[ticker] || {};
@@ -847,7 +846,7 @@ export default function Page(): JSX.Element {
       console.warn(`⚠️ shiftExpiryByMonth: Opzione inesistente o chain vuota per ${ticker}, fallback diretto a current call ${currentExpiry} C${currentStrike}`);
       const symbol = getSymbolFromExpiryStrike(ticker, currentExpiry, currentStrike);
       const optPrices = prices[ticker]?.[symbol] ?? { bid: currentItem.current_bid, ask: currentItem.current_ask, last_trade_price: currentItem.current_last_trade_price };
-      return {
+      const newOption = {
         label: `${monthNames[Number(currentExpiry.split('-')[1]) - 1]} ${currentExpiry.split('-')[0].slice(2)} C${currentStrike}`,
         symbol,
         expiry: currentExpiry,
@@ -856,6 +855,45 @@ export default function Page(): JSX.Element {
         ask: optPrices.ask,
         last_trade_price: optPrices.last_trade_price,
       };
+
+      // Salva su Supabase
+      const saveNewState = async () => {
+        try {
+          const updatedItem = {
+            ...currentItem,
+            [type]: currentItem[type].map((o: OptionEntry, index: number) =>
+              index === (opt.label === currentItem[type][0].label ? 0 : 1) ? newOption : o
+            ),
+          };
+          const res = await authenticatedFetch('/api/save-state', {
+            method: 'POST',
+            body: JSON.stringify({
+              ticker,
+              future: updatedItem.future,
+              earlier: updatedItem.earlier,
+            }),
+          });
+
+          if (!res.ok) {
+            console.error('Errore salvataggio shift su Supabase:', res.status);
+          } else {
+            console.log('Salvato shift su Supabase per', ticker);
+          }
+        } catch (err) {
+          console.error('Eccezione salvataggio shift:', err);
+        }
+      };
+      saveNewState();
+
+      // Aggiorna stato locale
+      setData(prev => prev.map(d => d.ticker === ticker ? {
+        ...d,
+        [type]: d[type].map((o: OptionEntry, index: number) =>
+          index === (opt.label === d[type][0].label ? 0 : 1) ? newOption : o
+        ),
+      } : d));
+
+      return newOption;
     }
 
     const [yearStr, monthStr] = targetExpiry.split('-');
@@ -912,9 +950,7 @@ export default function Page(): JSX.Element {
       const expiry = getThirdFriday(year, monthIdx);
       const symbol = getSymbolFromExpiryStrike(ticker, expiry, targetStrikeNew);
       const optPrices = prices[ticker]?.[symbol] ?? { bid: 0, ask: 0, last_trade_price: 0 };
-
-      console.log(`✅ shiftExpiryByMonth: Trovata opzione valida ${monthName} ${year} C${targetStrikeNew} per ${ticker}`);
-      return {
+      const newOption = {
         label: `${monthName} ${String(year).slice(2)} C${targetStrikeNew}`,
         symbol,
         expiry,
@@ -923,13 +959,54 @@ export default function Page(): JSX.Element {
         ask: optPrices.ask,
         last_trade_price: optPrices.last_trade_price,
       };
+
+      console.log(`✅ shiftExpiryByMonth: Trovata opzione valida ${monthName} ${year} C${targetStrikeNew} per ${ticker}`);
+
+      // Salva su Supabase
+      const saveNewState = async () => {
+        try {
+          const updatedItem = {
+            ...currentItem,
+            [type]: currentItem[type].map((o: OptionEntry, index: number) =>
+              index === (opt.label === currentItem[type][0].label ? 0 : 1) ? newOption : o
+            ),
+          };
+          const res = await authenticatedFetch('/api/save-state', {
+            method: 'POST',
+            body: JSON.stringify({
+              ticker,
+              future: updatedItem.future,
+              earlier: updatedItem.earlier,
+            }),
+          });
+
+          if (!res.ok) {
+            console.error('Errore salvataggio shift su Supabase:', res.status);
+          } else {
+            console.log('Salvato shift su Supabase per', ticker);
+          }
+        } catch (err) {
+          console.error('Eccezione salvataggio shift:', err);
+        }
+      };
+      saveNewState();
+
+      // Aggiorna stato locale
+      setData(prev => prev.map(d => d.ticker === ticker ? {
+        ...d,
+        [type]: d[type].map((o: OptionEntry, index: number) =>
+          index === (opt.label === d[type][0].label ? 0 : 1) ? newOption : o
+        ),
+      } : d));
+
+      return newOption;
     }
 
     // Fallback finale a current call se niente trovato
     console.warn(`⚠️ shiftExpiryByMonth: Nessuna scadenza ${direction} trovata per ${ticker}, fallback a current call`);
     const symbol = getSymbolFromExpiryStrike(ticker, currentExpiry, currentStrike);
     const optPrices = prices[ticker]?.[symbol] ?? { bid: currentItem.current_bid, ask: currentItem.current_ask, last_trade_price: currentItem.current_last_trade_price };
-    return {
+    const newOption = {
       label: `${monthNames[Number(currentExpiry.split('-')[1]) - 1]} ${currentExpiry.split('-')[0].slice(2)} C${currentStrike}`,
       symbol,
       expiry: currentExpiry,
@@ -938,7 +1015,46 @@ export default function Page(): JSX.Element {
       ask: optPrices.ask,
       last_trade_price: optPrices.last_trade_price,
     };
-  }, [chain, prices, data]);
+
+    // Salva su Supabase
+    const saveNewState = async () => {
+      try {
+        const updatedItem = {
+          ...currentItem,
+          [type]: currentItem[type].map((o: OptionEntry, index: number) =>
+            index === (opt.label === currentItem[type][0].label ? 0 : 1) ? newOption : o
+          ),
+        };
+        const res = await authenticatedFetch('/api/save-state', {
+          method: 'POST',
+          body: JSON.stringify({
+            ticker,
+            future: updatedItem.future,
+            earlier: updatedItem.earlier,
+          }),
+        });
+
+        if (!res.ok) {
+          console.error('Errore salvataggio shift su Supabase:', res.status);
+        } else {
+          console.log('Salvato shift su Supabase per', ticker);
+        }
+      } catch (err) {
+        console.error('Eccezione salvataggio shift:', err);
+      }
+    };
+    saveNewState();
+
+    // Aggiorna stato locale
+    setData(prev => prev.map(d => d.ticker === ticker ? {
+      ...d,
+      [type]: d[type].map((o: OptionEntry, index: number) =>
+        index === (opt.label === d[type][0].label ? 0 : 1) ? newOption : o
+      ),
+    } : d));
+
+    return newOption;
+  }, [chain, prices, data, setData]);
 
   // Funzione di utilità per calcolare Future/Earlier basandosi su una nuova selezione
   // Nota: Questa funzione è stata estratta da updateCurrentCall e handleRollaClick per de-duplicare la logica.
