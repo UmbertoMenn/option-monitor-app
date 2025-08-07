@@ -830,39 +830,35 @@ export default function Page(): JSX.Element {
     const monthNames = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC'];
     const tickerChain = chain[ticker] || {};
 
-    // Trova la current call per il fallback
+    // Trova la current call per fallback
     const currentItem = data.find((item) => item.ticker === ticker);
     if (!currentItem) {
       console.error(`❌ shiftExpiryByMonth: Nessun item trovato per ticker ${ticker}`);
       return null;
     }
+    const currentExpiry = currentItem.expiry;
+    const currentStrike = currentItem.strike;
 
-    let currentExpiry = opt.expiry;
-    let currentStrike = opt.strike;
+    let targetExpiry = opt.expiry;
+    let targetStrike = opt.strike;
 
-    // Gestione opzione inesistente o chain vuota
+    // Gestione opzione inesistente o chain vuota: fallback diretto a current call
     if (opt.label === 'OPZIONE INESISTENTE' || !opt.expiry || Object.keys(tickerChain).length === 0) {
-      console.warn(`⚠️ shiftExpiryByMonth: Opzione inesistente o chain vuota per ${ticker}, tentativo con findFirstAvailableExpiry`);
-      const fallback = findFirstAvailableExpiry(tickerChain);
-      if (!fallback) {
-        console.warn(`⚠️ shiftExpiryByMonth: Nessun expiry disponibile, fallback a current call ${currentItem.expiry} C${currentItem.strike}`);
-        const symbol = getSymbolFromExpiryStrike(ticker, currentItem.expiry, currentItem.strike);
-        const optPrices = prices[ticker]?.[symbol] ?? { bid: currentItem.current_bid, ask: currentItem.current_ask, last_trade_price: currentItem.current_last_trade_price };
-        return {
-          label: `${monthNames[Number(currentItem.expiry.split('-')[1]) - 1]} ${currentItem.expiry.split('-')[0].slice(2)} C${currentItem.strike}`,
-          symbol,
-          expiry: currentItem.expiry,
-          strike: currentItem.strike,
-          bid: optPrices.bid,
-          ask: optPrices.ask,
-          last_trade_price: optPrices.last_trade_price,
-        };
-      }
-      currentExpiry = fallback.expiry;
-      currentStrike = type === 'future' ? fallback.strikes[0] : fallback.strikes[fallback.strikes.length - 1];
+      console.warn(`⚠️ shiftExpiryByMonth: Opzione inesistente o chain vuota per ${ticker}, fallback diretto a current call ${currentExpiry} C${currentStrike}`);
+      const symbol = getSymbolFromExpiryStrike(ticker, currentExpiry, currentStrike);
+      const optPrices = prices[ticker]?.[symbol] ?? { bid: currentItem.current_bid, ask: currentItem.current_ask, last_trade_price: currentItem.current_last_trade_price };
+      return {
+        label: `${monthNames[Number(currentExpiry.split('-')[1]) - 1]} ${currentExpiry.split('-')[0].slice(2)} C${currentStrike}`,
+        symbol,
+        expiry: currentExpiry,
+        strike: currentStrike,
+        bid: optPrices.bid,
+        ask: optPrices.ask,
+        last_trade_price: optPrices.last_trade_price,
+      };
     }
 
-    const [yearStr, monthStr] = currentExpiry.split('-');
+    const [yearStr, monthStr] = targetExpiry.split('-');
     let year = Number(yearStr);
     let monthIdx = Number(monthStr); // 1-based
 
@@ -886,15 +882,11 @@ export default function Page(): JSX.Element {
         }
       }
 
-      if (year < new Date().getFullYear() - 5 || year > new Date().getFullYear() + 10) {
-        console.warn(`⚠️ shiftExpiryByMonth: Limite anni raggiunto (${year}), fallback a current call`);
-        break;
-      }
+      if (year < new Date().getFullYear() - 5 || year > new Date().getFullYear() + 10) break;
 
       const monthName = monthNames[monthIdx - 1];
       const yearKey = year.toString();
 
-      // Verifica se la scadenza esiste nella chain
       if (!tickerChain[yearKey] || !tickerChain[yearKey][monthName]) {
         console.log(`ℹ️ shiftExpiryByMonth: Nessuna chain per ${yearKey}/${monthName}, continuo`);
         continue;
@@ -906,49 +898,42 @@ export default function Page(): JSX.Element {
         continue;
       }
 
-      // Trova lo strike target più vicino in base al tipo
-      let targetStrike: number | undefined;
-      if (type === 'future') {
-        targetStrike = strikes.find((s: number) => s > currentStrike) ||
-          strikes.find((s: number) => s === currentStrike) ||
-          strikes[strikes.length - 1];
-      } else {
-        targetStrike = [...strikes].reverse().find((s: number) => s < currentStrike) ||
-          strikes.find((s: number) => s === currentStrike) ||
-          strikes[0];
-      }
+      // Trova strike più vicino al currentStrike (per evitare lontani)
+      let targetStrikeNew = strikes.reduce((prev, curr) => {
+        return Math.abs(curr - currentStrike) < Math.abs(prev - currentStrike) ? curr : prev;
+      }, strikes[0]);
 
-      if (!targetStrike) {
+      if (!targetStrikeNew) {
         console.log(`ℹ️ shiftExpiryByMonth: Nessun targetStrike valido per ${yearKey}/${monthName}, continuo`);
         continue;
       }
 
       // Trovata l'opzione valida
       const expiry = getThirdFriday(year, monthIdx);
-      const symbol = getSymbolFromExpiryStrike(ticker, expiry, targetStrike);
+      const symbol = getSymbolFromExpiryStrike(ticker, expiry, targetStrikeNew);
       const optPrices = prices[ticker]?.[symbol] ?? { bid: 0, ask: 0, last_trade_price: 0 };
 
-      console.log(`✅ shiftExpiryByMonth: Trovata opzione valida ${monthName} ${year} C${targetStrike} per ${ticker}`);
+      console.log(`✅ shiftExpiryByMonth: Trovata opzione valida ${monthName} ${year} C${targetStrikeNew} per ${ticker}`);
       return {
-        label: `${monthName} ${String(year).slice(2)} C${targetStrike}`,
+        label: `${monthName} ${String(year).slice(2)} C${targetStrikeNew}`,
         symbol,
         expiry,
-        strike: targetStrike,
+        strike: targetStrikeNew,
         bid: optPrices.bid,
         ask: optPrices.ask,
         last_trade_price: optPrices.last_trade_price,
       };
     }
 
-    // Fallback a current call se non trova nulla
+    // Fallback finale a current call se niente trovato
     console.warn(`⚠️ shiftExpiryByMonth: Nessuna scadenza ${direction} trovata per ${ticker}, fallback a current call`);
-    const symbol = getSymbolFromExpiryStrike(ticker, currentItem.expiry, currentItem.strike);
+    const symbol = getSymbolFromExpiryStrike(ticker, currentExpiry, currentStrike);
     const optPrices = prices[ticker]?.[symbol] ?? { bid: currentItem.current_bid, ask: currentItem.current_ask, last_trade_price: currentItem.current_last_trade_price };
     return {
-      label: `${monthNames[Number(currentItem.expiry.split('-')[1]) - 1]} ${currentItem.expiry.split('-')[0].slice(2)} C${currentItem.strike}`,
+      label: `${monthNames[Number(currentExpiry.split('-')[1]) - 1]} ${currentExpiry.split('-')[0].slice(2)} C${currentStrike}`,
       symbol,
-      expiry: currentItem.expiry,
-      strike: currentItem.strike,
+      expiry: currentExpiry,
+      strike: currentStrike,
       bid: optPrices.bid,
       ask: optPrices.ask,
       last_trade_price: optPrices.last_trade_price,
