@@ -38,10 +38,21 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: 'Errore fetch dati attuali', details: fetchError?.message }, { status: 500 });
     }
 
+    // Nuova validazione
+    console.log('[DEBUG-SAVE-VALIDATE] Validazione earlier:', earlier, 'future:', future);
+
+    // Guardia: verifica se earlier e future sono array validi (almeno 2 elementi, expiry non vuota, strike non null)
+    if (!Array.isArray(earlier) || earlier.length < 2 || !Array.isArray(future) || future.length < 2 ||
+        earlier.some(opt => !opt || !opt.expiry || opt.strike === null) ||
+        future.some(opt => !opt || !opt.expiry || opt.strike === null)) {
+      console.error('[DEBUG-SAVE-ERROR] Array earlier/future invalidi:', earlier, future);
+      return NextResponse.json({ success: false, error: 'Dati earlier/future invalidi' }, { status: 400 });
+    }
+
     // Update solo campi specifici, mantenendo gli altri, filtrato per user_id
     const { error: optionsError } = await supabase.from('options').update({ 
-      earlier, 
-      future,
+      earlier: JSON.stringify(earlier), 
+      future: JSON.stringify(future),
       created_at: new Date().toISOString()  // Traccia update
     }).eq('ticker', ticker).eq('user_id', user.id);
     if (optionsError) {
