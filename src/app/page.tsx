@@ -5,6 +5,7 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import { sendTelegramMessage } from './telegram';
 import { useRouter } from 'next/navigation';
 import { supabaseClient } from '../lib/supabaseClient'; // Usa solo questo singleton
+import debounce from 'lodash/debounce'; // Importazione corretta
 
 // --- FUNZIONE HELPER CRUCIALE PER RISOLVERE L'ERRORE 401 ---
 // Questa funzione esegue fetch includendo automaticamente il token di autenticazione Supabase.
@@ -711,19 +712,27 @@ export default function Page(): JSX.Element {
 
   // *** CORREZIONE 401: Usa authenticatedFetch ***
   const fetchData = useCallback(async () => {
+    const now = new Date().toISOString();
+    console.log(`[FETCH-DATA] Inizio fetch a ${now}`);
     try {
-      const res = await authenticatedFetch('/api/options')
+      const res = await authenticatedFetch('/api/options');
       if (res.ok) {
         const json = await res.json();
         console.log('Response raw da /api/options:', json); // Log aggiunto per debug
-        if (Array.isArray(json)) setData(json)
+        if (Array.isArray(json)) setData(json);
       } else if (res.status !== 401) {
         console.error('Errore fetch /api/options:', res.status);
       }
     } catch (err) {
-      console.error('Errore fetch /api/options', err)
+      console.error('Errore fetch /api/options', err);
+    } finally {
+      console.log(`[FETCH-DATA] Fine fetch a ${now}`);
     }
   }, []);
+
+  // Aggiungi debounce per limitare chiamate ravvicinate
+  const debouncedFetchData = useCallback(debounce(fetchData, 1000), [fetchData]);
+
   // ***************************************
 
   // *** CORREZIONE 401: Usa authenticatedFetch ***
@@ -1525,10 +1534,9 @@ export default function Page(): JSX.Element {
   useEffect(() => {
     if (!user) return;
     fetchTickers();
-    fetchData();
+    debouncedFetchData(); // Usa versione debounced
     fetchAlerts();
-  }, [user, fetchTickers, fetchData, fetchAlerts]);
-
+  }, [user, fetchTickers, debouncedFetchData, fetchAlerts]);
 
   // 4. Fetch della Chain (dipende dai Tickers)
   useEffect(() => {
