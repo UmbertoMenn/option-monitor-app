@@ -719,7 +719,7 @@ export default function Page(): JSX.Element {
       const res = await authenticatedFetch('/api/options');
       if (res.ok) {
         const json = await res.json();
-        console.log('Response raw da /api/options:', json); // Log aggiunto per debug
+        console.log('Response raw da /api/options:', json);
         if (Array.isArray(json)) setData(json);
       } else if (res.status !== 401) {
         console.error('Errore fetch /api/options:', res.status);
@@ -731,8 +731,6 @@ export default function Page(): JSX.Element {
     }
   }, []);
 
-  // Aggiungi debounce per limitare chiamate ravvicinate
-  const debouncedFetchData = useCallback(debounce(fetchData, 1000), [fetchData]);
 
   // ***************************************
 
@@ -1535,9 +1533,9 @@ export default function Page(): JSX.Element {
   useEffect(() => {
     if (!user) return;
     fetchTickers();
-    debouncedFetchData(); // Usa versione debounced
+    fetchData(); // Senza debounce per test
     fetchAlerts();
-  }, [user, fetchTickers, debouncedFetchData, fetchAlerts]);
+  }, [user, fetchTickers, fetchData, fetchAlerts]);
 
   useEffect(() => {
     if (!user || data.length === 0) return;
