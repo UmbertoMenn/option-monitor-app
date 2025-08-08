@@ -131,7 +131,7 @@ function isMarketOpen(): boolean {
 
     // Controlla se l'ora rientra nel pre-market e nella sessione regolare (9:00 AM - 4:00 PM ET)
     // hour < 16 significa "fino alle 15:59"
-    const isMarketHours = hour >= 5 && hour < 16;
+    const isMarketHours = hour >= 9 && hour < 16;
 
     return isWeekday && isMarketHours;
 
