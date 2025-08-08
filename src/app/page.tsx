@@ -676,6 +676,11 @@ export default function Page(): JSX.Element {
   const [loading, setLoading] = useState(true); // Stato di caricamento iniziale
   const router = useRouter();
 
+  const dataRef = useRef<OptionData[]>(data);
+  useEffect(() => {
+    dataRef.current = data;
+  }, [data]);
+
   // *** CORREZIONE 401: Usa authenticatedFetch ***
   const fetchTickers = useCallback(async () => {
     try {
@@ -765,9 +770,10 @@ export default function Page(): JSX.Element {
 
   // *** CORREZIONE 401: Usa authenticatedFetch ***
   const fetchPrices = useCallback(async () => {
+    console.log('[FETCH-PRICES] Inizio esecuzione');
     try {
       let symbols: string[] = [];
-      data.forEach(item => {
+      dataRef.current.forEach(item => {
         if (!item || item.invalid) return;
 
         const currentSymbol = getSymbolFromExpiryStrike(item.ticker, item.expiry, item.strike);
@@ -785,6 +791,7 @@ export default function Page(): JSX.Element {
       symbols = [...new Set(symbols.filter(s => s && s.trim() !== ''))];
 
       if (symbols.length === 0) {
+        console.log('[FETCH-PRICES] Nessun symbol valido, skip');
         return;
       }
 
@@ -816,7 +823,7 @@ export default function Page(): JSX.Element {
       setPrices(grouped);
 
       // Fetch degli Spots
-      const tickersList = data.map(item => item.ticker).filter(t => t);
+      const tickersList = dataRef.current.map(item => item.ticker).filter(t => t);
       if (tickersList.length > 0) {
         const tickersStr = tickersList.join(',');
         const spotRes = await authenticatedFetch(`/api/spots?tickers=${tickersStr}`);
@@ -829,8 +836,10 @@ export default function Page(): JSX.Element {
       }
     } catch (err) {
       console.error('Errore fetch /api/full-prices o /api/spots:', err);
+    } finally {
+      console.log('[FETCH-PRICES] Fine esecuzione');
     }
-  }, [data]);
+  }, []); // Rimossa dipendenza [data], usa dataRef.current
   // ***************************************
 
   const shiftExpiryByMonth = useCallback((ticker: string, opt: OptionEntry, direction: 'next' | 'prev', type: 'future' | 'earlier'): OptionEntry | null => {
