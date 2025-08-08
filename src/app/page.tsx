@@ -1137,7 +1137,7 @@ export default function Page(): JSX.Element {
     const allEarlierMonths: { monthIdx: number, year: number }[] = [];
     attempts = 0;
 
-    while (allEarlierMonths.length < 2 && attempts < maxAttempts) { // Corretto a < 2 per due earlier
+    while (allEarlierMonths.length < 1 && attempts < maxAttempts) {
       attempts++;
       monthIdx--;
       if (monthIdx < 0) {
@@ -1153,29 +1153,57 @@ export default function Page(): JSX.Element {
       }
     }
 
-    for (let i = 0; i < Math.min(2, allEarlierMonths.length); i++) {
-      const { monthIdx, year } = allEarlierMonths[i];
+    if (allEarlierMonths.length > 0) {
+      const { monthIdx, year } = allEarlierMonths[0];
       const earlierMonth = monthNames[monthIdx];
       const eStrikeList = tickerChain[year.toString()]?.[earlierMonth] || [];
-      let eStrike = eStrikeList.reduce((prev, curr) => {
-        return Math.abs(curr - strikeRef) < Math.abs(prev - strikeRef) ? curr : prev;
-      }, eStrikeList[0] || 0);
 
-      if (eStrike) {
+      let eStrike1 = [...eStrikeList].reverse().find((s: number) => s < strikeRef) ||
+        eStrikeList.find((s: number) => s === strikeRef) ||
+        eStrikeList[0];
+
+      if (eStrike1) {
         const expiry = getThirdFriday(year, monthIdx + 1);
-        const symbol = getSymbolFromExpiryStrike(ticker, expiry, eStrike);
+        const symbol = getSymbolFromExpiryStrike(ticker, expiry, eStrike1);
         if (symbol) {
           const optPrices = prices[ticker]?.[symbol] ?? { bid: 0, ask: 0, last_trade_price: 0 };
           earlier.push({
-            label: `${earlierMonth} ${String(year).slice(2)} C${eStrike}`,
+            label: `${earlierMonth} ${String(year).slice(2)} C${eStrike1}`,
             symbol,
-            strike: eStrike,
+            strike: eStrike1,
             bid: optPrices.bid,
             ask: optPrices.ask,
             last_trade_price: optPrices.last_trade_price,
             expiry
           });
-          strikeRef = eStrike; // Aggiorna per la prossima
+          strikeRef = eStrike1; // Aggiorna strikeRef per la seconda earlier
+        }
+      }
+
+      // Seconda Earlier
+      if (eStrike1) {
+        let eStrike2 = [...eStrikeList].reverse().find((s: number) => s < strikeRef);
+
+        // Se non trova uno strike inferiore, prende il primo disponibile se diverso dal primo
+        if (!eStrike2 && eStrikeList.length > 0) {
+          eStrike2 = eStrikeList[0];
+        }
+
+        if (eStrike2 && eStrike2 !== eStrike1) {
+          const expiry = getThirdFriday(year, monthIdx + 1);
+          const symbol = getSymbolFromExpiryStrike(ticker, expiry, eStrike2);
+          if (symbol) {
+            const optPrices = prices[ticker]?.[symbol] ?? { bid: 0, ask: 0, last_trade_price: 0 };
+            earlier.push({
+              label: `${earlierMonth} ${String(year).slice(2)} C${eStrike2}`,
+              symbol,
+              strike: eStrike2,
+              bid: optPrices.bid,
+              ask: optPrices.ask,
+              last_trade_price: optPrices.last_trade_price,
+              expiry
+            });
+          }
         }
       }
     }
@@ -1521,8 +1549,6 @@ export default function Page(): JSX.Element {
 useEffect(() => {
   const intervalRef = useRef<NodeJS.Timeout | null>(null); // Spostato qui, unconditional
 
-  if (!user || data.length === 0) return;
-
   let isMounted = true;
 
   // Esegui fallback se mercato chiuso solo all'init
@@ -1567,7 +1593,7 @@ useEffect(() => {
     isMounted = false;
     if (intervalRef.current) clearInterval(intervalRef.current);
   };
-}, [user, fetchPrices]); // Solo user e fetchPrices, no data per evitare loop
+}, [user, fetchPrices, data.length]); // Aggiunta data.length per trigger su data change, ma controllata
 
   // Definizione isFattibile (Memoizzata)
   const isFattibile = useCallback((opt: OptionEntry, item: OptionData) => {
