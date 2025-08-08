@@ -673,7 +673,7 @@ export default function Page(): JSX.Element {
   const [alertsEnabled, setAlertsEnabled] = useState<{ [ticker: string]: boolean }>({})
   const [pendingRoll, setPendingRoll] = useState<{ ticker: string, opt: OptionEntry } | null>(null)
   const [user, setUser] = useState<any>(null);
-  const [loading, setLoading] = useState(true); // Stato di caricamento iniziale // Stato di caricamento iniziale
+  const [loading, setLoading] = useState(true); // Stato di caricamento iniziale
   const router = useRouter();
 
   const dataRef = useRef<OptionData[]>(data);
@@ -1599,7 +1599,6 @@ useEffect(() => {
 
   // 6. Gestione degli Alert (Polling)
   useEffect(() => {
-    if (!user || data.length === 0) return;
     let isMounted = true;
 
     const checkAlerts = async () => {
